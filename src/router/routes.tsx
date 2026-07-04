@@ -1,16 +1,18 @@
 import { createRootRoute, createRoute } from '@tanstack/react-router'
 
-// import Home from '@/pages/Home'
-import { Projects } from '@/projects/Projects'
-// import Calendar from '@/pages/Calendar'
-// import Settings from '@/pages/Settings'
+import { AppLayout } from '@/components/layout/AppLayout'
+import { Dashboard } from '@/Dashboard/Dashboard'
+import { Projects } from '@/Projects/Projects'
+import { Settings } from '@/Settings/Settings'
 
-const rootRoute = createRootRoute()
+const rootRoute = createRootRoute({
+  component: AppLayout,
+})
 
-const homeRoute = createRoute({
+const dashboardRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/',
-  component: Projects,
+  component: Dashboard,
 })
 
 const projectsRoute = createRoute({
@@ -19,21 +21,14 @@ const projectsRoute = createRoute({
   component: Projects,
 })
 
-// const calendarRoute = createRoute({
-//   getParentRoute: () => rootRoute,
-//   path: '/calendar',
-//   component: Calendar,
-// })
-//
-// const settingsRoute = createRoute({
-//   getParentRoute: () => rootRoute,
-//   path: '/settings',
-//   component: Settings,
-// })
+const settingsRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/settings',
+  component: Settings,
+})
 
 export const routeTree = rootRoute.addChildren([
-  homeRoute,
+  dashboardRoute,
   projectsRoute,
-  // calendarRoute,
-  // settingsRoute,
-])      
+  settingsRoute
+])
