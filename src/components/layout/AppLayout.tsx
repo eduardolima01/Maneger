@@ -6,8 +6,10 @@ export function AppLayout() {
     <div className="flex h-screen overflow-hidden">
       <Aside />
 
-      <main className="flex-1 overflow-y-auto bg-zinc-950 p-6">
-        <Outlet />
+      <main className="flex flex-1 flex-col overflow-hidden">
+        <div className="flex-1 overflow-y-auto p-6">
+          <Outlet />
+        </div>
       </main>
     </div>
   )
