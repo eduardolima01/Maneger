@@ -17,6 +17,11 @@ const menuItems = [
     to: '/',
   },
   {
+    label: 'Agenda',
+    icon: MdCalendarMonth,
+    to: '/agenda',
+  },
+  {
     label: 'Projetos',
     icon: MdFolder,
     to: '/projects',
@@ -25,11 +30,6 @@ const menuItems = [
     label: 'Tarefas',
     icon: MdTask,
     to: '/tasks',
-  },
-  {
-    label: 'Agenda',
-    icon: MdCalendarMonth,
-    to: '/calendar',
   },
   {
     label: 'Notas',
