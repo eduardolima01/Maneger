@@ -1,5 +1,6 @@
 import CreateProjects from './components/CreateProjects';
 import { useProjects } from '../lib/hooks/useProjects';
+import CardProject from './components/CardProject';
 
 export const Projects = () => {
   const { projects, loading, error, add } = useProjects();
@@ -13,7 +14,11 @@ export const Projects = () => {
       <CreateProjects onCreate={add} />
       <ul>
         {projects.map((p) => (
-          <li key={p.id}>{p.name}</li>
+          <li key={p.id}>
+            <CardProject
+              project={p}
+            />
+          </li>
         ))}
       </ul>
     </div>
