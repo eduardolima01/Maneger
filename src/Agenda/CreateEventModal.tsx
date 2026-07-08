@@ -11,14 +11,14 @@ interface CreateEventModalProps {
   draftStart: Date | null;
   draftEnd: Date | null;
   editingEvent: Event | null;
-  onSave: (data: { title: string; project_id: number | null }) => void;
+  onSave: (data: { title: string; project_id: string | null }) => void;
   onDelete?: () => void;
 }
 
 export default function CreateEventModal({ isOpen, onClose, draftStart, draftEnd, editingEvent, onSave, onDelete }: CreateEventModalProps) {
   const { projects } = useProjects();
   const [title, setTitle] = useState('');
-  const [projectId, setProjectId] = useState<number | null>(null);
+  const [projectId, setProjectId] = useState<string | null>(null);
 
   useEffect(() => {
     if (isOpen) {
@@ -51,7 +51,7 @@ export default function CreateEventModal({ isOpen, onClose, draftStart, draftEnd
 
         <select
           value={projectId ?? ''}
-          onChange={(e) => setProjectId(e.target.value ? Number(e.target.value) : null)}
+          onChange={(e) => setProjectId(e.target.value ? e.target.value : null)}
           style={{ width: '100%', padding: 8, marginBottom: 16, fontSize: 14 }}
         >
           <option value="">Sem projeto</option>

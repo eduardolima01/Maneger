@@ -1,16 +1,14 @@
 export interface Event {
-  id: number;
-  project_id: number | null;
+  id: string;
+  project_id: string | null;
   title: string;
   start_at: string;
   end_at: string;
 }
-
 export interface CreateEventInput {
   title: string;
-  project_id: number | null;
+  project_id: string | null;
   start_at: string;
   end_at: string;
 }
-
 export type UpdateEventInput = Partial<CreateEventInput>;

@@ -1,36 +1,37 @@
 import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from '@tanstack/react-router'
-import { useTasks } from '@/lib/hooks/useTasks'
+
 import { getProjectById } from '@/lib/api/projects'
 import { ProjectType } from '@/types/project.types'
 import Button from '@/components/layout/Button'
+import { useProjectModules } from '@/lib/hooks/useProjectModules'
+import AgendaSection from './AgendaSection';
+
+import ProjectSettingsModal from './ProjectSettingsModal';
+import TasksSection from './TasksSection';
+import KanbanBoard from './KanbanBoard';
+import NotesSection from './NotesSection';
 
 export function Project() {
-  const { projectId } = useParams({ from: '/projects/$projectId' })
-  const navigate = useNavigate()
-
   const [project, setProject] = useState<ProjectType | null>(null)
+  const { projectId } = useParams({ from: '/projects/$projectId' })
   const [loadingProject, setLoadingProject] = useState(true)
 
-  useEffect(() => {
-    getProjectById(Number(projectId)).then((p) => {
+  const navigate = useNavigate()
+  const [settingsOpen, setSettingsOpen] = useState(false)
+
+  const { modules, toggle: toggleModule } = useProjectModules(projectId)
+  const getProject = async () => await
+    getProjectById(projectId).then((p) => {
       setProject(p)
       setLoadingProject(false)
     })
+
+  useEffect(() => {
+    getProject()
   }, [projectId])
 
-  const { tasks, loading, error, add, toggle, remove } = useTasks(Number(projectId))
-  const [title, setTitle] = useState('')
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-    if (!title.trim()) return
-    await add(title.trim())
-    setTitle('')
-  }
-
-  if (loadingProject) return <p>Carregando projeto...</p>
-  if (!project) return <p>Projeto não encontrado.</p>
+  if (loadingProject || !project) return <p>Carregando projeto...</p>
 
   return (
     <div style={{ maxWidth: 480, margin: '2rem auto' }}>
@@ -41,56 +42,27 @@ export function Project() {
       >
         ← Voltar
       </Button>
+      <div className="flex items-center justify-between my-4">
+        <h1>{project.name}</h1>
+        <Button variant="secondary" onClick={() => setSettingsOpen(true)}>
+          ⚙ Configurações
+        </Button>
+      </div>
 
-      <h1>{project.name}</h1>
+      {modules?.tasks && <TasksSection projectId={projectId} />}
+      {modules?.kanban && <KanbanBoard projectId={projectId} />}
+      {modules?.notes && <NotesSection projectId={projectId} />}
+      {modules?.agenda && <AgendaSection projectId={projectId} />}
 
-      <form
-        onSubmit={handleSubmit}
-        style={{ display: 'flex', gap: 8, marginBottom: 16 }}
-      >
-        <input
-          value={title}
-          onChange={(e) => setTitle(e.target.value)}
-          placeholder="Nova tarefa..."
-          style={{ flex: 1, padding: 8 }}
-        />
-        <Button type="submit">Adicionar</Button>
-      </form>
-
-      {loading && <p>Carregando tarefas...</p>}
-      {error && <p style={{ color: 'red' }}>Erro: {error}</p>}
-
-      <ul style={{ listStyle: 'none', padding: 0 }}>
-        {tasks.map((task) => (
-          <li
-            key={task.id}
-            style={{
-              display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'center',
-              padding: '8px 0',
-              borderBottom: '1px solid #eee',
-            }}
-          >
-            <span
-              onClick={() => toggle(task)}
-              style={{
-                cursor: 'pointer',
-                textDecoration: task.done ? 'line-through' : 'none',
-              }}
-            >
-              {task.title}
-            </span>
-            <Button variant="danger" onClick={() => remove(task.id)}>
-              excluir
-            </Button>
-          </li>
-        ))}
-      </ul>
-
-      {!loading && tasks.length === 0
-        && <p>Nenhuma tarefa ainda neste projeto.</p>}
+      <ProjectSettingsModal
+        isOpen={settingsOpen}
+        onClose={() => setSettingsOpen(false)}
+        project={project}
+        modules={modules}
+        onToggleModule={toggleModule}
+        onUpdated={() => { /* recarregar dados do projeto, se necessário */ }}
+        onDeleted={() => { /* navegar de volta pra /projects */ }}
+      />
     </div>
   )
 }
-

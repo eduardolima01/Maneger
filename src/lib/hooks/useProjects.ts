@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { listProjects, createProject, deleteProject } from '../api/projects';
+import { getProjects, createProject, deleteProject } from '../api/projects';
 import { ProjectType } from '@/types/project.types';
 
 export function useProjects() {
@@ -10,7 +10,7 @@ export function useProjects() {
   const refresh = useCallback(async () => {
     try {
       setLoading(true);
-      const result = await listProjects();
+      const result = await getProjects();
       setProjects(result);
       setError(null);
     } catch (e) {
@@ -25,11 +25,11 @@ export function useProjects() {
   }, [refresh]);
 
   const add = async (name: string) => {
-    await createProject(name);
+    await createProject({ name });
     await refresh();
   };
 
-  const remove = async (id: number) => {
+  const remove = async (id: string) => {
     await deleteProject(id);
     await refresh();
   };

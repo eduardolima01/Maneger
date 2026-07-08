@@ -1,6 +1,6 @@
 import { useRef, useState, useEffect } from 'react';
 import type { Event } from '@/types/event.types';
-import { toLocalISO, snapMinutes, formatHourLabel, isSameDay, isToday, minutesSinceMidnight } from '../lib/utils/date';
+import { snapMinutes, formatHourLabel, isSameDay, isToday, minutesSinceMidnight } from '../lib/utils/date';
 import EventBlock from './EventBlock';
 
 import { useNow } from '../lib/hooks/useNow';
