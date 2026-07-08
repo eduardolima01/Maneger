@@ -11,12 +11,20 @@ const HOURS = Array.from({ length: 24 }, (_, i) => i);
 interface TimeGridViewProps {
   days: Date[];
   events: Event[];
+  resolveColor: (projectId: string | null) => string;
   onCreateEvent: (start: Date, end: Date) => void;
   onEventClick: (event: Event) => void;
-  onEventChange: (id: number, startAt: string, endAt: string) => void;
+  onEventChange: (id: string, startAt: string, endAt: string) => void;
 }
 
-export default function TimeGridView({ days, events, onCreateEvent, onEventClick, onEventChange }: TimeGridViewProps) {
+export default function TimeGridView({
+  days,
+  events,
+  onCreateEvent,
+  onEventClick,
+  onEventChange,
+  resolveColor
+}: TimeGridViewProps) {
   const [draft, setDraft] = useState<{ dayIndex: number; startMin: number; currentMin: number } | null>(null);
   const columnRefs = useRef<(HTMLDivElement | null)[]>([]);
 
@@ -115,7 +123,7 @@ export default function TimeGridView({ days, events, onCreateEvent, onEventClick
         {days.map((day, dayIndex) => (
           <div
             key={dayIndex}
-            ref={(el) => (columnRefs.current[dayIndex] = el)}
+            ref={(el: any) => (columnRefs.current[dayIndex] = el)}
             onPointerDown={(e) => handlePointerDown(dayIndex, e)}
             style={{ flex: 1, position: 'relative', borderLeft: '1px solid #eee', height: HOUR_HEIGHT * 24 }}
           >
@@ -152,7 +160,14 @@ export default function TimeGridView({ days, events, onCreateEvent, onEventClick
             {events
               .filter((ev) => isSameDay(new Date(ev.start_at), day))
               .map((ev) => (
-                <EventBlock key={ev.id} event={ev} hourHeight={HOUR_HEIGHT} onClick={onEventClick} onChange={onEventChange} />
+                <EventBlock
+                  key={ev.id}
+                  event={ev}
+                  hourHeight={HOUR_HEIGHT}
+                  color={resolveColor(ev.project_id)}
+                  onClick={onEventClick}
+                  onChange={onEventChange}
+                />
               ))}
 
             {draft && draft.dayIndex === dayIndex && (

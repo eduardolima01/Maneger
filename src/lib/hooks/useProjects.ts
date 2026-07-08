@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { getProjects, createProject, deleteProject } from '../api/projects';
+import { getAllProjects, createProject, deleteProject } from '../api/projects';
 import { ProjectType } from '@/types/project.types';
 
 export function useProjects() {
@@ -10,7 +10,7 @@ export function useProjects() {
   const refresh = useCallback(async () => {
     try {
       setLoading(true);
-      const result = await getProjects();
+      const result = await getAllProjects();
       setProjects(result);
       setError(null);
     } catch (e) {

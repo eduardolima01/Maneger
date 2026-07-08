@@ -29,12 +29,12 @@ export function useEvents(rangeStartISO: string, rangeEndISO: string) {
     await reload();
   }, [reload]);
 
-  const update = useCallback(async (id: number, input: UpdateEventInput) => {
+  const update = useCallback(async (id: string, input: UpdateEventInput) => {
     await eventsApi.updateEvent(id, input);
     await reload();
   }, [reload]);
 
-  const remove = useCallback(async (id: number) => {
+  const remove = useCallback(async (id: string) => {
     await eventsApi.deleteEvent(id);
     await reload();
   }, [reload]);

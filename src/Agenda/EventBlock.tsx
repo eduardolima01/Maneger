@@ -1,15 +1,17 @@
 import { useRef, useState } from 'react';
 import type { Event } from '@/types/event.types';
 import { fromLocalISO, toLocalISO, minutesSinceMidnight, snapMinutes } from '../lib/utils/date';
+import Button from '@/components/layout/Button';
 
 interface EventBlockProps {
   event: Event;
   hourHeight: number;
+  color: string;
   onClick: (event: Event) => void;
-  onChange: (id: number, startAt: string, endAt: string) => void;
+  onChange: (id: string, startAt: string, endAt: string) => void;
 }
 
-export default function EventBlock({ event, hourHeight, onClick, onChange }: EventBlockProps) {
+export default function EventBlock({ event, hourHeight, color, onClick, onChange }: EventBlockProps) {
   const start = fromLocalISO(event.start_at);
   const end = fromLocalISO(event.end_at);
   const startMin = minutesSinceMidnight(start);
@@ -65,17 +67,13 @@ export default function EventBlock({ event, hourHeight, onClick, onChange }: Eve
   return (
     <div
       onPointerDown={(e) => beginDrag('move', e)}
-      onClick={(e) => {
-        e.stopPropagation();
-        if (dragOffsetMin === 0 && resizeExtraMin === 0) onClick(event);
-      }}
       style={{
         position: 'absolute',
         top,
         height,
         left: 2,
         right: 2,
-        backgroundColor: '#1a73e8',
+        backgroundColor: color,
         color: '#fff',
         borderRadius: 4,
         padding: '2px 6px',
@@ -85,7 +83,16 @@ export default function EventBlock({ event, hourHeight, onClick, onChange }: Eve
         userSelect: 'none',
         zIndex: 2,
       }}
+      className="group"
     >
+      <Button
+        className="absolute top-0 right-0 hidden group-hover:block"
+        onClick={(e) => {
+          e.stopPropagation();
+          if (dragOffsetMin === 0 && resizeExtraMin === 0) onClick(event);
+        }}
+      >P</Button>
+
       {event.title}
       <div
         onPointerDown={(e) => beginDrag('resize', e)}

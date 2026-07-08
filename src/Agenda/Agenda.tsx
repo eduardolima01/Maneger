@@ -7,7 +7,12 @@ import { useEvents } from '../lib/hooks/useEvents';
 import type { Event } from '../types/event.types';
 import { addDays, addMonths, startOfWeek, startOfDay, toLocalISO } from '../lib/utils/date';
 
+import { useProjectColors } from '../lib/hooks/useProjectColors';
+import { useNavigate } from '@tanstack/react-router';
+
 export default function Agenda() {
+  const navigate = useNavigate();
+  const { resolveColor } = useProjectColors();
   const [view, setView] = useState<AgendaViewMode>('week');
   const [anchor, setAnchor] = useState(() => startOfDay(new Date()));
   const [draft, setDraft] = useState<{ start: Date; end: Date } | null>(null);
@@ -50,12 +55,19 @@ export default function Agenda() {
   }
 
   function openEdit(event: Event) {
+    if (event.project_id) {
+      navigate({
+        to: '/projects/$projectId',
+        params: { projectId: event.project_id }
+      });
+      return;
+    }
     setEditingEvent(event);
     setDraft(null);
     setModalOpen(true);
   }
 
-  async function handleSave(data: { title: string; project_id: number | null }) {
+  async function handleSave(data: { title: string; project_id: string | null }) {
     if (editingEvent) {
       await update(editingEvent.id, data);
     } else if (draft) {
@@ -87,6 +99,7 @@ export default function Agenda() {
           <MonthView
             anchor={anchor}
             events={events}
+            resolveColor={resolveColor}
             onDayClick={(day) => {
               setAnchor(day);
               setView('day');
@@ -105,8 +118,10 @@ export default function Agenda() {
             days={days}
             events={events}
             onCreateEvent={openCreate}
+            resolveColor={resolveColor}
             onEventClick={openEdit}
-            onEventChange={(id, startAt, endAt) => update(id, { start_at: startAt, end_at: endAt })}
+            onEventChange={(id, startAt, endAt) =>
+              update(id, { start_at: startAt, end_at: endAt })}
           />
         )}
       </div>

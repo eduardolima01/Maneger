@@ -4,12 +4,20 @@ import type { Event } from '../types/event.types';
 interface MonthViewProps {
   anchor: Date;
   events: Event[];
+  resolveColor: (projectId: string | null) => string;
   onDayClick: (day: Date) => void;
   onEventClick: (event: Event) => void;
   onCreateEvent: (day: Date) => void;
 }
 
-export default function MonthView({ anchor, events, onDayClick, onEventClick, onCreateEvent }: MonthViewProps) {
+export default function MonthView({
+  anchor,
+  events,
+  resolveColor,
+  onDayClick,
+  onEventClick,
+  onCreateEvent
+}: MonthViewProps) {
   const weeks = getMonthMatrix(anchor);
 
   return (
@@ -68,7 +76,7 @@ export default function MonthView({ anchor, events, onDayClick, onEventClick, on
                       onEventClick(ev);
                     }}
                     style={{
-                      backgroundColor: '#1a73e8',
+                      backgroundColor: resolveColor(ev.project_id),
                       color: '#fff',
                       fontSize: 11,
                       borderRadius: 3,

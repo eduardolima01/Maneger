@@ -7,6 +7,8 @@ import type { ProjectType } from '../../types/project.types';
 import type { ModuleStatus } from '../../lib/api/modules';
 import type { ModuleKey } from '../../types/module.types';
 
+import { getProjectColor } from '@/lib/utils/projectColor';
+
 interface ProjectSettingsModalProps {
   isOpen: boolean;
   onClose: () => void;
@@ -21,11 +23,13 @@ export default function ProjectSettingsModal({
   isOpen, onClose, project, modules, onToggleModule, onUpdated, onDeleted,
 }: ProjectSettingsModalProps) {
   const [name, setName] = useState(project.name);
+  const [color, setColor] = useState<string | null>(project.color);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
 
   useEffect(() => {
     if (isOpen) {
       setName(project.name);
+      setColor(project.color);
       setConfirmingDelete(false);
     }
   }, [isOpen, project.name]);
@@ -33,6 +37,18 @@ export default function ProjectSettingsModal({
   async function handleSaveName() {
     if (!name.trim() || name === project.name) return;
     await projectsApi.updateProject(project.id, { name: name.trim() });
+    onUpdated();
+  }
+
+  async function handleColorChange(hex: string) {
+    setColor(hex);
+    await projectsApi.updateProject(project.id, { color: hex });
+    onUpdated();
+  }
+
+  async function handleResetColor() {
+    setColor(null);
+    await projectsApi.updateProject(project.id, { color: null });
     onUpdated();
   }
 
@@ -55,6 +71,25 @@ export default function ProjectSettingsModal({
             onBlur={handleSaveName}
             style={{ width: '100%', padding: 8, fontSize: 14 }}
           />
+        </div>
+        <div>
+          <label style={{ fontSize: 13, fontWeight: 600, display: 'block', marginBottom: 4 }}>Cor do projeto</label>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <input
+              type="color"
+              value={color ?? getProjectColor(project.id)}
+              onChange={(e) => handleColorChange(e.target.value)}
+              style={{ width: 36, height: 28, padding: 0, border: '1px solid #ccc', borderRadius: 4, cursor: 'pointer' }}
+            />
+            {color !== null && (
+              <button
+                onClick={handleResetColor}
+                style={{ fontSize: 12, color: '#666', background: 'none', border: 'none', cursor: 'pointer', textDecoration: 'underline' }}
+              >
+                usar cor automática
+              </button>
+            )}
+          </div>
         </div>
 
         {modules && <ModuleToggles modules={modules} onToggle={onToggleModule} />}
