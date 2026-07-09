@@ -13,7 +13,8 @@ interface TimeGridViewProps {
   events: Event[];
   resolveColor: (projectId: string | null) => string;
   onCreateEvent: (start: Date, end: Date) => void;
-  onEventClick: (event: Event) => void;
+  onEventEdit: (event: Event) => void;
+  onEventProjectClick: (event: Event) => void;
   onEventChange: (id: string, startAt: string, endAt: string) => void;
 }
 
@@ -21,7 +22,8 @@ export default function TimeGridView({
   days,
   events,
   onCreateEvent,
-  onEventClick,
+  onEventEdit,
+  onEventProjectClick,
   onEventChange,
   resolveColor
 }: TimeGridViewProps) {
@@ -165,7 +167,8 @@ export default function TimeGridView({
                   event={ev}
                   hourHeight={HOUR_HEIGHT}
                   color={resolveColor(ev.project_id)}
-                  onClick={onEventClick}
+                  onEditClick={onEventEdit}
+                  onProjectClick={onEventProjectClick}
                   onChange={onEventChange}
                 />
               ))}

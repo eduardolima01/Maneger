@@ -9,6 +9,7 @@ const PALETTE = [
   '#c0ca33', // lima
   '#f6bf26', // amarelo
 ];
+export { PALETTE };
 
 export function getProjectColor(projectId: string | null): string {
   if (!projectId) return PALETTE[0];

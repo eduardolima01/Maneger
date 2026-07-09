@@ -10,6 +10,11 @@ import { addDays, addMonths, startOfWeek, startOfDay, toLocalISO } from '../lib/
 import { useProjectColors } from '../lib/hooks/useProjectColors';
 import { useNavigate } from '@tanstack/react-router';
 
+import { getProjectById } from '../lib/api/projects';
+import type { ProjectType } from '../types/project.types';
+
+import ProjectQuickModal from '../Projects/Project/ProjectQuickModal.tsx';
+
 export default function Agenda() {
   const navigate = useNavigate();
   const { resolveColor } = useProjectColors();
@@ -18,6 +23,9 @@ export default function Agenda() {
   const [draft, setDraft] = useState<{ start: Date; end: Date } | null>(null);
   const [editingEvent, setEditingEvent] = useState<Event | null>(null);
   const [modalOpen, setModalOpen] = useState(false);
+
+  const [quickEditProject, setQuickEditProject] = useState<ProjectType | null>(null);
+  const [projectModalOpen, setProjectModalOpen] = useState(false);
 
   const { rangeStart, rangeEnd, days, label } = useMemo(() => {
     if (view === 'day') {
@@ -55,16 +63,17 @@ export default function Agenda() {
   }
 
   function openEdit(event: Event) {
-    if (event.project_id) {
-      navigate({
-        to: '/projects/$projectId',
-        params: { projectId: event.project_id }
-      });
-      return;
-    }
     setEditingEvent(event);
     setDraft(null);
     setModalOpen(true);
+  }
+
+  async function openProjectModal(event: Event) {
+    if (!event.project_id) return;
+    const project = await getProjectById(event.project_id);
+    if (!project) return;
+    setQuickEditProject(project);
+    setProjectModalOpen(true);
   }
 
   async function handleSave(data: { title: string; project_id: string | null }) {
@@ -104,7 +113,8 @@ export default function Agenda() {
               setAnchor(day);
               setView('day');
             }}
-            onEventClick={openEdit}
+            onEventProjectClick={openProjectModal}
+            onEventEdit={openEdit}
             onCreateEvent={(day) => {
               const start = new Date(day);
               start.setHours(9, 0, 0, 0);
@@ -119,9 +129,9 @@ export default function Agenda() {
             events={events}
             onCreateEvent={openCreate}
             resolveColor={resolveColor}
-            onEventClick={openEdit}
-            onEventChange={(id, startAt, endAt) =>
-              update(id, { start_at: startAt, end_at: endAt })}
+            onEventEdit={openEdit}
+            onEventProjectClick={openProjectModal}
+            onEventChange={(id, startAt, endAt) => update(id, { start_at: startAt, end_at: endAt })}
           />
         )}
       </div>
@@ -135,6 +145,18 @@ export default function Agenda() {
         onSave={handleSave}
         onDelete={handleDelete}
       />
+
+      {quickEditProject && (
+        <ProjectQuickModal
+          isOpen={projectModalOpen}
+          onClose={() => setProjectModalOpen(false)}
+          project={quickEditProject}
+          onGoToProject={() => {
+            setProjectModalOpen(false);
+            navigate({ to: '/projects/$projectId', params: { projectId: quickEditProject.id } });
+          }}
+        />
+      )}
     </div>
   );
 }

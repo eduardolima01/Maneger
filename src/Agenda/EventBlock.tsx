@@ -2,16 +2,25 @@ import { useRef, useState } from 'react';
 import type { Event } from '@/types/event.types';
 import { fromLocalISO, toLocalISO, minutesSinceMidnight, snapMinutes } from '../lib/utils/date';
 import Button from '@/components/layout/Button';
+import { FaProjectDiagram } from 'react-icons/fa';
 
 interface EventBlockProps {
   event: Event;
   hourHeight: number;
   color: string;
-  onClick: (event: Event) => void;
+  onEditClick: (event: Event) => void;
+  onProjectClick: (event: Event) => void;
   onChange: (id: string, startAt: string, endAt: string) => void;
 }
 
-export default function EventBlock({ event, hourHeight, color, onClick, onChange }: EventBlockProps) {
+export default function EventBlock({
+  event,
+  hourHeight,
+  color,
+  onEditClick,
+  onProjectClick,
+  onChange
+}: EventBlockProps) {
   const start = fromLocalISO(event.start_at);
   const end = fromLocalISO(event.end_at);
   const startMin = minutesSinceMidnight(start);
@@ -85,13 +94,43 @@ export default function EventBlock({ event, hourHeight, color, onClick, onChange
       }}
       className="group"
     >
-      <Button
-        className="absolute top-0 right-0 hidden group-hover:block"
-        onClick={(e) => {
-          e.stopPropagation();
-          if (dragOffsetMin === 0 && resizeExtraMin === 0) onClick(event);
-        }}
-      >P</Button>
+      <span className="truncate block pr-10">{event.title}</span>
+
+      <div className="absolute top-0.5 right-0.5 flex gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+        <button
+          onPointerDown={(e) => e.stopPropagation()}
+          onClick={(e) => {
+            e.stopPropagation();
+            onEditClick(event);
+          }}
+          title="Editar evento"
+          className="w-4 h-4 flex items-center justify-center rounded bg-black/25 hover:bg-black/40"
+        >
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="w-2.5 h-2.5">
+            <path d="M12 20h9" />
+            <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4Z" />
+          </svg>
+        </button>
+
+        {event.project_id && (
+          <button
+            onPointerDown={(e) => e.stopPropagation()}
+            onClick={(e) => {
+              e.stopPropagation();
+              onProjectClick(event);
+            }}
+            title="Ir para o projeto"
+            className="w-4 h-4 flex items-center justify-center rounded bg-black/25 hover:bg-black/40"
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="w-2.5 h-2.5">
+              <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
+              <path d="M15 3h6v6" />
+              <path d="M10 14 21 3" />
+            </svg>
+          </button>
+        )}
+      </div>
+
 
       {event.title}
       <div

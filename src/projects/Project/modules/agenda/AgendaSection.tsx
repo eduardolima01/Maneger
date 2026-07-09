@@ -1,19 +1,23 @@
 import { useState } from 'react';
 import Button from '@/components/layout/Button';
-import EventFormModal from './EventFormModal';
+import EventFormModal from '../event/EventFormModal';
 import { useProjectEvents } from '@/lib/hooks/useProjectEvents';
 import type { Event } from '@/types/event.types';
 import { fromLocalISO, formatTime } from '@/lib/utils/date';
 
 interface AgendaSectionProps {
   projectId: string;
+  projectName: string;
 }
 
 function formatDate(d: Date): string {
   return d.toLocaleDateString('pt-BR', { day: '2-digit', month: 'short', year: 'numeric' });
 }
 
-export default function AgendaSection({ projectId }: AgendaSectionProps) {
+export default function AgendaSection({
+  projectId,
+  projectName
+}: AgendaSectionProps) {
   const { events, loading, create, update, remove } = useProjectEvents(projectId);
   const [modalOpen, setModalOpen] = useState(false);
   const [editingEvent, setEditingEvent] = useState<Event | null>(null);
@@ -87,6 +91,7 @@ export default function AgendaSection({ projectId }: AgendaSectionProps) {
         isOpen={modalOpen}
         onClose={() => setModalOpen(false)}
         editingEvent={editingEvent}
+        projectName={projectName}
         onSave={handleSave}
         onDelete={handleDelete}
       />

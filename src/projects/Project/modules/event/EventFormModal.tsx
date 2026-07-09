@@ -8,6 +8,7 @@ interface EventFormModalProps {
   isOpen: boolean;
   onClose: () => void;
   editingEvent: Event | null;
+  projectName: string;
   onSave: (data: { title: string; start_at: string; end_at: string }) => void;
   onDelete?: () => void;
 }
@@ -23,7 +24,14 @@ function toTimeInput(d: Date): string {
   return `${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
-export default function EventFormModal({ isOpen, onClose, editingEvent, onSave, onDelete }: EventFormModalProps) {
+export default function EventFormModal({
+  isOpen,
+  onClose,
+  editingEvent,
+  onSave,
+  onDelete,
+  projectName
+}: EventFormModalProps) {
   const [title, setTitle] = useState('');
   const [date, setDate] = useState('');
   const [startTime, setStartTime] = useState('09:00');
@@ -49,7 +57,8 @@ export default function EventFormModal({ isOpen, onClose, editingEvent, onSave, 
   }, [isOpen, editingEvent]);
 
   function handleSubmit() {
-    if (!title.trim() || !date) return;
+    const finalTitle = title.trim() || projectName;
+    if (!finalTitle || !date) return;
 
     const [sh, sm] = startTime.split(':').map(Number);
     const [eh, em] = endTime.split(':').map(Number);
@@ -59,7 +68,7 @@ export default function EventFormModal({ isOpen, onClose, editingEvent, onSave, 
     let end = new Date(y, m - 1, d, eh, em);
     if (end <= start) end = new Date(start.getTime() + 60 * 60000); // fallback: +1h se hora final inválida
 
-    onSave({ title: title.trim(), start_at: toLocalISO(start), end_at: toLocalISO(end) });
+    onSave({ title: finalTitle, start_at: toLocalISO(start), end_at: toLocalISO(end) });
   }
 
   return (

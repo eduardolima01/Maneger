@@ -6,7 +6,8 @@ interface MonthViewProps {
   events: Event[];
   resolveColor: (projectId: string | null) => string;
   onDayClick: (day: Date) => void;
-  onEventClick: (event: Event) => void;
+  onEventEdit: (event: Event) => void;
+  onEventProjectClick: (event: Event) => void;
   onCreateEvent: (day: Date) => void;
 }
 
@@ -15,8 +16,9 @@ export default function MonthView({
   events,
   resolveColor,
   onDayClick,
-  onEventClick,
-  onCreateEvent
+  onEventEdit,
+  onCreateEvent,
+  onEventProjectClick
 }: MonthViewProps) {
   const weeks = getMonthMatrix(anchor);
 
@@ -71,23 +73,42 @@ export default function MonthView({
                 {dayEvents.slice(0, 3).map((ev) => (
                   <div
                     key={ev.id}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onEventClick(ev);
-                    }}
-                    style={{
-                      backgroundColor: resolveColor(ev.project_id),
-                      color: '#fff',
-                      fontSize: 11,
-                      borderRadius: 3,
-                      padding: '1px 4px',
-                      marginBottom: 2,
-                      overflow: 'hidden',
-                      whiteSpace: 'nowrap',
-                      textOverflow: 'ellipsis'
-                    }}
+                    className="group relative flex items-center justify-between"
+                    style={{ backgroundColor: resolveColor(ev.project_id), color: '#fff', fontSize: 11, borderRadius: 3, padding: '1px 4px', marginBottom: 2 }}
                   >
                     {ev.title}
+                    <span className="truncate">{ev.title}</span>
+                    <div className="flex gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onEventEdit(ev);
+                        }}
+                        title="Editar evento"
+                        className="w-3 h-3 flex items-center justify-center rounded bg-black/25 hover:bg-black/40"
+                      >
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="w-2 h-2">
+                          <path d="M12 20h9" />
+                          <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4Z" />
+                        </svg>
+                      </button>
+                      {ev.project_id && (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onEventProjectClick(ev);
+                          }}
+                          title="Ir para o projeto"
+                          className="w-3 h-3 flex items-center justify-center rounded bg-black/25 hover:bg-black/40"
+                        >
+                          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="w-2 h-2">
+                            <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
+                            <path d="M15 3h6v6" />
+                            <path d="M10 14 21 3" />
+                          </svg>
+                        </button>
+                      )}
+                    </div>
                   </div>
                 ))}
                 {dayEvents.length > 3 && (

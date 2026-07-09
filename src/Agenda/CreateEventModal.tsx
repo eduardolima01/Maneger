@@ -70,7 +70,13 @@ export default function CreateEventModal({ isOpen, onClose, draftStart, draftEnd
             <Button variant="secondary" onClick={onClose}>Cancelar</Button>
             <Button
               variant="primary"
-              onClick={() => title.trim() && onSave({ title: title.trim(), project_id: projectId })}
+              onClick={() => {
+                const fallbackName = projectId
+                  ? projects.find((p) => p.id === projectId)?.name ?? ''
+                  : '';
+                const finalTitle = title.trim() || fallbackName;
+                if (finalTitle) onSave({ title: finalTitle, project_id: projectId });
+              }}
             >
               Salvar
             </Button>

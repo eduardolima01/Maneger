@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useNotes } from '../../lib/hooks/useNotes';
+import { useNotes } from '@/lib/hooks/useNotes';
 
 interface NotesSectionProps {
   projectId: string;

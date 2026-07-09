@@ -1,38 +1,28 @@
 import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from '@tanstack/react-router'
-
 import { getProjectById } from '@/lib/api/projects'
 import { ProjectType } from '@/types/project.types'
 import Button from '@/components/layout/Button'
 import { useProjectModules } from '@/lib/hooks/useProjectModules'
-import AgendaSection from './AgendaSection';
-
 import ProjectSettingsModal from './ProjectSettingsModal';
-import TasksSection from './TasksSection';
-import KanbanBoard from './KanbanBoard';
-import NotesSection from './NotesSection';
+import ProjectModuleTabs from './modules/ProjectModuleTabs';
 
 export function Project() {
   const [project, setProject] = useState<ProjectType | null>(null)
   const { projectId } = useParams({ from: '/projects/$projectId' })
   const [loadingProject, setLoadingProject] = useState(true)
-
   const navigate = useNavigate()
   const [settingsOpen, setSettingsOpen] = useState(false)
-
   const { modules, toggle: toggleModule } = useProjectModules(projectId)
   const getProject = async () => await
     getProjectById(projectId).then((p) => {
       setProject(p)
       setLoadingProject(false)
     })
-
   useEffect(() => {
     getProject()
   }, [projectId])
-
   if (loadingProject || !project) return <p>Carregando projeto...</p>
-
   return (
     <div style={{ maxWidth: 480, margin: '2rem auto' }}>
       <Button
@@ -43,17 +33,29 @@ export function Project() {
         ← Voltar
       </Button>
       <div className="flex items-center justify-between my-4">
-        <h1>{project.name}</h1>
+        <div className="flex gap-2">
+          <div
+            className={`flex w-2 h-6`}
+            style={{
+              backgroundColor: project.color || '#1a73e8',
+            }}
+          >
+          </div>
+          <h1>
+            {project.name}
+          </h1>
+        </div>
         <Button variant="secondary" onClick={() => setSettingsOpen(true)}>
           ⚙ Configurações
         </Button>
       </div>
-
-      {modules?.tasks && <TasksSection projectId={projectId} />}
-      {modules?.kanban && <KanbanBoard projectId={projectId} />}
-      {modules?.notes && <NotesSection projectId={projectId} />}
-      {modules?.agenda && <AgendaSection projectId={projectId} />}
-
+      {modules && (
+        <ProjectModuleTabs
+          projectId={projectId}
+          projectName={project.name}
+          modules={modules}
+        />
+      )}
       <ProjectSettingsModal
         isOpen={settingsOpen}
         onClose={() => setSettingsOpen(false)}
@@ -66,4 +68,3 @@ export function Project() {
     </div>
   )
 }
-
