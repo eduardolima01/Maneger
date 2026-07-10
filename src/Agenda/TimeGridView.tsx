@@ -1,7 +1,8 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { Event } from '@/types/event.types';
 import { snapMinutes, formatHourLabel, formatMinutesLabel, isSameDay } from '../lib/utils/date';
 import EventBlock from './EventBlock';
+import { useNow } from '@/lib/hooks/useNow';
 
 const HOUR_HEIGHT = 48;
 const HOURS = Array.from({ length: 24 }, (_, i) => i);
@@ -81,12 +82,34 @@ export default function TimeGridView({
     setHoverMinutes(null);
   }
 
+  const now = useNow();
+  const nowMinutes = now.getHours() * 60 + now.getMinutes();
+  const todayIndex = days.findIndex((d) => isSameDay(d, now));
+
+  useEffect(() => {
+    const el = gridRef.current;
+    if (!el || todayIndex === -1) return;
+    const targetScrollTop = (nowMinutes / 60) * HOUR_HEIGHT - el.clientHeight / 2;
+    el.scrollTop = Math.max(0, targetScrollTop);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [days]); // só re-centraliza quando o range de dias muda (troca de view/navegação), não a cada minuto
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
       <div style={{ display: 'flex', borderBottom: '1px solid #e0e0e0' }}>
         <div style={{ width: 56 }} />
         {days.map((day, i) => (
-          <div key={i} style={{ flex: 1, textAlign: 'center', padding: '8px 0', fontWeight: 600, fontSize: 13 }}>
+          <div
+            key={i}
+            style={{
+              flex: 1,
+              textAlign: 'center',
+              padding: '8px 0',
+              fontWeight: 600,
+              fontSize: 13,
+              color: i === todayIndex ? '#1a73e8' : undefined,
+            }}
+          >
             {day.toLocaleDateString('pt-BR', { weekday: 'short' })} {day.getDate()}
           </div>
         ))}
@@ -127,7 +150,13 @@ export default function TimeGridView({
             key={dayIndex}
             ref={(el: any) => (columnRefs.current[dayIndex] = el)}
             onPointerDown={(e) => handlePointerDown(dayIndex, e)}
-            style={{ flex: 1, position: 'relative', borderLeft: '1px solid #eee', height: HOUR_HEIGHT * 24 }}
+            style={{
+              flex: 1,
+              position: 'relative',
+              borderLeft: '1px solid #eee',
+              height: HOUR_HEIGHT * 24,
+              backgroundColor: dayIndex === todayIndex ? 'rgba(26,115,232,0.04)' : undefined,
+            }}
           >
             {HOURS.map((h) => (
               <div key={h} style={{ position: 'absolute', top: h * HOUR_HEIGHT, left: 0, right: 0, borderTop: '1px solid #f0f0f0', height: HOUR_HEIGHT }} />
@@ -152,6 +181,32 @@ export default function TimeGridView({
                   onDuplicate={onEventDuplicate}
                 />
               ))}
+
+            {dayIndex === todayIndex && (
+              <div
+                style={{
+                  position: 'absolute',
+                  top: (nowMinutes / 60) * HOUR_HEIGHT,
+                  left: 0,
+                  right: 0,
+                  borderTop: '2px solid #ea4335',
+                  zIndex: 3,
+                  pointerEvents: 'none',
+                }}
+              >
+                <div
+                  style={{
+                    position: 'absolute',
+                    left: -5,
+                    top: -4,
+                    width: 8,
+                    height: 8,
+                    borderRadius: '50%',
+                    backgroundColor: '#ea4335',
+                  }}
+                />
+              </div>
+            )}
 
             {draft && draft.dayIndex === dayIndex && (
               <div

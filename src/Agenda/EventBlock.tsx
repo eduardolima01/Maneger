@@ -1,7 +1,7 @@
 import { useRef, useState } from 'react';
 import { convertFileSrc } from '@tauri-apps/api/core';
 import type { Event } from '@/types/event.types';
-import { fromLocalISO, toLocalISO, minutesSinceMidnight, snapMinutes, formatMinutesLabel } from '../lib/utils/date';
+import { fromLocalISO, toLocalISO, minutesSinceMidnight, snapMinutes, formatMinutesLabel, formatDuration } from '../lib/utils/date';
 
 interface EventBlockProps {
   event: Event;
@@ -150,7 +150,7 @@ export default function EventBlock({
             pointerEvents: 'none',
           }}
         >
-          {formatMinutesLabel(startMin)} – {formatMinutesLabel(startMin + durationMin)}
+          {formatMinutesLabel(startMin)} – {formatMinutesLabel(startMin + durationMin)} · {formatDuration(durationMin)}
         </div>
       )}
 
@@ -198,11 +198,15 @@ export default function EventBlock({
         {coverPath && (
           <img
             src={convertFileSrc(coverPath)}
-            className="w-3.5 h-3.5 rounded-full object-cover shrink-0"
+            className="w-5.5 h-5.5 rounded-full object-cover shrink-0"
           />
         )}
         <span className="truncate">{event.title}</span>
       </span>
+
+      {height >= 36 && (
+        <span className="block text-[10px] opacity-80 truncate">{formatDuration(durationMin)}</span>
+      )}
 
       <div className="absolute top-0.5 right-0.5 flex gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
         <button

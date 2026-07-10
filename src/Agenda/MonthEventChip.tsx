@@ -3,7 +3,8 @@ import { convertFileSrc } from '@tauri-apps/api/core';
 import {
   fromLocalISO,
   minutesSinceMidnight,
-  formatMinutesLabel
+  formatMinutesLabel,
+  formatDuration
 } from '../lib/utils/date';
 import type { Event } from '@/types/event.types';
 
@@ -29,6 +30,7 @@ export function MonthEventChip({
   const end = fromLocalISO(event.end_at);
   const startMin = minutesSinceMidnight(start);
   const endMin = minutesSinceMidnight(end);
+  const durationMin = endMin >= startMin ? endMin - startMin : (1440 - startMin) + endMin;
 
   return (
     <div
@@ -64,7 +66,7 @@ export function MonthEventChip({
             pointerEvents: 'none',
           }}
         >
-          {formatMinutesLabel(startMin)} – {formatMinutesLabel(endMin)}
+          {formatMinutesLabel(startMin)} – {formatMinutesLabel(endMin)} · {formatDuration(durationMin)}
         </div>
       )}
 

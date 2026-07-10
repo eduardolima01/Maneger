@@ -65,6 +65,14 @@ export function formatMinutesLabel(totalMinutes: number): string {
   return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
 }
 
+export function formatDuration(totalMinutes: number): string {
+  const h = Math.floor(totalMinutes / 60);
+  const m = Math.round(totalMinutes % 60);
+  if (h === 0) return `${m}min`;
+  if (m === 0) return `${h}h`;
+  return `${h}h${m}min`;
+}
+
 export function getMonthMatrix(anchor: Date, weekStartsOn: 0 | 1 = 0): Date[][] {
   const firstOfMonth = new Date(anchor.getFullYear(), anchor.getMonth(), 1);
   const gridStart = startOfWeek(firstOfMonth, weekStartsOn);

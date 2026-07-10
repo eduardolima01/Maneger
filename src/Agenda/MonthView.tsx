@@ -4,7 +4,7 @@ import {
   isSameDay,
   fromLocalISO,
   toLocalISO,
-  isToday
+  isToday,
 } from '@/lib/utils/date';
 
 import type { Event } from '../types/event.types';

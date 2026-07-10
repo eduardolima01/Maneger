@@ -53,7 +53,7 @@ export default function ProjectQuickView({ project, onGoToProject }: ProjectQuic
       )}
 
       {!loading && modules && (
-        <div style={{ maxHeight: '50vh', overflowY: 'auto' }}>
+        <div style={{ height: '55vh', overflowY: 'auto' }}>
           <ProjectModuleTabs projectId={project.id} projectName={project.name} modules={modules} />
         </div>
       )}
