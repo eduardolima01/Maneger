@@ -100,6 +100,15 @@ export default function Agenda() {
     }
   }
 
+  async function handleDuplicateEvent(sourceEvent: Event, startAt: string, endAt: string) {
+    await create({
+      title: sourceEvent.title,
+      project_id: sourceEvent.project_id,
+      start_at: startAt,
+      end_at: endAt,
+    });
+  }
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
       <AgendaHeader
@@ -132,6 +141,8 @@ export default function Agenda() {
               end.setHours(10, 0, 0, 0);
               openCreate(start, end);
             }}
+            onEventChange={(id, startAt, endAt) => update(id, { start_at: startAt, end_at: endAt })}
+            onEventDuplicate={handleDuplicateEvent}
           />
         ) : (
           <TimeGridView
@@ -144,6 +155,7 @@ export default function Agenda() {
             onEventEdit={openEdit}
             onEventProjectClick={openEventProjectTab}
             onEventChange={(id, startAt, endAt) => update(id, { start_at: startAt, end_at: endAt })}
+            onEventDuplicate={handleDuplicateEvent}
           />
         )}
       </div>

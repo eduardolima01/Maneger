@@ -1,6 +1,14 @@
-import { getMonthMatrix, isSameDay, isToday } from '../lib/utils/date';
+import { useState } from 'react';
+import {
+  getMonthMatrix,
+  isSameDay,
+  fromLocalISO,
+  toLocalISO,
+  isToday
+} from '@/lib/utils/date';
+
 import type { Event } from '../types/event.types';
-import { convertFileSrc } from '@tauri-apps/api/core';
+import { MonthEventChip } from './MonthEventChip';
 
 interface MonthViewProps {
   anchor: Date;
@@ -12,6 +20,20 @@ interface MonthViewProps {
   onEventEdit: (event: Event) => void;
   onEventProjectClick: (event: Event) => void;
   onCreateEvent: (day: Date) => void;
+  onEventChange: (id: string, startAt: string, endAt: string) => void;
+  onEventDuplicate: (event: Event, startAt: string, endAt: string) => void;
+}
+
+function moveEventToDay(event: Event, targetDay: Date) {
+  const start = fromLocalISO(event.start_at);
+  const end = fromLocalISO(event.end_at);
+  const durationMs = end.getTime() - start.getTime();
+
+  const newStart = new Date(targetDay);
+  newStart.setHours(start.getHours(), start.getMinutes(), start.getSeconds(), 0);
+  const newEnd = new Date(newStart.getTime() + durationMs);
+
+  return { startAt: toLocalISO(newStart), endAt: toLocalISO(newEnd) };
 }
 
 export default function MonthView({
@@ -23,9 +45,12 @@ export default function MonthView({
   onDayClick,
   onEventEdit,
   onCreateEvent,
-  onEventProjectClick
+  onEventProjectClick,
+  onEventChange,
+  onEventDuplicate,
 }: MonthViewProps) {
   const weeks = getMonthMatrix(anchor);
+  const [hoveredDayKey, setHoveredDayKey] = useState<string | null>(null);
 
   return (
     <div style={{ display: 'grid', gridTemplateRows: `auto repeat(${weeks.length}, 1fr)`, height: '100%' }}>
@@ -45,12 +70,34 @@ export default function MonthView({
               <div
                 key={di}
                 onClick={() => onCreateEvent(day)}
+                onDragOver={(e) => {
+                  e.preventDefault();
+                  e.dataTransfer.dropEffect = e.altKey ? 'copy' : 'move';
+                  setHoveredDayKey(day.toDateString());
+                }}
+                onDragLeave={() => setHoveredDayKey((k) => (k === day.toDateString() ? null : k))}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  setHoveredDayKey(null);
+                  const eventId = e.dataTransfer.getData('text/plain');
+                  const draggedEvent = events.find((ev) => ev.id === eventId);
+                  if (!draggedEvent) return;
+
+                  const { startAt, endAt } = moveEventToDay(draggedEvent, day);
+                  if (e.altKey) {
+                    onEventDuplicate(draggedEvent, startAt, endAt);
+                  } else {
+                    onEventChange(draggedEvent.id, startAt, endAt);
+                  }
+                }}
                 style={{
                   borderLeft: '1px solid #eee',
                   padding: 4,
                   minHeight: 90,
                   cursor: 'pointer',
-                  backgroundColor: inMonth ? '#fff' : '#fafafa',
+                  backgroundColor: hoveredDayKey === day.toDateString()
+                    ? '#e8f0fe'
+                    : inMonth ? '#fff' : '#fafafa',
                   color: inMonth ? '#000' : '#aaa',
                 }}
               >
@@ -76,54 +123,15 @@ export default function MonthView({
                   {day.getDate()}
                 </div>
                 {dayEvents.slice(0, 3).map((ev) => (
-                  <div
+                  <MonthEventChip
                     key={ev.id}
-                    onDoubleClick={(e) => {
-                      e.stopPropagation();
-                      onEventDoubleClick(ev);
-                    }}
-                    className="group relative flex items-center justify-between"
-                    style={{ backgroundColor: resolveColor(ev.project_id), color: '#fff', fontSize: 11, borderRadius: 3, padding: '1px 4px', marginBottom: 2 }}
-                  >
-                    {resolveCover(ev.project_id) && (
-                      <img
-                        src={convertFileSrc(resolveCover(ev.project_id)!)}
-                        className="w-2.5 h-2.5 rounded-full object-cover shrink-0 mr-1"
-                      />
-                    )}
-                    <span className="truncate">{ev.title}</span>
-                    <div className="flex gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          onEventEdit(ev);
-                        }}
-                        title="Editar evento"
-                        className="w-3 h-3 flex items-center justify-center rounded bg-black/25 hover:bg-black/40"
-                      >
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="w-2 h-2">
-                          <path d="M12 20h9" />
-                          <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4Z" />
-                        </svg>
-                      </button>
-                      {ev.project_id && (
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            onEventProjectClick(ev);
-                          }}
-                          title="Ir para o projeto"
-                          className="w-3 h-3 flex items-center justify-center rounded bg-black/25 hover:bg-black/40"
-                        >
-                          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="w-2 h-2">
-                            <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
-                            <path d="M15 3h6v6" />
-                            <path d="M10 14 21 3" />
-                          </svg>
-                        </button>
-                      )}
-                    </div>
-                  </div>
+                    event={ev}
+                    color={resolveColor(ev.project_id)}
+                    coverPath={resolveCover(ev.project_id)}
+                    onEdit={onEventEdit}
+                    onProjectClick={onEventProjectClick}
+                    onDoubleClick={onEventDoubleClick}
+                  />
                 ))}
                 {dayEvents.length > 3 && (
                   <div style={{ fontSize: 11, color: '#666' }}>+{dayEvents.length - 3} mais</div>

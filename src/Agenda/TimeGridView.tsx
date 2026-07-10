@@ -1,9 +1,7 @@
-import { useRef, useState, useEffect } from 'react';
+import { useRef, useState } from 'react';
 import type { Event } from '@/types/event.types';
-import { snapMinutes, formatHourLabel, isSameDay, isToday, minutesSinceMidnight } from '../lib/utils/date';
+import { snapMinutes, formatHourLabel, formatMinutesLabel, isSameDay } from '../lib/utils/date';
 import EventBlock from './EventBlock';
-
-import { useNow } from '../lib/hooks/useNow';
 
 const HOUR_HEIGHT = 48;
 const HOURS = Array.from({ length: 24 }, (_, i) => i);
@@ -13,41 +11,26 @@ interface TimeGridViewProps {
   events: Event[];
   resolveColor: (projectId: string | null) => string;
   resolveCover: (projectId: string | null) => string | null;
-  onEventDoubleClick: (event: Event) => void;
   onCreateEvent: (start: Date, end: Date) => void;
   onEventEdit: (event: Event) => void;
   onEventProjectClick: (event: Event) => void;
+  onEventDoubleClick: (event: Event) => void;
   onEventChange: (id: string, startAt: string, endAt: string) => void;
+  onEventDuplicate: (event: Event, startAt: string, endAt: string) => void;
 }
 
 export default function TimeGridView({
-  days,
-  events,
-  onCreateEvent,
-  resolveCover,
-  onEventDoubleClick,
-  onEventEdit,
-  onEventProjectClick,
-  onEventChange,
-  resolveColor
+  days, events, resolveColor, resolveCover, onCreateEvent,
+  onEventEdit, onEventProjectClick, onEventDoubleClick, onEventChange, onEventDuplicate,
 }: TimeGridViewProps) {
   const [draft, setDraft] = useState<{ dayIndex: number; startMin: number; currentMin: number } | null>(null);
   const columnRefs = useRef<(HTMLDivElement | null)[]>([]);
+  const gridRef = useRef<HTMLDivElement>(null);
+  const [hoverMinutes, setHoverMinutes] = useState<number | null>(null);
 
-  const now = useNow();
-  const scrollRef = useRef<HTMLDivElement | null>(null);
-  const hasScrolledRef = useRef(false);
-
-  useEffect(() => {
-    if (hasScrolledRef.current || !scrollRef.current) return;
-
-    const nowMin = minutesSinceMidnight(now);
-    const nowPx = nowMin * (HOUR_HEIGHT / 60);
-    const viewportHeight = scrollRef.current.clientHeight;
-
-    scrollRef.current.scrollTop = Math.max(0, nowPx - viewportHeight / 2);
-    hasScrolledRef.current = true;
-  }, [now]);
+  function getColumnWidth(): number {
+    return columnRefs.current[0]?.getBoundingClientRect().width ?? 0;
+  }
 
   function yToMinutes(dayIndex: number, clientY: number): number {
     const col = columnRefs.current[dayIndex];
@@ -85,45 +68,58 @@ export default function TimeGridView({
     window.addEventListener('pointerup', handleUp);
   }
 
+  function handleGridMouseMove(e: React.MouseEvent) {
+    const el = gridRef.current;
+    if (!el) return;
+    const rect = el.getBoundingClientRect();
+    const y = e.clientY - rect.top + el.scrollTop;
+    const raw = (y / HOUR_HEIGHT) * 60;
+    setHoverMinutes(snapMinutes(Math.max(0, Math.min(24 * 60 - 1, raw)), 5));
+  }
+
+  function handleGridMouseLeave() {
+    setHoverMinutes(null);
+  }
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
       <div style={{ display: 'flex', borderBottom: '1px solid #e0e0e0' }}>
         <div style={{ width: 56 }} />
         {days.map((day, i) => (
-          <div
-            key={i}
-            style={{
-              flex: 1,
-              textAlign: 'center',
-              padding: '8px 0',
-              fontWeight: 600,
-              fontSize: 13,
-              color: isToday(day) ? '#1a73e8' : '#000',
-            }}
-          >
-            {day.toLocaleDateString('pt-BR', { weekday: 'short' })}
-            <span
-              style={{
-                display: 'inline-block',
-                minWidth: 22,
-                borderRadius: '50%',
-                backgroundColor: isToday(day) ? '#1a73e8' : 'transparent',
-                color: isToday(day) ? '#fff' : '#000',
-              }}
-            >
-              {day.getDate()}
-            </span>
+          <div key={i} style={{ flex: 1, textAlign: 'center', padding: '8px 0', fontWeight: 600, fontSize: 13 }}>
+            {day.toLocaleDateString('pt-BR', { weekday: 'short' })} {day.getDate()}
           </div>
         ))}
       </div>
 
-      <div ref={scrollRef} style={{ flex: 1, overflowY: 'auto', display: 'flex' }}>
-        <div style={{ width: 56 }}>
+      <div
+        ref={gridRef}
+        onMouseMove={handleGridMouseMove}
+        onMouseLeave={handleGridMouseLeave}
+        style={{ flex: 1, overflowY: 'auto', display: 'flex', position: 'relative' }}
+      >
+        <div style={{ width: 56, position: 'relative' }}>
           {HOURS.map((h) => (
             <div key={h} style={{ height: HOUR_HEIGHT, fontSize: 11, color: '#666', textAlign: 'right', paddingRight: 4, transform: 'translateY(-6px)' }}>
               {formatHourLabel(h)}
             </div>
           ))}
+          {hoverMinutes !== null && !draft && (
+            <div
+              style={{
+                position: 'absolute',
+                top: (hoverMinutes / 60) * HOUR_HEIGHT - 6,
+                right: 4,
+                fontSize: 11,
+                fontWeight: 700,
+                color: '#ea4335',
+                backgroundColor: '#fff',
+                pointerEvents: 'none',
+              }}
+            >
+              {formatMinutesLabel(hoverMinutes)}
+            </div>
+          )}
         </div>
 
         {days.map((day, dayIndex) => (
@@ -133,32 +129,6 @@ export default function TimeGridView({
             onPointerDown={(e) => handlePointerDown(dayIndex, e)}
             style={{ flex: 1, position: 'relative', borderLeft: '1px solid #eee', height: HOUR_HEIGHT * 24 }}
           >
-            {isToday(day) && (
-              <div
-                style={{
-                  position: 'absolute',
-                  top: minutesSinceMidnight(now) * (HOUR_HEIGHT / 60),
-                  left: 0,
-                  right: 0,
-                  height: 0,
-                  borderTop: '2px solid #ea4335',
-                  zIndex: 3,
-                  pointerEvents: 'none',
-                }}
-              >
-                <div
-                  style={{
-                    position: 'absolute',
-                    left: -5,
-                    top: -4,
-                    width: 8,
-                    height: 8,
-                    borderRadius: '50%',
-                    backgroundColor: '#ea4335',
-                  }}
-                />
-              </div>
-            )}
             {HOURS.map((h) => (
               <div key={h} style={{ position: 'absolute', top: h * HOUR_HEIGHT, left: 0, right: 0, borderTop: '1px solid #f0f0f0', height: HOUR_HEIGHT }} />
             ))}
@@ -172,10 +142,14 @@ export default function TimeGridView({
                   hourHeight={HOUR_HEIGHT}
                   color={resolveColor(ev.project_id)}
                   coverPath={resolveCover(ev.project_id)}
-                  onDoubleClick={onEventDoubleClick}
+                  days={days}
+                  dayIndex={dayIndex}
+                  getColumnWidth={getColumnWidth}
                   onEditClick={onEventEdit}
                   onProjectClick={onEventProjectClick}
+                  onDoubleClick={onEventDoubleClick}
                   onChange={onEventChange}
+                  onDuplicate={onEventDuplicate}
                 />
               ))}
 

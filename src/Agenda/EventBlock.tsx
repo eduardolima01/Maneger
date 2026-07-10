@@ -1,28 +1,26 @@
 import { useRef, useState } from 'react';
-import type { Event } from '@/types/event.types';
-import { fromLocalISO, toLocalISO, minutesSinceMidnight, snapMinutes } from '../lib/utils/date';
 import { convertFileSrc } from '@tauri-apps/api/core';
+import type { Event } from '@/types/event.types';
+import { fromLocalISO, toLocalISO, minutesSinceMidnight, snapMinutes, formatMinutesLabel } from '../lib/utils/date';
 
 interface EventBlockProps {
   event: Event;
   hourHeight: number;
   color: string;
   coverPath: string | null;
-  onDoubleClick: (event: Event) => void;
+  days: Date[];
+  dayIndex: number;
+  getColumnWidth: () => number;
   onEditClick: (event: Event) => void;
   onProjectClick: (event: Event) => void;
+  onDoubleClick: (event: Event) => void;
   onChange: (id: string, startAt: string, endAt: string) => void;
+  onDuplicate: (event: Event, startAt: string, endAt: string) => void;
 }
 
 export default function EventBlock({
-  event,
-  hourHeight,
-  color,
-  coverPath,
-  onDoubleClick,
-  onEditClick,
-  onProjectClick,
-  onChange
+  event, hourHeight, color, coverPath, days, dayIndex, getColumnWidth,
+  onEditClick, onProjectClick, onDoubleClick, onChange, onDuplicate,
 }: EventBlockProps) {
   const start = fromLocalISO(event.start_at);
   const end = fromLocalISO(event.end_at);
@@ -30,9 +28,13 @@ export default function EventBlock({
   const durationMin = Math.max(15, minutesSinceMidnight(end) - startMin || (24 * 60 - startMin));
 
   const [dragOffsetMin, setDragOffsetMin] = useState(0);
+  const [dragOffsetX, setDragOffsetX] = useState(0);
   const [resizeExtraMin, setResizeExtraMin] = useState(0);
+  const [isHovering, setIsHovering] = useState(false);
   const dragMode = useRef<'move' | 'resize' | null>(null);
   const dragStartY = useRef(0);
+  const dragStartX = useRef(0);
+
 
   const pxPerMin = hourHeight / 60;
 
@@ -40,24 +42,42 @@ export default function EventBlock({
     e.stopPropagation();
     dragMode.current = mode;
     dragStartY.current = e.clientY;
+    dragStartX.current = e.clientX;
     setDragOffsetMin(0);
+    setDragOffsetX(0);
     setResizeExtraMin(0);
+
+    const columnWidth = getColumnWidth();
 
     const handleMove = (ev: PointerEvent) => {
       const deltaMin = snapMinutes((ev.clientY - dragStartY.current) / pxPerMin);
-      if (dragMode.current === 'move') setDragOffsetMin(deltaMin);
+      if (dragMode.current === 'move') {
+        setDragOffsetMin(deltaMin);
+        setDragOffsetX(ev.clientX - dragStartX.current);
+      }
       if (dragMode.current === 'resize') setResizeExtraMin(Math.max(15 - durationMin, deltaMin));
     };
 
     const handleUp = (ev: PointerEvent) => {
       const deltaMin = snapMinutes((ev.clientY - dragStartY.current) / pxPerMin);
+      const deltaX = ev.clientX - dragStartX.current;
       window.removeEventListener('pointermove', handleMove);
       window.removeEventListener('pointerup', handleUp);
 
-      if (dragMode.current === 'move' && deltaMin !== 0) {
-        const newStart = new Date(start.getTime() + deltaMin * 60000);
-        const newEnd = new Date(end.getTime() + deltaMin * 60000);
-        onChange(event.id, toLocalISO(newStart), toLocalISO(newEnd));
+      if (dragMode.current === 'move' && (deltaMin !== 0 || Math.abs(deltaX) >= columnWidth / 2)) {
+        const dayDelta = columnWidth > 0 ? Math.round(deltaX / columnWidth) : 0;
+        const targetDayIndex = Math.min(days.length - 1, Math.max(0, dayIndex + dayDelta));
+        const targetDay = days[targetDayIndex];
+
+        const newStart = new Date(targetDay);
+        newStart.setHours(0, startMin + deltaMin, 0, 0);
+        const newEnd = new Date(newStart.getTime() + durationMin * 60000);
+
+        if (ev.altKey) {
+          onDuplicate(event, toLocalISO(newStart), toLocalISO(newEnd));
+        } else {
+          onChange(event.id, toLocalISO(newStart), toLocalISO(newEnd));
+        }
       } else if (dragMode.current === 'resize' && deltaMin !== 0) {
         const extra = Math.max(15 - durationMin, deltaMin);
         const newEnd = new Date(end.getTime() + extra * 60000);
@@ -66,6 +86,7 @@ export default function EventBlock({
 
       dragMode.current = null;
       setDragOffsetMin(0);
+      setDragOffsetX(0);
       setResizeExtraMin(0);
     };
 
@@ -76,13 +97,23 @@ export default function EventBlock({
   const top = (startMin + dragOffsetMin) * pxPerMin;
   const height = Math.max(16, (durationMin + resizeExtraMin) * pxPerMin);
 
+  const isDraggingMove = dragOffsetMin !== 0 || dragOffsetX !== 0;
+  const isResizing = resizeExtraMin !== 0;
+  const showHoverTooltip = isHovering && !isDraggingMove && !isResizing;
+  const previewStartMin = startMin + dragOffsetMin;
+  const previewEndMin = previewStartMin + durationMin;
+  const previewResizeEndMin = startMin + durationMin + resizeExtraMin;
+
   return (
     <div
       onPointerDown={(e) => beginDrag('move', e)}
+      onMouseEnter={() => setIsHovering(true)}
+      onMouseLeave={() => setIsHovering(false)}
       onDoubleClick={(e) => {
         e.stopPropagation();
         onDoubleClick(event);
       }}
+      className="group"
       style={{
         position: 'absolute',
         top,
@@ -94,13 +125,85 @@ export default function EventBlock({
         borderRadius: 4,
         padding: '2px 6px',
         fontSize: 12,
-        overflow: 'hidden',
+        // overflow: 'hidden',
         cursor: 'pointer',
         userSelect: 'none',
         zIndex: 2,
+        transform: dragOffsetX ? `translateX(${dragOffsetX}px)` : undefined,
+        boxShadow: dragOffsetX ? '0 4px 12px rgba(0,0,0,0.3)' : undefined,
       }}
-      className="group"
     >
+
+      {showHoverTooltip && (
+        <div
+          style={{
+            position: 'absolute',
+            top: -22,
+            left: 0,
+            backgroundColor: '#333',
+            color: '#fff',
+            fontSize: 11,
+            padding: '2px 6px',
+            borderRadius: 4,
+            whiteSpace: 'nowrap',
+            zIndex: 10,
+            pointerEvents: 'none',
+          }}
+        >
+          {formatMinutesLabel(startMin)} – {formatMinutesLabel(startMin + durationMin)}
+        </div>
+      )}
+
+      {isDraggingMove && (
+        <div
+          style={{
+            position: 'absolute',
+            top: -22,
+            left: 0,
+            backgroundColor: '#333',
+            color: '#fff',
+            fontSize: 11,
+            padding: '2px 6px',
+            borderRadius: 4,
+            whiteSpace: 'nowrap',
+            zIndex: 10,
+            pointerEvents: 'none',
+          }}
+        >
+          {formatMinutesLabel(previewStartMin)} – {formatMinutesLabel(previewEndMin)}
+        </div>
+      )}
+
+      {isResizing && (
+        <div
+          style={{
+            position: 'absolute',
+            bottom: -22,
+            left: 0,
+            backgroundColor: '#333',
+            color: '#fff',
+            fontSize: 11,
+            padding: '2px 6px',
+            borderRadius: 4,
+            whiteSpace: 'nowrap',
+            zIndex: 10,
+            pointerEvents: 'none',
+          }}
+        >
+          até {formatMinutesLabel(previewResizeEndMin)}
+        </div>
+      )}
+
+      <span className="truncate flex items-center gap-1 pr-10">
+        {coverPath && (
+          <img
+            src={convertFileSrc(coverPath)}
+            className="w-3.5 h-3.5 rounded-full object-cover shrink-0"
+          />
+        )}
+        <span className="truncate">{event.title}</span>
+      </span>
+
       <div className="absolute top-0.5 right-0.5 flex gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
         <button
           onPointerDown={(e) => e.stopPropagation()}
@@ -135,15 +238,7 @@ export default function EventBlock({
           </button>
         )}
       </div>
-      <span className="truncate flex items-center gap-1 pr-10">
-        {coverPath && (
-          <img
-            src={convertFileSrc(coverPath)}
-            className="w-3.5 h-3.5 rounded-full object-cover shrink-0"
-          />
-        )}
-        <span className="truncate">{event.title}</span>
-      </span>
+
       <div
         onPointerDown={(e) => beginDrag('resize', e)}
         style={{

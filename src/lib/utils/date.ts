@@ -58,6 +58,13 @@ export function isToday(d: Date): boolean {
   return isSameDay(d, new Date());
 }
 
+export function formatMinutesLabel(totalMinutes: number): string {
+  const clamped = ((totalMinutes % 1440) + 1440) % 1440;
+  const h = Math.floor(clamped / 60);
+  const m = Math.round(clamped % 60);
+  return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+}
+
 export function getMonthMatrix(anchor: Date, weekStartsOn: 0 | 1 = 0): Date[][] {
   const firstOfMonth = new Date(anchor.getFullYear(), anchor.getMonth(), 1);
   const gridStart = startOfWeek(firstOfMonth, weekStartsOn);
