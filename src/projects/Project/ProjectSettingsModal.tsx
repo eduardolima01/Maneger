@@ -7,6 +7,10 @@ import type { ProjectType } from '../../types/project.types';
 import type { ModuleStatus } from '../../lib/api/modules';
 import type { ModuleKey } from '../../types/module.types';
 
+import { setProjectArchived } from '../../lib/api/projects';
+import { open } from '@tauri-apps/plugin-dialog';
+import { invoke, convertFileSrc } from '@tauri-apps/api/core';
+
 import { getProjectColor, PALETTE } from '@/lib/utils/projectColor';
 
 interface ProjectSettingsModalProps {
@@ -66,9 +70,35 @@ export default function ProjectSettingsModal({
   }
 
   async function handleDelete() {
+    if (project.cover_path) {
+      await invoke('delete_project_cover', { projectId: project.id })
+        .catch(() => { });
+    }
     await projectsApi.deleteProject(project.id);
     onDeleted();
     onClose();
+  }
+
+  async function handleToggleArchived() {
+    await setProjectArchived(project.id, !project.archived);
+    onUpdated();
+    onClose();
+  }
+
+  async function handlePickCover() {
+    const selected = await open({
+      multiple: false,
+      filters: [{ name: 'Imagens', extensions: ['png', 'jpg', 'jpeg', 'webp', 'gif'] }],
+    });
+    if (!selected || Array.isArray(selected)) return;
+
+    const newPath = await invoke<string>('save_project_cover', {
+      projectId: project.id,
+      sourcePath: selected,
+    });
+
+    await projectsApi.updateProject(project.id, { cover_path: newPath });
+    onUpdated();
   }
 
   return (
@@ -124,6 +154,30 @@ export default function ProjectSettingsModal({
         </div>
 
         {modules && <ModuleToggles modules={modules} onToggle={onToggleModule} />}
+
+        <div>
+          <label
+            style={{ fontSize: 13, fontWeight: 600, display: 'block', marginBottom: 4 }}>
+            Capa
+          </label>
+          {project.cover_path && (
+            <img
+              src={convertFileSrc(project.cover_path)}
+              style={{ width: '100%', height: 100, objectFit: 'cover', borderRadius: 6, marginBottom: 8 }}
+            />
+          )}
+          <Button variant="secondary" onClick={handlePickCover}>
+            {project.cover_path ? 'Trocar capa' : 'Escolher capa'}
+          </Button>
+        </div>
+
+        {modules && <ModuleToggles modules={modules} onToggle={onToggleModule} />}
+
+        <div style={{ borderTop: '1px solid #eee', paddingTop: 12 }}>
+          <Button variant="secondary" onClick={handleToggleArchived}>
+            {project.archived ? '📤 Desarquivar projeto' : '📥 Arquivar projeto'}
+          </Button>
+        </div>
 
         <div style={{ borderTop: '1px solid #eee', paddingTop: 12 }}>
           {!confirmingDelete ? (

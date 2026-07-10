@@ -12,6 +12,8 @@ interface TimeGridViewProps {
   days: Date[];
   events: Event[];
   resolveColor: (projectId: string | null) => string;
+  resolveCover: (projectId: string | null) => string | null;
+  onEventDoubleClick: (event: Event) => void;
   onCreateEvent: (start: Date, end: Date) => void;
   onEventEdit: (event: Event) => void;
   onEventProjectClick: (event: Event) => void;
@@ -22,6 +24,8 @@ export default function TimeGridView({
   days,
   events,
   onCreateEvent,
+  resolveCover,
+  onEventDoubleClick,
   onEventEdit,
   onEventProjectClick,
   onEventChange,
@@ -167,6 +171,8 @@ export default function TimeGridView({
                   event={ev}
                   hourHeight={HOUR_HEIGHT}
                   color={resolveColor(ev.project_id)}
+                  coverPath={resolveCover(ev.project_id)}
+                  onDoubleClick={onEventDoubleClick}
                   onEditClick={onEventEdit}
                   onProjectClick={onEventProjectClick}
                   onChange={onEventChange}

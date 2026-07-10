@@ -1,13 +1,14 @@
 import { useRef, useState } from 'react';
 import type { Event } from '@/types/event.types';
 import { fromLocalISO, toLocalISO, minutesSinceMidnight, snapMinutes } from '../lib/utils/date';
-import Button from '@/components/layout/Button';
-import { FaProjectDiagram } from 'react-icons/fa';
+import { convertFileSrc } from '@tauri-apps/api/core';
 
 interface EventBlockProps {
   event: Event;
   hourHeight: number;
   color: string;
+  coverPath: string | null;
+  onDoubleClick: (event: Event) => void;
   onEditClick: (event: Event) => void;
   onProjectClick: (event: Event) => void;
   onChange: (id: string, startAt: string, endAt: string) => void;
@@ -17,6 +18,8 @@ export default function EventBlock({
   event,
   hourHeight,
   color,
+  coverPath,
+  onDoubleClick,
   onEditClick,
   onProjectClick,
   onChange
@@ -76,6 +79,10 @@ export default function EventBlock({
   return (
     <div
       onPointerDown={(e) => beginDrag('move', e)}
+      onDoubleClick={(e) => {
+        e.stopPropagation();
+        onDoubleClick(event);
+      }}
       style={{
         position: 'absolute',
         top,
@@ -88,14 +95,12 @@ export default function EventBlock({
         padding: '2px 6px',
         fontSize: 12,
         overflow: 'hidden',
-        cursor: 'grab',
+        cursor: 'pointer',
         userSelect: 'none',
         zIndex: 2,
       }}
       className="group"
     >
-      <span className="truncate block pr-10">{event.title}</span>
-
       <div className="absolute top-0.5 right-0.5 flex gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
         <button
           onPointerDown={(e) => e.stopPropagation()}
@@ -130,9 +135,15 @@ export default function EventBlock({
           </button>
         )}
       </div>
-
-
-      {event.title}
+      <span className="truncate flex items-center gap-1 pr-10">
+        {coverPath && (
+          <img
+            src={convertFileSrc(coverPath)}
+            className="w-3.5 h-3.5 rounded-full object-cover shrink-0"
+          />
+        )}
+        <span className="truncate">{event.title}</span>
+      </span>
       <div
         onPointerDown={(e) => beginDrag('resize', e)}
         style={{

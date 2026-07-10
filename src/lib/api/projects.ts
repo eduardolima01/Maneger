@@ -4,7 +4,23 @@ import type { ProjectType, CreateProjectInput, UpdateProjectInput } from '@/type
 
 export async function getAllProjects(): Promise<ProjectType[]> {
   const db = await getDb();
-  return db.select<ProjectType[]>('SELECT * FROM projects ORDER BY name ASC');
+  return db.select<ProjectType[]>('SELECT * FROM projects WHERE archived = 0 ORDER BY name ASC');
+}
+
+export async function getArchivedProjects(): Promise<ProjectType[]> {
+  const db = await getDb();
+  return db.select<ProjectType[]>('SELECT * FROM projects WHERE archived = 1 ORDER BY name ASC');
+}
+
+export async function setProjectArchived(id: string, archived: boolean): Promise<void> {
+  const db = await getDb();
+  await db.execute('UPDATE projects SET archived = $1 WHERE id = $2', [archived ? 1 : 0, id]);
+}
+
+export async function getProjectCovers(): Promise<Record<string, string | null>> {
+  const db = await getDb();
+  const rows = await db.select<{ id: string; cover_path: string | null }[]>('SELECT id, cover_path FROM projects');
+  return Object.fromEntries(rows.map((r) => [r.id, r.cover_path]));
 }
 
 export async function getProjectById(id: string): Promise<ProjectType | null> {

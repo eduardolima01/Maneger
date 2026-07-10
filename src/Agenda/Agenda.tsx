@@ -8,12 +8,9 @@ import type { Event } from '../types/event.types';
 import { addDays, addMonths, startOfWeek, startOfDay, toLocalISO } from '../lib/utils/date';
 
 import { useProjectColors } from '../lib/hooks/useProjectColors';
+import { useProjectCovers } from '../lib/hooks/project/useProjectCovers';
+
 import { useNavigate } from '@tanstack/react-router';
-
-import { getProjectById } from '../lib/api/projects';
-import type { ProjectType } from '../types/project.types';
-
-import ProjectQuickModal from '../Projects/Project/ProjectQuickModal.tsx';
 
 export default function Agenda() {
   const navigate = useNavigate();
@@ -24,8 +21,9 @@ export default function Agenda() {
   const [editingEvent, setEditingEvent] = useState<Event | null>(null);
   const [modalOpen, setModalOpen] = useState(false);
 
-  const [quickEditProject, setQuickEditProject] = useState<ProjectType | null>(null);
-  const [projectModalOpen, setProjectModalOpen] = useState(false);
+  const [modalInitialTab, setModalInitialTab] = useState<'event' | 'project'>('event');
+
+  const { resolveCover } = useProjectCovers();
 
   const { rangeStart, rangeEnd, days, label } = useMemo(() => {
     if (view === 'day') {
@@ -65,15 +63,8 @@ export default function Agenda() {
   function openEdit(event: Event) {
     setEditingEvent(event);
     setDraft(null);
+    setModalInitialTab('event');
     setModalOpen(true);
-  }
-
-  async function openProjectModal(event: Event) {
-    if (!event.project_id) return;
-    const project = await getProjectById(event.project_id);
-    if (!project) return;
-    setQuickEditProject(project);
-    setProjectModalOpen(true);
   }
 
   async function handleSave(data: { title: string; project_id: string | null }) {
@@ -83,6 +74,23 @@ export default function Agenda() {
       await create({ ...data, start_at: toLocalISO(draft.start), end_at: toLocalISO(draft.end) });
     }
     setModalOpen(false);
+  }
+
+  function openEventProjectTab(event: Event) {
+    if (!event.project_id) return;
+    setEditingEvent(event);
+    setDraft(null);
+    setModalInitialTab('project');
+    setModalOpen(true);
+  }
+
+
+  function handleCardDoubleClick(event: Event) {
+    if (event.project_id) {
+      openEventProjectTab(event);
+    } else {
+      openEdit(event);
+    }
   }
 
   async function handleDelete() {
@@ -109,12 +117,14 @@ export default function Agenda() {
             anchor={anchor}
             events={events}
             resolveColor={resolveColor}
+            resolveCover={resolveCover}
             onDayClick={(day) => {
               setAnchor(day);
               setView('day');
             }}
-            onEventProjectClick={openProjectModal}
+            onEventProjectClick={openEventProjectTab}
             onEventEdit={openEdit}
+            onEventDoubleClick={handleCardDoubleClick}
             onCreateEvent={(day) => {
               const start = new Date(day);
               start.setHours(9, 0, 0, 0);
@@ -129,8 +139,10 @@ export default function Agenda() {
             events={events}
             onCreateEvent={openCreate}
             resolveColor={resolveColor}
+            resolveCover={resolveCover}
+            onEventDoubleClick={handleCardDoubleClick}
             onEventEdit={openEdit}
-            onEventProjectClick={openProjectModal}
+            onEventProjectClick={openEventProjectTab}
             onEventChange={(id, startAt, endAt) => update(id, { start_at: startAt, end_at: endAt })}
           />
         )}
@@ -144,19 +156,13 @@ export default function Agenda() {
         editingEvent={editingEvent}
         onSave={handleSave}
         onDelete={handleDelete}
+        initialTab={modalInitialTab}
+        onGoToProject={(projectId) => navigate({
+          to: '/projects/$projectId',
+          params: { projectId }
+        })}
       />
-
-      {quickEditProject && (
-        <ProjectQuickModal
-          isOpen={projectModalOpen}
-          onClose={() => setProjectModalOpen(false)}
-          project={quickEditProject}
-          onGoToProject={() => {
-            setProjectModalOpen(false);
-            navigate({ to: '/projects/$projectId', params: { projectId: quickEditProject.id } });
-          }}
-        />
-      )}
     </div>
   );
 }
+

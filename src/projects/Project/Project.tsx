@@ -6,6 +6,7 @@ import Button from '@/components/layout/Button'
 import { useProjectModules } from '@/lib/hooks/useProjectModules'
 import ProjectSettingsModal from './ProjectSettingsModal';
 import ProjectModuleTabs from './modules/ProjectModuleTabs';
+import { convertFileSrc } from '@tauri-apps/api/core';
 
 export function Project() {
   const [project, setProject] = useState<ProjectType | null>(null)
@@ -32,6 +33,14 @@ export function Project() {
       >
         ← Voltar
       </Button>
+
+      {project.cover_path && (
+        <img
+          src={convertFileSrc(project.cover_path)}
+          style={{ width: '100%', height: 140, objectFit: 'cover', borderRadius: 8, marginBottom: 12 }}
+        />
+      )}
+
       <div className="flex items-center justify-between my-4">
         <div className="flex gap-2">
           <div
@@ -56,6 +65,7 @@ export function Project() {
           modules={modules}
         />
       )}
+
       <ProjectSettingsModal
         isOpen={settingsOpen}
         onClose={() => setSettingsOpen(false)}

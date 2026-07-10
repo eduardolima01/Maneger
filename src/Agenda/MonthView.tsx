@@ -1,10 +1,13 @@
 import { getMonthMatrix, isSameDay, isToday } from '../lib/utils/date';
 import type { Event } from '../types/event.types';
+import { convertFileSrc } from '@tauri-apps/api/core';
 
 interface MonthViewProps {
   anchor: Date;
   events: Event[];
   resolveColor: (projectId: string | null) => string;
+  resolveCover: (projectId: string | null) => string | null;
+  onEventDoubleClick: (event: Event) => void;
   onDayClick: (day: Date) => void;
   onEventEdit: (event: Event) => void;
   onEventProjectClick: (event: Event) => void;
@@ -15,6 +18,8 @@ export default function MonthView({
   anchor,
   events,
   resolveColor,
+  resolveCover,
+  onEventDoubleClick,
   onDayClick,
   onEventEdit,
   onCreateEvent,
@@ -73,10 +78,19 @@ export default function MonthView({
                 {dayEvents.slice(0, 3).map((ev) => (
                   <div
                     key={ev.id}
+                    onDoubleClick={(e) => {
+                      e.stopPropagation();
+                      onEventDoubleClick(ev);
+                    }}
                     className="group relative flex items-center justify-between"
                     style={{ backgroundColor: resolveColor(ev.project_id), color: '#fff', fontSize: 11, borderRadius: 3, padding: '1px 4px', marginBottom: 2 }}
                   >
-                    {ev.title}
+                    {resolveCover(ev.project_id) && (
+                      <img
+                        src={convertFileSrc(resolveCover(ev.project_id)!)}
+                        className="w-2.5 h-2.5 rounded-full object-cover shrink-0 mr-1"
+                      />
+                    )}
                     <span className="truncate">{ev.title}</span>
                     <div className="flex gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
                       <button

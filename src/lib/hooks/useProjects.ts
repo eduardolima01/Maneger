@@ -34,5 +34,5 @@ export function useProjects() {
     await refresh();
   };
 
-  return { projects, loading, error, add, remove };
+  return { projects, loading, error, add, remove, refresh };
 }
