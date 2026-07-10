@@ -73,7 +73,7 @@ export default function CreateEventModal({
 
   return (
     <Modal open={isOpen} onClose={onClose}>
-      <div style={{ padding: 16, width: 640, maxWidth: '90vw' }}>
+      <div style={{ padding: 16, width: 640, maxWidth: '90vw', height: 640, maxHeight: '90vw' }}>
         {hasProjectTab && (
           <div style={{ display: 'flex', gap: 4, borderBottom: '1px solid #e0e0e0', marginBottom: 12 }}>
             {(['event', 'project'] as EditorTab[]).map((tab) => (

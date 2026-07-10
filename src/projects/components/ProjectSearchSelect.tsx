@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { createProject } from '@/lib/api/projects';
 import { useProjects } from '@/lib/hooks/useProjects';
+import { useFavoriteProjects } from '@/lib/hooks/useFavoriteProjects';
 import type { ProjectType } from '@/types/project.types';
 
 interface ProjectSearchSelectProps {
@@ -10,6 +11,7 @@ interface ProjectSearchSelectProps {
 
 export default function ProjectSearchSelect({ value, onChange }: ProjectSearchSelectProps) {
   const { projects, refresh } = useProjects();
+  const { isFavorite, toggleFavorite } = useFavoriteProjects();
   const [query, setQuery] = useState('');
   const [isOpen, setIsOpen] = useState(false);
   const [creating, setCreating] = useState(false);
@@ -30,6 +32,8 @@ export default function ProjectSearchSelect({ value, onChange }: ProjectSearchSe
 
   const filtered = projects.filter((p) => p.name.toLowerCase().includes(query.toLowerCase()));
   const exactMatch = projects.some((p) => p.name.toLowerCase() === query.trim().toLowerCase());
+  const favorites = filtered.filter((p) => isFavorite(p.id));
+  const nonFavorites = filtered.filter((p) => !isFavorite(p.id));
 
   function selectProject(project: ProjectType) {
     onChange(project.id, project);
@@ -37,6 +41,40 @@ export default function ProjectSearchSelect({ value, onChange }: ProjectSearchSe
     setQuery('');
   }
 
+  function renderRow(p: ProjectType) {
+    const favorited = isFavorite(p.id);
+    return (
+      <div
+        key={p.id}
+        style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 8px 8px 8px' }}
+        onMouseDown={(e) => e.preventDefault()}
+      >
+        <span
+          onClick={() => selectProject(p)}
+          style={{ flex: 1, fontSize: 14, cursor: 'pointer' }}
+        >
+          {p.name}
+        </span>
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            toggleFavorite(p.id);
+          }}
+          title={favorited ? 'Remover dos favoritos' : 'Marcar como favorito'}
+          style={{
+            border: 'none',
+            background: 'none',
+            cursor: 'pointer',
+            fontSize: 14,
+            color: favorited ? '#f6bf26' : '#ccc',
+            padding: '0 4px',
+          }}
+        >
+          {favorited ? '★' : '☆'}
+        </button>
+      </div>
+    );
+  }
   function clearSelection() {
     onChange(null, null);
     setQuery('');
@@ -118,16 +156,21 @@ export default function ProjectSearchSelect({ value, onChange }: ProjectSearchSe
             Sem projeto
           </div>
 
-          {filtered.map((p) => (
-            <div
-              key={p.id}
-              onClick={() => selectProject(p)}
-              style={{ padding: 8, fontSize: 14, cursor: 'pointer' }}
-              onMouseDown={(e) => e.preventDefault()}
-            >
-              {p.name}
-            </div>
-          ))}
+          {favorites.length > 0 && (
+            <>
+              <div style={{ padding: '6px 8px 2px', fontSize: 11, fontWeight: 700, color: '#999', textTransform: 'uppercase' }}>
+                ★ Favoritos
+              </div>
+              {favorites.map(renderRow)}
+              {nonFavorites.length > 0 && (
+                <div style={{ padding: '6px 8px 2px', fontSize: 11, fontWeight: 700, color: '#999', textTransform: 'uppercase', borderTop: '1px solid #eee' }}>
+                  Todos os projetos
+                </div>
+              )}
+            </>
+          )}
+
+          {nonFavorites.map(renderRow)}
 
           {query.trim() && !exactMatch && (
             <div
