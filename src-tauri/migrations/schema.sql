@@ -6,15 +6,56 @@ CREATE TABLE IF NOT EXISTS projects (
     archived INTEGER NOT NULL DEFAULT 0
 );
 
-CREATE TABLE IF NOT EXISTS tasks (
+CREATE TABLE IF NOT EXISTS task_groups (
     id TEXT PRIMARY KEY,
     project_id TEXT NOT NULL,
-    title TEXT NOT NULL,
-    status TEXT NOT NULL DEFAULT 'todo' CHECK (status IN ('todo', 'doing', 'done')),
+    name TEXT NOT NULL,
+    position INTEGER NOT NULL DEFAULT 0,
     FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE
 );
 
+CREATE INDEX IF NOT EXISTS idx_task_groups_project_id ON task_groups (project_id);
+
+CREATE TABLE IF NOT EXISTS tasks (
+    id TEXT PRIMARY KEY,
+    project_id TEXT NOT NULL,
+    group_id TEXT,
+    type TEXT NOT NULL CHECK (type IN ('note', 'checkbox', 'status')),
+    title TEXT NOT NULL,
+    description TEXT,
+    payload TEXT NOT NULL DEFAULT '{}',
+    position INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE,
+    FOREIGN KEY (group_id) REFERENCES task_groups (id) ON DELETE SET NULL
+);
+
 CREATE INDEX IF NOT EXISTS idx_tasks_project_id ON tasks (project_id);
+CREATE INDEX IF NOT EXISTS idx_tasks_group_id ON tasks (group_id);
+
+CREATE TABLE IF NOT EXISTS subtasks (
+    id TEXT PRIMARY KEY,
+    task_id TEXT NOT NULL,
+    title TEXT NOT NULL,
+    checked INTEGER NOT NULL DEFAULT 0,
+    position INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    FOREIGN KEY (task_id) REFERENCES tasks (id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_subtasks_task_id ON subtasks (task_id);
+
+CREATE TABLE IF NOT EXISTS task_ideas (
+    id TEXT PRIMARY KEY,
+    project_id TEXT NOT NULL,
+    content TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_task_ideas_project_id ON task_ideas (project_id);
 
 CREATE TABLE IF NOT EXISTS notes (
     id TEXT PRIMARY KEY,
