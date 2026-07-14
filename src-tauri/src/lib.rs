@@ -1,3 +1,5 @@
+mod schema;
+
 use std::fs;
 use std::path::PathBuf;
 use tauri::Manager;
@@ -70,7 +72,7 @@ pub fn run() {
     let migrations = vec![Migration {
         version: 1,
         description: "initial_schema",
-        sql: include_str!("../migrations/schema.sql"),
+        sql: schema::SCHEMA,
         kind: MigrationKind::Up,
     }];
 
