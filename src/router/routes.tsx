@@ -5,6 +5,7 @@ import { Projects } from '@/Projects/Projects'
 import { Project } from '@/Projects/Project/Project'
 import { Settings } from '@/Settings/Settings'
 import Agenda from '@/Agenda/Agenda';
+import LogsPage from '@/Logs/LogsPage';
 
 const rootRoute = createRootRoute({
   component: AppLayout,
@@ -40,10 +41,17 @@ const agendaRoute = createRoute({
   component: Agenda,
 });
 
+const logsRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/logs',
+  component: LogsPage,
+});
+
 export const routeTree = rootRoute.addChildren([
   dashboardRoute,
   projectsRoute,
   projectRoute,
   settingsRoute,
-  agendaRoute
+  agendaRoute,
+  logsRoute
 ])

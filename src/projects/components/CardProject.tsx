@@ -1,34 +1,40 @@
 import { ProjectType } from "@/types/project.types";
 import { Link } from "@tanstack/react-router";
+import { convertFileSrc } from "@tauri-apps/api/core";
 
 interface CardProjectProps {
   project: ProjectType;
-  onClick?: (project: ProjectType) => void;
 }
 
-export default function CardProject({ project, onClick }: CardProjectProps) {
+export default function CardProject({ project }: CardProjectProps) {
   return (
-    <div
-      onClick={() => onClick?.(project)}
-      style={{
-        display: 'flex',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        padding: 16,
-        borderRadius: 8,
-        border: '1px solid #e5e7eb',
-        marginBottom: 8,
-        cursor: onClick ? 'pointer' : 'default',
-      }}
+    <Link
+      to="/projects/$projectId"
+      params={{ projectId: String(project.id) }}
     >
-      <span style={{ fontWeight: 500 }}>{project.name}</span>
-
-      <Link
-        to="/projects/$projectId"
-        params={{ projectId: String(project.id) }}
+      <div
+        style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          padding: 16,
+          borderRadius: 8,
+          border: '1px solid #e5e7eb',
+          marginBottom: 8,
+          cursor: 'pointer'
+        }}
+        className="hover:bg-gray-50"
       >
-        selecionar
-      </Link>
-    </div>
+        <div className="flex gap-1 items-center">
+          {project.cover_path && (
+            <img
+              src={convertFileSrc(project.cover_path)}
+              className="w-16 h-16 object-cover rounded-full mr-4"
+            />
+          )}
+          <span style={{ fontWeight: 500 }}>{project.name}</span>
+        </div>
+      </div>
+    </Link>
   );
 }

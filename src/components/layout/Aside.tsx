@@ -9,6 +9,7 @@ import {
 } from 'react-icons/md'
 
 import { ThemeToggle } from '@/components/layout/ThemeToggle'
+import { LuLogs } from 'react-icons/lu'
 
 const menuItems = [
   {
@@ -35,6 +36,11 @@ const menuItems = [
     label: 'Notas',
     icon: MdNotes,
     to: '/notes',
+  },
+  {
+    label: 'Logs',
+    icon: LuLogs,
+    to: '/logs',
   },
 ]
 
