@@ -1,17 +1,20 @@
+import { useState } from 'react';
 import CreateProjects from './components/CreateProjects';
-import { useProjects } from '../lib/hooks/useProjects';
-import CardProject from './components/CardProject';
-
+import ProjectTree from './ProjectTree';
 import { getArchivedProjects, setProjectArchived } from '../lib/api/projects';
 import type { ProjectType } from '../types/project.types';
-import { useState } from 'react';
+import { useProjectTree } from '@/lib/hooks/project/useProjectTree';
 
 export const Projects = () => {
-  const { projects, loading, error, add } = useProjects();
+  const treeApi = useProjectTree();
 
   const [showArchived, setShowArchived] = useState(false);
   const [archivedProjects, setArchivedProjects] = useState<ProjectType[]>([]);
   const [loadingArchived, setLoadingArchived] = useState(false);
+
+  async function handleCreateRoot(name: string) {
+    await treeApi.createProject({ name });
+  }
 
   async function toggleShowArchived() {
     if (!showArchived) {
@@ -26,25 +29,15 @@ export const Projects = () => {
   async function handleUnarchive(id: string) {
     await setProjectArchived(id, false);
     setArchivedProjects((prev) => prev.filter((p) => p.id !== id));
+    await treeApi.reload(); // agora é um reload de verdade, sem remount — expandedIds sobrevive
   }
-
-
-  if (loading) return <p>Carregando...</p>;
-  if (error) return <p>Erro: {error}</p>;
 
   return (
     <div>
       <h1>Projetos</h1>
-      <CreateProjects onCreate={add} />
-      <ul>
-        {projects.map((p) => (
-          <li key={p.id}>
-            <CardProject
-              project={p}
-            />
-          </li>
-        ))}
-      </ul>
+      <CreateProjects onCreate={handleCreateRoot} />
+
+      {treeApi.loading ? <p>Carregando...</p> : <ProjectTree api={treeApi} />}
 
       <div style={{ marginTop: 24, borderTop: '1px solid #eee', paddingTop: 12 }}>
         <button
@@ -62,10 +55,7 @@ export const Projects = () => {
             )}
             <ul>
               {archivedProjects.map((p) => (
-                <li
-                  key={p.id}
-                  style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '6px 0' }}
-                >
+                <li key={p.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '6px 0' }}>
                   <span>{p.name}</span>
                   <button
                     onClick={() => handleUnarchive(p.id)}
@@ -81,5 +71,4 @@ export const Projects = () => {
       </div>
     </div>
   );
-}
-
+};

@@ -153,8 +153,6 @@ export default function ProjectSettingsModal({
           </div>
         </div>
 
-        {modules && <ModuleToggles modules={modules} onToggle={onToggleModule} />}
-
         <div>
           <label
             style={{ fontSize: 13, fontWeight: 600, display: 'block', marginBottom: 4 }}>

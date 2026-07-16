@@ -7,6 +7,8 @@ import { useProjectModules } from '@/lib/hooks/useProjectModules'
 import ProjectSettingsModal from './ProjectSettingsModal';
 import ProjectModuleTabs from './modules/ProjectModuleTabs';
 import { convertFileSrc } from '@tauri-apps/api/core';
+import SubprojectsSection from './SubProject/SubprojectsSection'
+import ProjectBreadcrumb from '../components/ProjectBreadcrumb'
 
 export function Project() {
   const [project, setProject] = useState<ProjectType | null>(null)
@@ -15,6 +17,8 @@ export function Project() {
   const navigate = useNavigate()
   const [settingsOpen, setSettingsOpen] = useState(false)
   const { modules, toggle: toggleModule } = useProjectModules(projectId)
+  const [breadcrumbRefresh, setBreadcrumbRefresh] = useState(0)
+
   const getProject = async () => await
     getProjectById(projectId).then((p) => {
       setProject(p)
@@ -26,13 +30,10 @@ export function Project() {
   if (loadingProject || !project) return <p>Carregando projeto...</p>
   return (
     <div style={{ maxWidth: 480, margin: '2rem auto' }}>
-      <Button
-        variant="secondary"
-        onClick={() => navigate({ to: '/projects' })}
-        style={{ marginBottom: 16 }}
-      >
-        ← Voltar
-      </Button>
+      <ProjectBreadcrumb
+        projectId={projectId}
+        refreshToken={breadcrumbRefresh}
+      />
 
       {project.cover_path && (
         <img
@@ -65,15 +66,18 @@ export function Project() {
           modules={modules}
         />
       )}
-
+      <SubprojectsSection
+        projectId={projectId}
+        projectName={project.name}
+      />
       <ProjectSettingsModal
         isOpen={settingsOpen}
         onClose={() => setSettingsOpen(false)}
         project={project}
         modules={modules}
         onToggleModule={toggleModule}
-        onUpdated={() => { /* recarregar dados do projeto, se necessário */ }}
-        onDeleted={() => { /* navegar de volta pra /projects */ }}
+        onUpdated={() => { getProject(); setBreadcrumbRefresh((k) => k + 1); }}
+        onDeleted={() => navigate({ to: '/projects' })}
       />
     </div>
   )
