@@ -1,5 +1,5 @@
 import { Outlet } from '@tanstack/react-router'
-import { Aside } from './Aside'
+import { Aside } from './Aside/Aside'
 
 export function AppLayout() {
   return (
