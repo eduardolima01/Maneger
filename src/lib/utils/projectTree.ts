@@ -1,5 +1,33 @@
 import type { ProjectType } from '@/types/project.types';
 
+export interface FlatSubtreeEntry {
+  node: ProjectTreeNode;
+  depth: number;
+}
+
+/** Acha o nó `rootId` dentro da floresta e retorna ele + toda a subárvore, achatada com profundidade (pra indentação em <select>). */
+export function flattenSubtree(tree: ProjectTreeNode[], rootId: string): FlatSubtreeEntry[] {
+  function findNode(nodes: ProjectTreeNode[]): ProjectTreeNode | null {
+    for (const n of nodes) {
+      if (n.id === rootId) return n;
+      const found = findNode(n.children);
+      if (found) return found;
+    }
+    return null;
+  }
+
+  const root = findNode(tree);
+  if (!root) return [];
+
+  const result: FlatSubtreeEntry[] = [];
+  function walk(node: ProjectTreeNode, depth: number) {
+    result.push({ node, depth });
+    for (const child of node.children) walk(child, depth + 1);
+  }
+  walk(root, 0);
+  return result;
+}
+
 export interface ProjectTreeNode extends ProjectType {
   children: ProjectTreeNode[];
 }

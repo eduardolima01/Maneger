@@ -20,6 +20,8 @@ import type { ModuleCounts } from '@/lib/api/projectModuleCounts';
 interface SubprojectsSectionProps {
   projectId: string;
   projectName: string;
+  onOpenSubproject?: (project: ProjectType) => void;
+  onEditSubproject?: (project: ProjectType) => void;
 }
 
 function SubprojectEditModal({ project, onClose, onUpdated, onDeleted }: {
@@ -39,7 +41,7 @@ function SubprojectEditModal({ project, onClose, onUpdated, onDeleted }: {
   );
 }
 
-export default function SubprojectsSection({ projectId, projectName }: SubprojectsSectionProps) {
+export default function SubprojectsSection({ projectId, projectName, onOpenSubproject, onEditSubproject }: SubprojectsSectionProps) {
   const { subprojects, loading, reload, createProject, remove, duplicate, move, reorder } = useSubprojects(projectId);
 
   const [search, setSearch] = useState('');
@@ -120,7 +122,9 @@ export default function SubprojectsSection({ projectId, projectName }: Subprojec
                   key={sp.id}
                   project={sp}
                   counts={counts[sp.id]}
+                  onOpen={onOpenSubproject ? () => onOpenSubproject(sp) : undefined}
                   onEdit={() => setEditingId(sp.id)}
+                  onEditInPlace={onEditSubproject ? () => onEditSubproject(sp) : undefined}
                   onDuplicate={() => duplicate(sp.id)}
                   onMove={() => setMoveTargetId(sp.id)}
                   onRequestDelete={() => setDeleteTarget({ id: sp.id, name: sp.name })}

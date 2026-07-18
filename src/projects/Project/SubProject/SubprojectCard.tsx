@@ -8,13 +8,15 @@ import CardProject from '@/Projects/components/CardProject';
 interface SubprojectCardProps {
   project: ProjectType;
   counts?: ModuleCounts;
+  onOpen?: () => void;
+  onEditInPlace?: () => void; // presente = dentro de um quick view; substitui o onEdit (modal empilhado)
   onEdit: () => void;
   onDuplicate: () => void;
   onMove: () => void;
   onRequestDelete: () => void;
 }
 
-export default function SubprojectCard({ project, counts, onEdit, onDuplicate, onMove, onRequestDelete }: SubprojectCardProps) {
+export default function SubprojectCard({ project, counts, onOpen, onEditInPlace, onEdit, onDuplicate, onMove, onRequestDelete }: SubprojectCardProps) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: project.id });
   const [menuOpen, setMenuOpen] = useState(false);
 
@@ -29,7 +31,7 @@ export default function SubprojectCard({ project, counts, onEdit, onDuplicate, o
       <span {...attributes} {...listeners} style={{ color: '#bbb', fontSize: 12, cursor: 'grab', touchAction: 'none', flexShrink: 0 }} title="Arrastar">⠿</span>
 
       <div style={{ flex: 1 }}>
-        <CardProject project={project} />
+        <CardProject project={project} onClick={onOpen} />
         {counts && (
           <div style={{ display: 'flex', gap: 8, fontSize: 11, color: '#999', marginTop: -4, marginLeft: 4 }}>
             <span>{counts.tasks} tasks</span>
@@ -46,16 +48,18 @@ export default function SubprojectCard({ project, counts, onEdit, onDuplicate, o
             onMouseLeave={() => setMenuOpen(false)}
             style={{ position: 'absolute', right: 0, top: '100%', backgroundColor: '#fff', border: '1px solid #ddd', borderRadius: 4, boxShadow: '0 2px 8px rgba(0,0,0,0.12)', zIndex: 10, minWidth: 140 }}
           >
-            {[
-              ['Editar', onEdit],
+            {([
+              ['Editar', onEditInPlace ?? onEdit],
               ['Duplicar', onDuplicate],
               ['Mover para...', onMove],
               ['Excluir', onRequestDelete],
-            ].map(([label, action]) => (
+            ] as [string, () => void][]).map(([label, action]) => (
               <button
-                key={label as string}
-                onClick={() => { (action as () => void)(); setMenuOpen(false); }}
-                style={{ display: 'block', width: '100%', textAlign: 'left', padding: '8px 12px', fontSize: 13, border: 'none', background: 'none', cursor: 'pointer', color: label === 'Excluir' ? '#c62828' : '#000' }}
+                key={label}
+                onClick={() => {
+                  action();
+                  setMenuOpen(false);
+                }}
               >
                 {label}
               </button>

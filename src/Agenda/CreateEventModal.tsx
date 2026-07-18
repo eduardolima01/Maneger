@@ -65,15 +65,14 @@ export default function CreateEventModal({
   const end = editingEvent ? new Date(editingEvent.end_at) : draftEnd;
   const hasProjectTab = !!editingEvent?.project_id;
 
-  function handleGoToProject() {
-    if (!linkedProject) return;
+  function handleGoToProject(projectId: string) {
     onClose();
-    onGoToProject(linkedProject.id);
+    onGoToProject(projectId);
   }
 
   return (
     <Modal open={isOpen} onClose={onClose}>
-      <div style={{ padding: 16, width: 640, maxWidth: '90vw', height: 640, maxHeight: '90vw' }}>
+      <div style={{ padding: 16, width: 780, maxWidth: '92vw', maxHeight: '85vh', overflowY: 'auto' }}>
         {hasProjectTab && (
           <div style={{ display: 'flex', gap: 4, borderBottom: '1px solid #e0e0e0', marginBottom: 12 }}>
             {(['event', 'project'] as EditorTab[]).map((tab) => (
