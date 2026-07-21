@@ -22,7 +22,8 @@
       "assetProtocol": {
         "enable": true,
         "scope": [
-          "$APPDATA/covers/*"
+          "$RESOURCE/../covers/*",
+          "**/covers/*"
         ]
       }
     }

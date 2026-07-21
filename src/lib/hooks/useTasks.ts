@@ -50,7 +50,7 @@ export function useTasks(projectId: string) {
     setTasks((prev) => {
       const map = new Map(prev.map((t) => [t.id, t]));
       const reordered = orderedIds.map((id) => map.get(id)).filter((t): t is Task => !!t);
-      const untouched = prev.filter((t) => !orderedIds.includes(t.id));
+      // const untouched = prev.filter((t) => !orderedIds.includes(t.id));
       const result = [...prev];
       let cursor = 0;
       for (let i = 0; i < result.length; i++) {

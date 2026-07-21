@@ -2,7 +2,6 @@ mod schema;
 
 use std::fs;
 use std::path::PathBuf;
-use tauri::Manager;
 use tauri_plugin_sql::{Migration, MigrationKind};
 
 #[tauri::command]
@@ -17,16 +16,9 @@ fn get_db_url() -> String {
 }
 
 #[tauri::command]
-fn save_project_cover(
-    app_handle: tauri::AppHandle,
-    project_id: String,
-    source_path: String,
-) -> Result<String, String> {
-    let app_dir = app_handle
-        .path()
-        .app_data_dir()
-        .map_err(|e| e.to_string())?;
-    let covers_dir = app_dir.join("covers");
+fn save_project_cover(project_id: String, source_path: String) -> Result<String, String> {
+    let dir = std::env::current_dir().map_err(|e| e.to_string())?;
+    let covers_dir = dir.join("covers");
     fs::create_dir_all(&covers_dir).map_err(|e| e.to_string())?;
 
     if let Ok(entries) = fs::read_dir(&covers_dir) {
@@ -48,12 +40,9 @@ fn save_project_cover(
 }
 
 #[tauri::command]
-fn delete_project_cover(app_handle: tauri::AppHandle, project_id: String) -> Result<(), String> {
-    let app_dir = app_handle
-        .path()
-        .app_data_dir()
-        .map_err(|e| e.to_string())?;
-    let covers_dir = app_dir.join("covers");
+fn delete_project_cover(project_id: String) -> Result<(), String> {
+    let dir = std::env::current_dir().map_err(|e| e.to_string())?;
+    let covers_dir = dir.join("covers");
 
     if let Ok(entries) = fs::read_dir(&covers_dir) {
         for entry in entries.flatten() {

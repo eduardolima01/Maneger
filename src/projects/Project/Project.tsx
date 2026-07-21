@@ -29,7 +29,7 @@ export function Project() {
   }, [projectId])
   if (loadingProject || !project) return <p>Carregando projeto...</p>
   return (
-    <div style={{ maxWidth: 480, margin: '2rem auto' }}>
+    <div style={{ width: '100%', maxWidth: '95vw', margin: '2rem auto', padding: '0 24px' }}>
       <ProjectBreadcrumb
         projectId={projectId}
         refreshToken={breadcrumbRefresh}

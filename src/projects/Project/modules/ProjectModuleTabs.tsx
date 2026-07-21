@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import TasksSection from './tasks/TasksSection';
-import KanbanBoard from './kanban/KanbanBoard';
+import KanbanManagement from './kanban/KanbanManagement';
 import NotesSection from './notes/NotesSection';
 import AgendaSection from './agenda/AgendaSection';
 import LogsSection from './logs/LogsSection';
@@ -66,7 +66,7 @@ export default function ProjectModuleTabs({ projectId, projectName, modules }: P
 
       <div style={{ paddingTop: 12 }}>
         {activeTab === 'tasks' && <TasksSection projectId={projectId} />}
-        {activeTab === 'kanban' && <KanbanBoard projectId={projectId} />}
+        {activeTab === 'kanban' && <KanbanManagement projectId={projectId} />}
         {activeTab === 'notes' && <NotesSection projectId={projectId} />}
         {activeTab === 'agenda' && <AgendaSection projectId={projectId} projectName={projectName} />}
         {activeTab === 'logs' && <LogsSection projectId={projectId} />}

@@ -1,6 +1,6 @@
 import { ProjectType } from "@/types/project.types";
-import { Link } from "@tanstack/react-router";
 import { convertFileSrc } from "@tauri-apps/api/core";
+import { Link } from "@tanstack/react-router";
 
 interface CardProjectProps {
   project: ProjectType;
@@ -38,14 +38,9 @@ export default function CardProject({ project, onClick }: CardProjectProps) {
     return <div onClick={onClick}>{content}</div>;
   }
 
-  return content
-
-  // return (
-  //   <Link
-  //     to="/projects/$projectId"
-  //     params={{ projectId: String(project.id) }}
-  //   >
-  //     {content}
-  //   </Link>
-  // );
+  return (
+    <Link to="/projects/$projectId" params={{ projectId: String(project.id) }}>
+      {content}
+    </Link>
+  );
 }

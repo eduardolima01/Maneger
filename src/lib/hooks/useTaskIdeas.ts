@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import * as ideasApi from '@/lib/api/taskIdeas';
-import type { TaskIdea } from '@/types/taskIdea.types';
+import type { TaskIdea } from '@/types/task/taskIdea.types';
 
 export function useTaskIdeas(projectId: string) {
   const [ideas, setIdeas] = useState<TaskIdea[]>([]);

@@ -1,5 +1,4 @@
 import type { Subtask } from './subtask.types';
-
 export type TaskType = 'note' | 'checkbox' | 'status';
 
 interface BaseTask {

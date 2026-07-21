@@ -93,9 +93,11 @@ export async function createTask(projectId: string, input: CreateTaskInput): Pro
   const nextPosition = (existing[0]?.maxPos ?? -1) + 1;
 
   await db.execute(
-    'INSERT INTO tasks (id, project_id, group_id, type, title, description, payload, position, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $9)',
+    `INSERT INTO tasks (id, project_id, group_id, type, title, description, payload, position, created_at, updated_at)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $9)`,
     [id, projectId, input.groupId, input.type, input.title, input.description ?? null, JSON.stringify(input.payload), nextPosition, now]
   );
+
   return id;
 }
 

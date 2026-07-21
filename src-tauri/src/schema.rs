@@ -1,6 +1,12 @@
 pub const SCHEMA: &str = concat!(
     include_str!("../migrations/schema/projects.sql"),
     "\n",
+    include_str!("../migrations/schema/kanbans.sql"),
+    "\n",
+    include_str!("../migrations/schema/kanban_columns.sql"),
+    "\n",
+    include_str!("../migrations/schema/kanban_cards.sql"),
+    "\n",
     include_str!("../migrations/schema/task_groups.sql"),
     "\n",
     include_str!("../migrations/schema/tasks.sql"),
@@ -23,5 +29,4 @@ pub const SCHEMA: &str = concat!(
     "\n",
     include_str!("../migrations/schema/project_modules.sql"),
     "\n",
-    include_str!("../migrations/schema/kanban_cards.sql"),
 );

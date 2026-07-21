@@ -21,7 +21,6 @@ export default function ProjectTreeNode({
   node, depth, expandedIds, onToggleExpanded,
   onNewSubproject, onRename, onDuplicate, onMove, onRequestDelete,
 }: ProjectTreeNodeProps) {
-  console.log(node)
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: node.id,
     data: { parentId: node.parentProjectId },
@@ -69,13 +68,13 @@ export default function ProjectTreeNode({
               onMouseLeave={() => setMenuOpen(false)}
               style={{ position: 'absolute', right: 0, top: '100%', backgroundColor: '#fff', border: '1px solid #ddd', borderRadius: 4, boxShadow: '0 2px 8px rgba(0,0,0,0.12)', zIndex: 10, minWidth: 160 }}
             >
-              {[
+              {([
                 ['+ Novo subprojeto', () => onNewSubproject(node.id)],
                 ['Renomear', () => onRename(node.id, node.name)],
                 ['Duplicar', () => onDuplicate(node.id)],
                 ['Mover para...', () => onMove(node.id)],
                 ['Excluir', () => onRequestDelete(node.id, node.name, countAll(node))],
-              ].map(([label, action]) => (
+              ] as const).map(([label, action]) => (
                 <button
                   key={label as string}
                   onClick={() => { (action as () => void)(); setMenuOpen(false); }}
