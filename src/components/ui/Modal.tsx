@@ -21,7 +21,7 @@ const customStyles: ReactModal.Styles = {
     transform: 'translate(-50%, -50%)',
     borderRadius: 8,
     padding: 24,
-    minWidth: 320,
+    minWidth: 1320,
     maxWidth: '90vw',
     maxHeight: '90vh',
     border: 'none',

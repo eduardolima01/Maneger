@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
 import type { Event } from '@/types/event.types';
-import { snapMinutes, formatHourLabel, formatMinutesLabel, isSameDay } from '../lib/utils/date';
+import { snapMinutes, formatHourLabel, formatMinutesLabel, isSameDay, fromLocalISO, addDays } from '../lib/utils/date';
 import EventBlock from './EventBlock';
 import { useNow } from '@/lib/hooks/useNow';
+import { ProjectType } from '@/types/project.types';
 
 const HOUR_HEIGHT = 48;
 const HOURS = Array.from({ length: 24 }, (_, i) => i);
@@ -12,17 +13,20 @@ interface TimeGridViewProps {
   events: Event[];
   resolveColor: (projectId: string | null) => string;
   resolveCover: (projectId: string | null) => string | null;
+  resolveBreadcrumb: (projectId: string | null) => ProjectType[];
   onCreateEvent: (start: Date, end: Date) => void;
   onEventEdit: (event: Event) => void;
   onEventProjectClick: (event: Event) => void;
   onEventDoubleClick: (event: Event) => void;
   onEventChange: (id: string, startAt: string, endAt: string) => void;
   onEventDuplicate: (event: Event, startAt: string, endAt: string) => void;
+  onProjectAssign: (eventId: string, projectId: string | null) => void;
 }
 
 export default function TimeGridView({
-  days, events, resolveColor, resolveCover, onCreateEvent,
+  days, events, resolveColor, resolveCover, onCreateEvent, resolveBreadcrumb,
   onEventEdit, onEventProjectClick, onEventDoubleClick, onEventChange, onEventDuplicate,
+  onProjectAssign
 }: TimeGridViewProps) {
   const [draft, setDraft] = useState<{ dayIndex: number; startMin: number; currentMin: number } | null>(null);
   const columnRefs = useRef<(HTMLDivElement | null)[]>([]);
@@ -163,7 +167,7 @@ export default function TimeGridView({
             ))}
 
             {events
-              .filter((ev) => isSameDay(new Date(ev.start_at), day))
+              .filter((ev) => isSameDay(fromLocalISO(ev.start_at), day))
               .map((ev) => (
                 <EventBlock
                   key={ev.id}
@@ -171,14 +175,45 @@ export default function TimeGridView({
                   hourHeight={HOUR_HEIGHT}
                   color={resolveColor(ev.project_id)}
                   coverPath={resolveCover(ev.project_id)}
+                  breadcrumb={resolveBreadcrumb(ev.project_id)}
                   days={days}
                   dayIndex={dayIndex}
                   getColumnWidth={getColumnWidth}
+                  segmentKind="start"
                   onEditClick={onEventEdit}
                   onProjectClick={onEventProjectClick}
                   onDoubleClick={onEventDoubleClick}
                   onChange={onEventChange}
                   onDuplicate={onEventDuplicate}
+                  onProjectAssign={onProjectAssign}
+                />
+              ))}
+
+            {events
+              .filter((ev) => {
+                const start = fromLocalISO(ev.start_at);
+                const end = fromLocalISO(ev.end_at);
+                if (isSameDay(start, end)) return false;
+                return isSameDay(start, addDays(day, -1));
+              })
+              .map((ev) => (
+                <EventBlock
+                  key={`${ev.id}-cont`}
+                  event={ev}
+                  hourHeight={HOUR_HEIGHT}
+                  color={resolveColor(ev.project_id)}
+                  coverPath={resolveCover(ev.project_id)}
+                  breadcrumb={resolveBreadcrumb(ev.project_id)}
+                  days={days}
+                  dayIndex={dayIndex}
+                  getColumnWidth={getColumnWidth}
+                  segmentKind="continuation"
+                  onEditClick={onEventEdit}
+                  onProjectClick={onEventProjectClick}
+                  onDoubleClick={onEventDoubleClick}
+                  onChange={onEventChange}
+                  onDuplicate={onEventDuplicate}
+                  onProjectAssign={onProjectAssign}
                 />
               ))}
 

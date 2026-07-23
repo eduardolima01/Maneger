@@ -9,12 +9,14 @@ import {
 
 import type { Event } from '../types/event.types';
 import { MonthEventChip } from './MonthEventChip';
+import { ProjectType } from '@/types/project.types';
 
 interface MonthViewProps {
   anchor: Date;
   events: Event[];
   resolveColor: (projectId: string | null) => string;
   resolveCover: (projectId: string | null) => string | null;
+  resolveBreadcrumb: (projectId: string | null) => ProjectType[];
   onEventDoubleClick: (event: Event) => void;
   onDayClick: (day: Date) => void;
   onEventEdit: (event: Event) => void;
@@ -22,6 +24,7 @@ interface MonthViewProps {
   onCreateEvent: (day: Date) => void;
   onEventChange: (id: string, startAt: string, endAt: string) => void;
   onEventDuplicate: (event: Event, startAt: string, endAt: string) => void;
+  onProjectAssign: (eventId: string, projectId: string | null) => void;
 }
 
 function moveEventToDay(event: Event, targetDay: Date) {
@@ -41,6 +44,7 @@ export default function MonthView({
   events,
   resolveColor,
   resolveCover,
+  resolveBreadcrumb,
   onEventDoubleClick,
   onDayClick,
   onEventEdit,
@@ -48,6 +52,7 @@ export default function MonthView({
   onEventProjectClick,
   onEventChange,
   onEventDuplicate,
+  onProjectAssign
 }: MonthViewProps) {
   const weeks = getMonthMatrix(anchor);
   const [hoveredDayKey, setHoveredDayKey] = useState<string | null>(null);
@@ -128,9 +133,11 @@ export default function MonthView({
                     event={ev}
                     color={resolveColor(ev.project_id)}
                     coverPath={resolveCover(ev.project_id)}
+                    breadcrumb={resolveBreadcrumb(ev.project_id)}
                     onEdit={onEventEdit}
                     onProjectClick={onEventProjectClick}
                     onDoubleClick={onEventDoubleClick}
+                    onProjectAssign={onProjectAssign}
                   />
                 ))}
                 {dayEvents.length > 3 && (

@@ -7,23 +7,29 @@ import {
   formatDuration
 } from '../lib/utils/date';
 import type { Event } from '@/types/event.types';
+import { ProjectType } from '@/types/project.types';
+import ProjectSearchSelect from '@/Projects/components/ProjectSearchSelect';
 
 interface MonthEventChipProps {
   event: Event;
   color: string;
   coverPath: string | null;
+  breadcrumb: ProjectType[];
   onEdit: (event: Event) => void;
   onProjectClick: (event: Event) => void;
   onDoubleClick: (event: Event) => void;
+  onProjectAssign: (eventId: string, projectId: string | null) => void;
 }
 
 export function MonthEventChip({
   event,
   color,
   coverPath,
+  breadcrumb,
   onEdit,
   onProjectClick,
-  onDoubleClick
+  onDoubleClick,
+  onProjectAssign
 }: MonthEventChipProps) {
   const [isHovering, setIsHovering] = useState(false);
   const start = fromLocalISO(event.start_at);
@@ -31,6 +37,9 @@ export function MonthEventChip({
   const startMin = minutesSinceMidnight(start);
   const endMin = minutesSinceMidnight(end);
   const durationMin = endMin >= startMin ? endMin - startMin : (1440 - startMin) + endMin;
+  const assignedName = breadcrumb.length > 0 ? breadcrumb[breadcrumb.length - 1].name : null;
+  const fullPath = breadcrumb.map((p) => p.name).join(' / ');
+  const [assignOpen, setAssignOpen] = useState(false);
 
   return (
     <div
@@ -66,7 +75,8 @@ export function MonthEventChip({
             pointerEvents: 'none',
           }}
         >
-          {formatMinutesLabel(startMin)} – {formatMinutesLabel(endMin)} · {formatDuration(durationMin)}
+          <div>{formatMinutesLabel(startMin)} – {formatMinutesLabel(endMin)} · {formatDuration(durationMin)}</div>
+          {fullPath && <div style={{ opacity: 0.8 }}>📁 {fullPath}</div>}
         </div>
       )}
 
@@ -76,6 +86,28 @@ export function MonthEventChip({
       <span className="truncate">{event.title}</span>
 
       <div className="flex gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
+        <button
+          onClick={(e) => { e.stopPropagation(); setAssignOpen((v) => !v); }}
+          title="Atribuir projeto"
+          className="w-3 h-3 flex items-center justify-center rounded bg-black/25 hover:bg-black/40"
+        >
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="w-2 h-2">
+            <path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7Z" />
+          </svg>
+        </button>
+
+        {assignOpen && (
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{ position: 'absolute', top: '100%', left: 0, marginTop: 4, backgroundColor: '#fff', border: '1px solid #ddd', borderRadius: 6, boxShadow: '0 2px 12px rgba(0,0,0,0.15)', padding: 8, width: 200, zIndex: 30 }}
+          >
+            <ProjectSearchSelect
+              value={event.project_id}
+              onChange={(projectId) => { onProjectAssign(event.id, projectId); setAssignOpen(false); }}
+            />
+          </div>
+        )}
+
         <button
           onClick={(e) => {
             e.stopPropagation();

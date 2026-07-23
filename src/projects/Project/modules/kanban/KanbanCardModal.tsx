@@ -61,7 +61,7 @@ export default function KanbanCardModal({ isOpen, onClose, card, onUpdate, onDup
 
   return (
     <Modal open={isOpen} onClose={onClose} title="Detalhes do card">
-      <div style={{ padding: 16, width: 460, maxWidth: '90vw', maxHeight: '80vh', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 12 }}>
+      <div style={{ padding: 16, width: 1460, maxWidth: '100%', maxHeight: '80vh', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 12 }}>
         {card.coverPath && (
           <img src={convertFileSrc(card.coverPath)} style={{ width: '100%', height: 120, objectFit: 'cover', borderRadius: 6 }} />
         )}

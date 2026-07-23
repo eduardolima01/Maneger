@@ -3,6 +3,7 @@ import { createProject } from '@/lib/api/projects';
 import { useProjects } from '@/lib/hooks/useProjects';
 import { useFavoriteProjects } from '@/lib/hooks/useFavoriteProjects';
 import type { ProjectType } from '@/types/project.types';
+import { buildBreadcrumbLabel } from '../utils/projectBreadcrumb';
 
 interface ProjectSearchSelectProps {
   value: string | null;
@@ -18,6 +19,7 @@ export default function ProjectSearchSelect({ value, onChange }: ProjectSearchSe
   const wrapperRef = useRef<HTMLDivElement>(null);
 
   const selectedProject = projects.find((p) => p.id === value) ?? null;
+  const selectedBreadcrumb = selectedProject ? buildBreadcrumbLabel(projects, selectedProject.id) : '';
 
   useEffect(() => {
     function handleClickOutside(e: MouseEvent) {
@@ -43,6 +45,8 @@ export default function ProjectSearchSelect({ value, onChange }: ProjectSearchSe
 
   function renderRow(p: ProjectType) {
     const favorited = isFavorite(p.id);
+    const breadcrumb = buildBreadcrumbLabel(projects, p.id);
+    const parentLabel = breadcrumb.includes(' / ') ? breadcrumb.slice(0, breadcrumb.lastIndexOf(' / ')) : null;
     return (
       <div
         key={p.id}
@@ -51,9 +55,12 @@ export default function ProjectSearchSelect({ value, onChange }: ProjectSearchSe
       >
         <span
           onClick={() => selectProject(p)}
-          style={{ flex: 1, fontSize: 14, cursor: 'pointer' }}
+          style={{ flex: 1, cursor: 'pointer' }}
         >
-          {p.name}
+          <span style={{ fontSize: 14, display: 'block' }}>{p.name}</span>
+          {parentLabel && (
+            <span style={{ fontSize: 11, color: '#999', display: 'block' }}>{parentLabel}</span>
+          )}
         </span>
         <button
           onClick={(e) => {
@@ -87,7 +94,13 @@ export default function ProjectSearchSelect({ value, onChange }: ProjectSearchSe
     try {
       const id = await createProject({ name });
       await refresh();
-      onChange(id, { id, name, color: null, cover_path: null, archived: 0 });
+      onChange(id, {
+        id,
+        name,
+        color: null,
+        cover_path: null,
+        archived: 0,
+      });
       setIsOpen(false);
       setQuery('');
     } finally {
@@ -111,7 +124,9 @@ export default function ProjectSearchSelect({ value, onChange }: ProjectSearchSe
             cursor: 'pointer',
           }}
         >
-          <span>{selectedProject.name}</span>
+          <span title={selectedBreadcrumb} style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            {selectedBreadcrumb}
+          </span>
           <button
             onClick={(e) => {
               e.stopPropagation();

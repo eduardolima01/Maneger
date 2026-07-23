@@ -12,6 +12,8 @@ import { useProjectCovers } from '../lib/hooks/project/useProjectCovers';
 
 import { useNavigate } from '@tanstack/react-router';
 
+import { useProjectBreadcrumbs } from '../lib/hooks/useProjectBreadcrumbs';
+
 export default function Agenda() {
   const navigate = useNavigate();
   const { resolveColor } = useProjectColors();
@@ -24,6 +26,7 @@ export default function Agenda() {
   const [modalInitialTab, setModalInitialTab] = useState<'event' | 'project'>('event');
 
   const { resolveCover } = useProjectCovers();
+  const { resolveBreadcrumb } = useProjectBreadcrumbs();
 
   const { rangeStart, rangeEnd, days, label } = useMemo(() => {
     if (view === 'day') {
@@ -67,11 +70,11 @@ export default function Agenda() {
     setModalOpen(true);
   }
 
-  async function handleSave(data: { title: string; project_id: string | null }) {
+  async function handleSave(data: { title: string; project_id: string | null; start_at: string; end_at: string }) {
     if (editingEvent) {
       await update(editingEvent.id, data);
     } else if (draft) {
-      await create({ ...data, start_at: toLocalISO(draft.start), end_at: toLocalISO(draft.end) });
+      await create(data);
     }
     setModalOpen(false);
   }
@@ -109,6 +112,10 @@ export default function Agenda() {
     });
   }
 
+  function handleQuickAssignProject(eventId: string, projectId: string | null) {
+    update(eventId, { project_id: projectId });
+  }
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
       <AgendaHeader
@@ -131,6 +138,7 @@ export default function Agenda() {
               setAnchor(day);
               setView('day');
             }}
+            resolveBreadcrumb={resolveBreadcrumb}
             onEventProjectClick={openEventProjectTab}
             onEventEdit={openEdit}
             onEventDoubleClick={handleCardDoubleClick}
@@ -143,6 +151,7 @@ export default function Agenda() {
             }}
             onEventChange={(id, startAt, endAt) => update(id, { start_at: startAt, end_at: endAt })}
             onEventDuplicate={handleDuplicateEvent}
+            onProjectAssign={handleQuickAssignProject}
           />
         ) : (
           <TimeGridView
@@ -151,11 +160,13 @@ export default function Agenda() {
             onCreateEvent={openCreate}
             resolveColor={resolveColor}
             resolveCover={resolveCover}
+            resolveBreadcrumb={resolveBreadcrumb}
             onEventDoubleClick={handleCardDoubleClick}
             onEventEdit={openEdit}
             onEventProjectClick={openEventProjectTab}
             onEventChange={(id, startAt, endAt) => update(id, { start_at: startAt, end_at: endAt })}
             onEventDuplicate={handleDuplicateEvent}
+            onProjectAssign={handleQuickAssignProject}
           />
         )}
       </div>
