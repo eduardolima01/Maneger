@@ -13,6 +13,8 @@ import { useProjectCovers } from '../lib/hooks/project/useProjectCovers';
 import { useNavigate } from '@tanstack/react-router';
 
 import { useProjectBreadcrumbs } from '../lib/hooks/useProjectBreadcrumbs';
+import ProjectQuickModal from '@/Projects/Project/ProjectQuickModal';
+import { getProjectById } from '@/lib/api/projects';
 
 export default function Agenda() {
   const navigate = useNavigate();
@@ -24,6 +26,8 @@ export default function Agenda() {
   const [modalOpen, setModalOpen] = useState(false);
 
   const [modalInitialTab, setModalInitialTab] = useState<'event' | 'project'>('event');
+  const [quickViewProject, setQuickViewProject] = useState<ProjectType | null>(null);
+  const [quickViewOpen, setQuickViewOpen] = useState(false);
 
   const { resolveCover } = useProjectCovers();
   const { resolveBreadcrumb } = useProjectBreadcrumbs();
@@ -87,6 +91,13 @@ export default function Agenda() {
     setModalOpen(true);
   }
 
+
+  async function openProjectSummary(projectId: string) {
+    const project = await getProjectById(projectId);
+    if (!project) return;
+    setQuickViewProject(project);
+    setQuickViewOpen(true);
+  }
 
   function handleCardDoubleClick(event: Event) {
     if (event.project_id) {
@@ -167,6 +178,7 @@ export default function Agenda() {
             onEventChange={(id, startAt, endAt) => update(id, { start_at: startAt, end_at: endAt })}
             onEventDuplicate={handleDuplicateEvent}
             onProjectAssign={handleQuickAssignProject}
+            onProjectSummaryClick={openProjectSummary}
           />
         )}
       </div>
@@ -184,6 +196,17 @@ export default function Agenda() {
           to: '/projects/$projectId',
           params: { projectId }
         })}
+      />
+
+      <ProjectQuickModal
+        isOpen={quickViewOpen}
+        onClose={() => setQuickViewOpen(false)}
+        project={quickViewProject}
+        onGoToProject={() => {
+          if (!quickViewProject) return;
+          setQuickViewOpen(false);
+          navigate({ to: '/projects/$projectId', params: { projectId: quickViewProject.id } });
+        }}
       />
     </div>
   );
