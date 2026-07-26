@@ -113,6 +113,7 @@ export default function KanbanBoard({ kanban }: KanbanBoardProps) {
                   onCardClick={(cardId) => setSelectedCardId(cardId)}
                   onRename={(name) => board.updateColumn(col.id, { name })}
                   onColumnMenu={() => setColumnSettingsOpen(true)}
+                  cardsWithSubKanban={board.cardsWithSubKanban}
                 />
                 {!collapsedIds.has(col.id) && (
                   newCardColumnId === col.id ? (

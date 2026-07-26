@@ -13,7 +13,7 @@ interface ConfirmDialogProps {
 export default function ConfirmDialog({ isOpen, title, message, confirmLabel = 'Excluir', onConfirm, onCancel }: ConfirmDialogProps) {
   return (
     <Modal open={isOpen} onClose={onCancel}>
-      <div style={{ padding: 16, width: 360, maxWidth: '90vw', display: 'flex', flexDirection: 'column', gap: 12 }}>
+      <div style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 12 }}>
         <h3 style={{ margin: 0, fontSize: 16 }}>{title}</h3>
         <p style={{ margin: 0, fontSize: 13, color: '#666' }}>{message}</p>
         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 8 }}>

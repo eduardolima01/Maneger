@@ -6,6 +6,7 @@ import { useNow } from '@/lib/hooks/useNow';
 import { ProjectType } from '@/types/project.types';
 import { convertFileSrc } from '@tauri-apps/api/core';
 import WeekSummaryModal from './WeekSummaryModal';
+import { computeOverlapLevels, getVisualRange } from './utils/eventLayout';
 
 const HOUR_HEIGHT = 48;
 const HOURS = Array.from({ length: 24 }, (_, i) => i);
@@ -36,6 +37,7 @@ export default function TimeGridView({
   const gridRef = useRef<HTMLDivElement>(null);
   const [hoverMinutes, setHoverMinutes] = useState<number | null>(null);
 
+  const CREATE_ZONE_WIDTH = 24;
   function getColumnWidth(): number {
     return columnRefs.current[0]?.getBoundingClientRect().width ?? 0;
   }
@@ -190,6 +192,7 @@ export default function TimeGridView({
               {formatHourLabel(h)}
             </div>
           ))}
+
           {hoverMinutes !== null && !draft && (
             <div
               style={{
@@ -212,7 +215,6 @@ export default function TimeGridView({
           <div
             key={dayIndex}
             ref={(el: any) => (columnRefs.current[dayIndex] = el)}
-            onPointerDown={(e) => handlePointerDown(dayIndex, e)}
             style={{
               flex: 1,
               position: 'relative',
@@ -225,11 +227,53 @@ export default function TimeGridView({
               <div key={h} style={{ position: 'absolute', top: h * HOUR_HEIGHT, left: 0, right: 0, borderTop: '1px solid #f0f0f0', height: HOUR_HEIGHT }} />
             ))}
 
-            {events
-              .filter((ev) => isSameDay(fromLocalISO(ev.start_at), day))
-              .map((ev) => (
+            <div
+              onPointerDown={(e) => handlePointerDown(dayIndex, e)}
+              style={{ position: 'absolute', inset: 0 }}
+            />
+
+            <div
+              onPointerDown={(e) => handlePointerDown(dayIndex, e)}
+              style={{
+                position: 'absolute',
+                top: 0,
+                right: 0,
+                bottom: 0,
+                width: CREATE_ZONE_WIDTH,
+                cursor: 'crosshair',
+                zIndex: 50,
+                // backgroundColor: 'rgba(26,115,232,0.06)',
+                // backgroundColor: "#fff",
+                borderLeft: '1px dashed rgba(26,115,232,0.3)',
+              }}
+            />
+
+            {(() => {
+              const startSegments = events
+                .filter((ev) => isSameDay(fromLocalISO(ev.start_at), day))
+                .map((ev) => ({ event: ev, segmentKind: 'start' as const }));
+
+              const continuationSegments = events
+                .filter((ev) => {
+                  const start = fromLocalISO(ev.start_at);
+                  const end = fromLocalISO(ev.end_at);
+                  if (isSameDay(start, end)) return false;
+                  return isSameDay(start, addDays(day, -1));
+                })
+                .map((ev) => ({ event: ev, segmentKind: 'continuation' as const }));
+
+              const allSegments = [...startSegments, ...continuationSegments];
+
+              const levels = computeOverlapLevels(
+                allSegments.map(({ event, segmentKind }) => {
+                  const range = getVisualRange(event, segmentKind);
+                  return { key: `${event.id}-${segmentKind}`, startMin: range.startMin, endMin: range.endMin };
+                })
+              );
+
+              return allSegments.map(({ event: ev, segmentKind }) => (
                 <EventBlock
-                  key={ev.id}
+                  key={`${ev.id}-${segmentKind}`}
                   event={ev}
                   hourHeight={HOUR_HEIGHT}
                   color={resolveColor(ev.project_id)}
@@ -238,7 +282,8 @@ export default function TimeGridView({
                   days={days}
                   dayIndex={dayIndex}
                   getColumnWidth={getColumnWidth}
-                  segmentKind="start"
+                  segmentKind={segmentKind}
+                  overlapLevel={levels[`${ev.id}-${segmentKind}`] ?? 0}
                   onEditClick={onEventEdit}
                   onProjectClick={onEventProjectClick}
                   onDoubleClick={onEventDoubleClick}
@@ -246,36 +291,8 @@ export default function TimeGridView({
                   onDuplicate={onEventDuplicate}
                   onProjectAssign={onProjectAssign}
                 />
-              ))}
-
-            {events
-              .filter((ev) => {
-                const start = fromLocalISO(ev.start_at);
-                const end = fromLocalISO(ev.end_at);
-                if (isSameDay(start, end)) return false;
-                return isSameDay(start, addDays(day, -1));
-              })
-              .map((ev) => (
-                <EventBlock
-                  key={`${ev.id}-cont`}
-                  event={ev}
-                  hourHeight={HOUR_HEIGHT}
-                  color={resolveColor(ev.project_id)}
-                  coverPath={resolveCover(ev.project_id)}
-                  breadcrumb={resolveBreadcrumb(ev.project_id)}
-                  days={days}
-                  dayIndex={dayIndex}
-                  getColumnWidth={getColumnWidth}
-                  segmentKind="continuation"
-                  onEditClick={onEventEdit}
-                  onProjectClick={onEventProjectClick}
-                  onDoubleClick={onEventDoubleClick}
-                  onChange={onEventChange}
-                  onDuplicate={onEventDuplicate}
-                  onProjectAssign={onProjectAssign}
-                />
-              ))}
-
+              ));
+            })()}
             {dayIndex === todayIndex && (
               <div
                 style={{

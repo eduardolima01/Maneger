@@ -8,6 +8,7 @@ import { emptyFilters, hasActiveFilters } from '@/types/kanban.types';
 export function useKanbanBoard(kanbanId: string) {
   const [columns, setColumns] = useState<KanbanColumn[]>([]);
   const [cards, setCards] = useState<KanbanCard[]>([]);
+  const [cardsWithSubKanban, setCardsWithSubKanban] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [filters, setFilters] = useState<KanbanFilters>(emptyFilters());
@@ -20,6 +21,8 @@ export function useKanbanBoard(kanbanId: string) {
     ]);
     setColumns(cols);
     setCards(cardList);
+    const subKanbanIds = await kanbansApi.getCardIdsWithSubKanban(cardList.map((c) => c.id));
+    setCardsWithSubKanban(subKanbanIds);
     setLoading(false);
   }, [kanbanId]);
 
@@ -128,7 +131,7 @@ export function useKanbanBoard(kanbanId: string) {
   }, [kanbanId]);
 
   return {
-    columns, cardsByColumn, cards, loading, reload,
+    columns, cardsByColumn, cards, cardsWithSubKanban, loading, reload,
     search, setSearch, filters, setFilters, filtersActive: hasActiveFilters(filters),
     moveCard, createCard, updateCard, duplicateCard, archiveCard, removeCard,
     createColumn, updateColumn, removeColumn, duplicateColumn, reorderColumns,

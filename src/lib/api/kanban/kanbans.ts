@@ -4,9 +4,10 @@ import { toLocalISO } from '@/lib/utils/date';
 import { defaultViewPrefs } from '@/types/kanban.types';
 import type { Kanban, CreateKanbanInput, UpdateKanbanInput, KanbanViewPrefs } from '@/types/kanban.types';
 
-interface KanbanRow {
+export interface KanbanRow {
   id: string;
   project_id: string;
+  parent_card_id: string | null;
   name: string;
   description: string | null;
   color: string | null;
@@ -28,6 +29,7 @@ function rowToKanban(row: KanbanRow): Kanban {
   return {
     id: row.id,
     projectId: row.project_id,
+    parentCardId: row.parent_card_id,
     name: row.name,
     description: row.description,
     color: row.color,
@@ -67,12 +69,12 @@ export async function createKanban(input: CreateKanbanInput): Promise<string> {
     [input.projectId]
   );
   const nextPosition = (existing[0]?.maxPos ?? -1) + 1;
-  const isFirstKanban = (existing[0]?.count ?? 0) === 0;
+  const isFirstKanban = !input.parentCardId && (existing[0]?.count ?? 0) === 0; // sub-kanban de card nunca vira "padrão do projeto"
 
   await db.execute(
-    `INSERT INTO kanbans (id, project_id, name, description, color, is_default, position, view_prefs, created_at, updated_at)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $9)`,
-    [id, input.projectId, input.name, input.description ?? null, input.color ?? null, isFirstKanban ? 1 : 0, nextPosition, JSON.stringify(defaultViewPrefs()), now]
+    `INSERT INTO kanbans (id, project_id, parent_card_id, name, description, color, is_default, position, view_prefs, created_at, updated_at)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $10)`,
+    [id, input.projectId, input.parentCardId ?? null, input.name, input.description ?? null, input.color ?? null, isFirstKanban ? 1 : 0, nextPosition, JSON.stringify(defaultViewPrefs()), now]
   );
 
   // colunas padrão, criadas automaticamente pra um Kanban novo não nascer vazio de estrutura
@@ -148,4 +150,53 @@ export async function duplicateKanban(id: string): Promise<string> {
   }
 
   return newId;
+}
+
+interface KanbanWithProject extends Kanban {
+  projectName: string;
+  projectColor: string | null;
+  projectCoverPath: string | null;
+  projectArchived: boolean;
+}
+
+interface KanbanWithProjectRow extends KanbanRow {
+  project_name: string;
+  project_color: string | null;
+  project_cover_path: string | null;
+  project_archived: number;
+}
+
+export async function getAllKanbansWithProject(): Promise<KanbanWithProject[]> {
+  const db = await getDb();
+  const rows = await db.select<KanbanWithProjectRow[]>(
+    `SELECT k.*, p.name as project_name, p.color as project_color, p.cover_path as project_cover_path, p.archived as project_archived
+     FROM kanbans k
+     JOIN projects p ON p.id = k.project_id
+     WHERE k.parent_card_id IS NULL
+     ORDER BY p.name ASC, k.position ASC`
+  );
+  return rows.map((row) => ({
+    ...rowToKanban(row),
+    projectName: row.project_name,
+    projectColor: row.project_color,
+    projectCoverPath: row.project_cover_path,
+    projectArchived: !!row.project_archived,
+  }));
+}
+
+export async function getSubKanbanByCardId(cardId: string): Promise<Kanban | null> {
+  const db = await getDb();
+  const rows = await db.select<KanbanRow[]>('SELECT * FROM kanbans WHERE parent_card_id = $1 LIMIT 1', [cardId]);
+  return rows[0] ? rowToKanban(rows[0]) : null;
+}
+
+export async function getCardIdsWithSubKanban(cardIds: string[]): Promise<Set<string>> {
+  if (cardIds.length === 0) return new Set();
+  const db = await getDb();
+  const placeholders = cardIds.map((_, i) => `$${i + 1}`).join(', ');
+  const rows = await db.select<{ parent_card_id: string }[]>(
+    `SELECT DISTINCT parent_card_id FROM kanbans WHERE parent_card_id IN (${placeholders})`,
+    cardIds
+  );
+  return new Set(rows.map((r) => r.parent_card_id));
 }

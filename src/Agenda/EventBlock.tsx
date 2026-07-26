@@ -13,6 +13,7 @@ interface EventBlockProps {
   dayIndex: number;
   getColumnWidth: () => number;
   segmentKind?: 'start' | 'continuation';
+  overlapLevel?: number;
   onEditClick: (event: Event) => void;
   onProjectClick: (event: Event) => void;
   onDoubleClick: (event: Event) => void;
@@ -23,6 +24,7 @@ interface EventBlockProps {
 
 export default function EventBlock({
   event, hourHeight, color, coverPath, breadcrumb, days, dayIndex, getColumnWidth,
+  overlapLevel = 0,
   segmentKind = 'start',
   onEditClick, onProjectClick, onDoubleClick, onChange, onDuplicate, onProjectAssign,
 }: EventBlockProps) {
@@ -30,6 +32,9 @@ export default function EventBlock({
   const end = fromLocalISO(event.end_at);
   const startMin = minutesSinceMidnight(start);
   const spansMidnight = !isSameDay(start, end);
+
+  const INSET_PX = 14;
+  const leftInset = 2 + overlapLevel * INSET_PX;
 
   const visualStartMin = segmentKind === 'continuation' ? 0 : startMin;
   const visualDurationMin =
@@ -137,18 +142,19 @@ export default function EventBlock({
         position: 'absolute',
         top,
         height,
-        left: 2,
+        left: leftInset,
         right: 2,
         backgroundColor: color,
         color: '#fff',
         borderRadius: 4,
         borderTop: segmentKind === 'continuation' ? '2px dashed rgba(255,255,255,0.7)' : undefined,
         borderBottom: segmentKind === 'start' && spansMidnight ? '2px dashed rgba(255,255,255,0.7)' : undefined,
+        outline: overlapLevel > 0 ? '2px solid #fff' : undefined,
         padding: '2px 6px',
         fontSize: 12,
         cursor: canMove ? 'pointer' : 'default',
         userSelect: 'none',
-        zIndex: 2,
+        zIndex: 2 + overlapLevel,
         transform: dragOffsetX ? `translateX(${dragOffsetX}px)` : undefined,
         boxShadow: dragOffsetX ? '0 4px 12px rgba(0,0,0,0.3)' : undefined,
       }}

@@ -21,7 +21,7 @@ const MODULE_LABELS: Record<ModuleKey, string> = {
   logs: 'Logs',
 };
 
-const MODULE_ORDER: ModuleKey[] = ['tasks', 'kanban', 'notes', 'agenda', 'logs'];
+const MODULE_ORDER: ModuleKey[] = ['kanban', 'tasks', 'notes', 'agenda', 'logs'];
 
 export default function ProjectModuleTabs({ projectId, projectName, modules }: ProjectModuleTabsProps) {
   const [activeTab, setActiveTab] = useState<ModuleKey | null>(null);
@@ -65,8 +65,8 @@ export default function ProjectModuleTabs({ projectId, projectName, modules }: P
       </div>
 
       <div style={{ paddingTop: 12 }}>
-        {activeTab === 'tasks' && <TasksSection projectId={projectId} />}
         {activeTab === 'kanban' && <KanbanManagement projectId={projectId} />}
+        {activeTab === 'tasks' && <TasksSection projectId={projectId} />}
         {activeTab === 'notes' && <NotesSection projectId={projectId} />}
         {activeTab === 'agenda' && <AgendaSection projectId={projectId} projectName={projectName} />}
         {activeTab === 'logs' && <LogsSection projectId={projectId} />}

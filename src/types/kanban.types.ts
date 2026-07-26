@@ -1,6 +1,7 @@
 export interface Kanban {
   id: string;
   projectId: string;
+  parentCardId: string | null;
   name: string;
   description: string | null;
   color: string | null;
@@ -90,6 +91,7 @@ export interface KanbanColumn {
 
 export interface CreateKanbanInput {
   projectId: string;
+  parentCardId?: string | null;
   name: string;
   description?: string | null;
   color?: string | null;
@@ -151,3 +153,9 @@ export function hasActiveFilters(f: KanbanFilters): boolean {
   return f.types.length > 0 || f.priorities.length > 0 || f.labels.length > 0 || f.hasSubtasks !== null || f.completion !== 'all';
 }
 
+export interface KanbanWithProject extends Kanban {
+  projectName: string;
+  projectColor: string | null;
+  projectCoverPath: string | null;
+  projectArchived: boolean;
+}

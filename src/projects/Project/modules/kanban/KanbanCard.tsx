@@ -7,10 +7,11 @@ import type { KanbanCard as CardType, KanbanDensity } from '@/types/kanban.types
 interface KanbanCardProps {
   card: CardType;
   density: KanbanDensity;
+  hasSubKanban: boolean;
   onClick: () => void;
 }
 
-export default function KanbanCard({ card, density, onClick }: KanbanCardProps) {
+export default function KanbanCard({ card, density, hasSubKanban, onClick }: KanbanCardProps) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: card.id,
     data: { type: 'card' },
@@ -43,6 +44,9 @@ export default function KanbanCard({ card, density, onClick }: KanbanCardProps) 
 
       <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginBottom: compact ? 0 : 4 }}>
         <span style={{ fontSize: compact ? 12 : 13, fontWeight: 500, flex: 1 }}>{card.title}</span>
+        {hasSubKanban && (
+          <span title="Tem sub-kanban" style={{ fontSize: 11 }}>📋</span>
+        )}
         {card.priority && (
           <span
             title={PRIORITY_LABELS[card.priority]}

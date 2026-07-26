@@ -16,6 +16,7 @@ interface KanbanColumnProps {
   cards: CardType[];
   density: KanbanDensity;
   width: number;
+  cardsWithSubKanban: Set<string>;
   onCardClick: (cardId: string) => void;
   onRename: (name: string) => void;
   onColumnMenu: () => void;
@@ -32,7 +33,8 @@ export default function KanbanColumn({
   onRename,
   onColumnMenu,
   collapsed,
-  onToggleCollapsed
+  onToggleCollapsed,
+  cardsWithSubKanban
 }: KanbanColumnProps) {
   const { attributes, listeners, setNodeRef: setSortableRef, transform, transition, isDragging } = useSortable({
     id: column.id,
@@ -87,12 +89,7 @@ export default function KanbanColumn({
           <div ref={setDroppableRef} style={{ flex: 1, overflowY: 'auto', minHeight: 40, borderRadius: 6, backgroundColor: isOver ? '#e8f0fe' : 'transparent', padding: 2 }}>
             <SortableContext items={cards.map((c) => c.id)} strategy={verticalListSortingStrategy}>
               {cards.map((c) => (
-                <KanbanCard
-                  key={c.id}
-                  card={c}
-                  density={density}
-                  onClick={() => onCardClick(c.id)}
-                />
+                <KanbanCard key={c.id} card={c} density={density} hasSubKanban={cardsWithSubKanban.has(c.id)} onClick={() => onCardClick(c.id)} />
               ))}
             </SortableContext>
           </div>

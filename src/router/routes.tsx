@@ -6,6 +6,7 @@ import { Project } from '@/Projects/Project/Project'
 import { Settings } from '@/Settings/Settings'
 import Agenda from '@/Agenda/Agenda';
 import LogsPage from '@/Logs/LogsPage';
+import KanbanOverviewPage from '@/Kanban/KanbanOverviewPage'
 
 const rootRoute = createRootRoute({
   component: AppLayout,
@@ -29,6 +30,12 @@ const projectRoute = createRoute({
   component: Project,
 })
 
+const kanbanRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/kanban',
+  component: KanbanOverviewPage,
+});
+
 const settingsRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/settings',
@@ -51,6 +58,7 @@ export const routeTree = rootRoute.addChildren([
   dashboardRoute,
   projectsRoute,
   projectRoute,
+  kanbanRoute,
   settingsRoute,
   agendaRoute,
   logsRoute

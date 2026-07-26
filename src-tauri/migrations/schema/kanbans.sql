@@ -1,6 +1,7 @@
 CREATE TABLE IF NOT EXISTS kanbans (
     id TEXT PRIMARY KEY,
     project_id TEXT NOT NULL,
+    parent_card_id TEXT,
     name TEXT NOT NULL,
     description TEXT,
     color TEXT,
@@ -10,7 +11,9 @@ CREATE TABLE IF NOT EXISTS kanbans (
     view_prefs TEXT NOT NULL DEFAULT '{}', -- JSON: densidade, largura de colunas, filtros salvos
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL,
-    FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE
+    FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE,
+    FOREIGN KEY (parent_card_id) REFERENCES kanban_cards (id) ON DELETE CASCADE
 );
 
 CREATE INDEX IF NOT EXISTS idx_kanbans_project_id ON kanbans (project_id);
+CREATE INDEX IF NOT EXISTS idx_kanbans_parent_card_id ON kanbans (parent_card_id);

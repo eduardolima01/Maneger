@@ -144,3 +144,48 @@ export async function reorderWithinColumn(orderedCardIds: string[]): Promise<voi
     await db.execute('UPDATE kanban_cards SET position = $1 WHERE id = $2', [index, orderedCardIds[index]]);
   }
 }
+
+export async function getCardCountsByKanbanIds(kanbanIds: string[]): Promise<Record<string, number>> {
+  const result: Record<string, number> = {};
+  for (const id of kanbanIds) result[id] = 0;
+  if (kanbanIds.length === 0) return result;
+
+  const db = await getDb();
+  const placeholders = kanbanIds.map((_, i) => `$${i + 1}`).join(', ');
+  const rows = await db.select<{ kanban_id: string; count: number }[]>(
+    `SELECT kanban_id, COUNT(*) as count FROM kanban_cards WHERE kanban_id IN (${placeholders}) AND archived = 0 GROUP BY kanban_id`,
+    kanbanIds
+  );
+  for (const r of rows) result[r.kanban_id] = r.count;
+  return result;
+}
+
+export interface ColumnCardCount {
+  columnId: string;
+  columnName: string;
+  count: number;
+}
+
+export async function getCardCountsByColumnForKanbans(kanbanIds: string[]): Promise<Record<string, ColumnCardCount[]>> {
+  const result: Record<string, ColumnCardCount[]> = {};
+  for (const id of kanbanIds) result[id] = [];
+  if (kanbanIds.length === 0) return result;
+
+  const db = await getDb();
+  const placeholders = kanbanIds.map((_, i) => `$${i + 1}`).join(', ');
+  const rows = await db.select<{ kanban_id: string; column_id: string; column_name: string; column_position: number; count: number }[]>(
+    `SELECT c.kanban_id as kanban_id, col.id as column_id, col.name as column_name, col.position as column_position, COUNT(c.id) as count
+     FROM kanban_columns col
+     LEFT JOIN kanban_cards c ON c.column_id = col.id AND c.archived = 0
+     WHERE col.kanban_id IN (${placeholders}) AND col.visible = 1
+     GROUP BY col.id
+     ORDER BY col.kanban_id ASC, col.position ASC`,
+    kanbanIds
+  );
+
+  for (const r of rows) {
+    if (!result[r.kanban_id]) result[r.kanban_id] = [];
+    result[r.kanban_id].push({ columnId: r.column_id, columnName: r.column_name, count: r.count });
+  }
+  return result;
+}

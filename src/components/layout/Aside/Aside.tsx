@@ -7,6 +7,7 @@ import {
   MdSettings,
   MdChevronLeft,
   MdChevronRight,
+  MdViewKanban,
 } from 'react-icons/md'
 import { ThemeToggle } from '@/components/layout/ThemeToggle'
 import { LuLogs } from 'react-icons/lu'
@@ -18,6 +19,7 @@ const menuItems = [
   { label: 'Dashboard', icon: MdDashboard, to: '/' },
   { label: 'Agenda', icon: MdCalendarMonth, to: '/agenda' },
   { label: 'Projetos', icon: MdFolder, to: '/projects' },
+  { label: 'Kanban', icon: MdViewKanban, to: '/kanban' },
   { label: 'Tarefas', icon: MdTask, to: '/tasks' },
   { label: 'Notas', icon: MdNotes, to: '/notes' },
   { label: 'Logs', icon: LuLogs, to: '/logs' },
