@@ -5,8 +5,9 @@ import type { KanbanCard, CreateKanbanCardInput, UpdateKanbanCardInput } from '@
 
 interface KanbanCardRow {
   id: string;
-  kanban_id: string;
-  column_id: string;
+  kanban_id: string | null;
+  column_id: string | null;
+  card_group_id: string | null;
   title: string;
   description: string | null;
   cover_path: string | null;
@@ -27,6 +28,7 @@ function rowToCard(row: KanbanCardRow): KanbanCard {
     id: row.id,
     kanbanId: row.kanban_id,
     columnId: row.column_id,
+    cardGroupId: row.card_group_id,
     title: row.title,
     description: row.description,
     coverPath: row.cover_path,
@@ -46,8 +48,14 @@ function rowToCard(row: KanbanCardRow): KanbanCard {
 export async function getCardsByKanban(kanbanId: string, includeArchived = false): Promise<KanbanCard[]> {
   const db = await getDb();
   const query = includeArchived
-    ? 'SELECT * FROM kanban_cards WHERE kanban_id = $1 ORDER BY position ASC'
-    : 'SELECT * FROM kanban_cards WHERE kanban_id = $1 AND archived = 0 ORDER BY position ASC';
+    ? `SELECT c.* FROM kanban_cards c
+       LEFT JOIN kanban_card_groups g ON g.id = c.card_group_id
+       WHERE c.kanban_id = $1 OR g.kanban_id = $1
+       ORDER BY c.position ASC`
+    : `SELECT c.* FROM kanban_cards c
+       LEFT JOIN kanban_card_groups g ON g.id = c.card_group_id
+       WHERE (c.kanban_id = $1 OR g.kanban_id = $1) AND c.archived = 0
+       ORDER BY c.position ASC`;
   const rows = await db.select<KanbanCardRow[]>(query, [kanbanId]);
   return rows.map(rowToCard);
 }
@@ -63,17 +71,20 @@ export async function createCard(input: CreateKanbanCardInput): Promise<string> 
   const id = generateId();
   const now = toLocalISO(new Date());
 
+  // const scopeColumn = 'column_id';
+  const scopeValue = input.cardGroupId ? 'card_group_id' : 'column_id';
+  const scopeId = input.cardGroupId ?? input.columnId;
   const existing = await db.select<{ maxPos: number | null }[]>(
-    'SELECT MAX(position) as maxPos FROM kanban_cards WHERE column_id = $1',
-    [input.columnId]
+    `SELECT MAX(position) as maxPos FROM kanban_cards WHERE ${scopeValue} = $1`,
+    [scopeId]
   );
   const nextPosition = (existing[0]?.maxPos ?? -1) + 1;
 
   await db.execute(
-    `INSERT INTO kanban_cards (id, kanban_id, column_id, title, description, color, priority, labels, start_date, due_date, position, created_at, updated_at)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $12)`,
+    `INSERT INTO kanban_cards (id, kanban_id, column_id, card_group_id, title, description, color, priority, labels, start_date, due_date, position, created_at, updated_at)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $13)`,
     [
-      id, input.kanbanId, input.columnId, input.title, input.description ?? null, input.color ?? null,
+      id, input.kanbanId ?? null, input.columnId ?? null, input.cardGroupId ?? null, input.title, input.description ?? null, input.color ?? null,
       input.priority ?? null, JSON.stringify(input.labels ?? []), input.startDate ?? null, input.dueDate ?? null,
       nextPosition, now,
     ]
@@ -189,3 +200,36 @@ export async function getCardCountsByColumnForKanbans(kanbanIds: string[]): Prom
   }
   return result;
 }
+
+export async function reorderCardsInGroup(orderedCardIds: string[]): Promise<void> {
+  const db = await getDb();
+  for (let index = 0; index < orderedCardIds.length; index++) {
+    await db.execute('UPDATE kanban_cards SET position = $1 WHERE id = $2', [index, orderedCardIds[index]]);
+  }
+}
+
+export async function getCardsByGroup(groupId: string): Promise<KanbanCard[]> {
+  const db = await getDb();
+  const rows = await db.select<KanbanCardRow[]>(
+    'SELECT * FROM kanban_cards WHERE card_group_id = $1 AND archived = 0 ORDER BY position ASC',
+    [groupId]
+  );
+  return rows.map(rowToCard);
+}
+
+export async function moveCardIntoGroup(cardId: string, groupId: string, orderedCardIdsInGroup: string[]): Promise<void> {
+  const db = await getDb();
+  await db.execute('UPDATE kanban_cards SET card_group_id = $1, kanban_id = NULL, column_id = NULL WHERE id = $2', [groupId, cardId]);
+  for (let index = 0; index < orderedCardIdsInGroup.length; index++) {
+    await db.execute('UPDATE kanban_cards SET position = $1 WHERE id = $2', [index, orderedCardIdsInGroup[index]]);
+  }
+}
+
+export async function moveCardOutOfGroup(cardId: string, kanbanId: string, columnId: string, orderedIdsInColumn: string[]): Promise<void> {
+  const db = await getDb();
+  await db.execute('UPDATE kanban_cards SET card_group_id = NULL, kanban_id = $1, column_id = $2 WHERE id = $3', [kanbanId, columnId, cardId]);
+  for (let index = 0; index < orderedIdsInColumn.length; index++) {
+    await db.execute('UPDATE kanban_cards SET position = $1 WHERE id = $2', [index, orderedIdsInColumn[index]]);
+  }
+}
+

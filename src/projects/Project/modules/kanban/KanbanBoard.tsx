@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import {
   DndContext, PointerSensor, useSensor, useSensors, closestCorners,
   type DragEndEvent,
@@ -19,37 +19,57 @@ interface KanbanBoardProps {
 const DEFAULT_COLUMN_WIDTH = 280;
 
 export default function KanbanBoard({ kanban }: KanbanBoardProps) {
-  const board = useKanbanBoard(kanban.id);
 
   const [columnSettingsOpen, setColumnSettingsOpen] = useState(false);
   const [selectedCardId, setSelectedCardId] = useState<string | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<{ id: string; title: string } | null>(null);
+  const [deleteGroupTarget, setDeleteGroupTarget] = useState<string | null>(null);
   const [newCardColumnId, setNewCardColumnId] = useState<string | null>(null);
   const [newCardTitle, setNewCardTitle] = useState('');
+  const [newGroupColumnId, setNewGroupColumnId] = useState<string | null>(null);
+  const [newGroupName, setNewGroupName] = useState('');
+  const newGroupInputRef = useRef<HTMLInputElement>(null);
+  const newCardInputRef = useRef<HTMLInputElement>(null);
+  const board = useKanbanBoard(kanban);
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 8 } }));
 
   const visibleColumns = board.columns.filter((c) => c.visible);
   const allLabels = Array.from(new Set(board.cards.flatMap((c) => c.labels)));
-  const collapsedIds = new Set(kanban.viewPrefs.collapsedColumnIds);
+  const collapsedIds = new Set(board.viewPrefs.collapsedColumnIds);
+  const collapsedGroupIds = new Set(board.viewPrefs.collapsedGroupIds);
   const selectedCard = selectedCardId ? board.cards.find((c) => c.id === selectedCardId) ?? null : null;
+
+  async function handleCreateGroup() {
+    if (!newGroupColumnId || !newGroupName.trim()) return;
+    await board.createGroup(newGroupColumnId, newGroupName.trim());
+    setNewGroupName('');
+    newGroupInputRef.current?.focus(); // mesmo padrão do card: mantém aberto pra criar vários em sequência
+  }
 
   function toggleColumnCollapsed(columnId: string) {
     const next = collapsedIds.has(columnId)
-      ? kanban.viewPrefs.collapsedColumnIds.filter((id) => id !== columnId)
-      : [...kanban.viewPrefs.collapsedColumnIds, columnId];
+      ? board.viewPrefs.collapsedColumnIds.filter((id) => id !== columnId)
+      : [...board.viewPrefs.collapsedColumnIds, columnId];
     board.saveViewPrefs({ collapsedColumnIds: next });
   }
 
-  function findColumnOfCard(cardId: string): string | undefined {
-    return board.cards.find((c) => c.id === cardId)?.columnId;
+
+  function toggleGroupCollapsed(groupId: string) {
+    const next = collapsedGroupIds.has(groupId)
+      ? board.viewPrefs.collapsedGroupIds.filter((id) => id !== groupId)
+      : [...board.viewPrefs.collapsedGroupIds, groupId];
+    board.saveViewPrefs({ collapsedGroupIds: next });
   }
 
   function handleDragEnd(event: DragEndEvent) {
     const { active, over } = event;
     if (!over) return;
 
+    const activeId = active.id as string;
+    const overId = over.id as string;
     const activeType = active.data.current?.type;
+    const overType = over.data.current?.type;
 
     if (activeType === 'column') {
       if (active.id === over.id) return;
@@ -61,27 +81,94 @@ export default function KanbanBoard({ kanban }: KanbanBoardProps) {
       return;
     }
 
-    if (activeType === 'card') {
-      const cardId = active.id as string;
-      const targetColumnId = (over.data.current?.columnId as string | undefined) ?? findColumnOfCard(over.id as string) ?? (over.id as string);
+    if (activeType === 'group') {
+      const groupId = activeId.replace('group:', '');
+      const targetColumnId =
+        (over.data.current?.type === 'column' && (over.data.current?.columnId as string)) ||
+        findColumnOfSortableItem(overId);
       if (!targetColumnId) return;
 
-      const cardsInTarget = board.cardsByColumn.get(targetColumnId) ?? [];
-      const orderedIds = cardsInTarget.map((c) => c.id).filter((id) => id !== cardId);
+      const itemsInTarget = combinedItemIdsForColumn(targetColumnId).filter((id) => id !== activeId);
+      const overIndex = itemsInTarget.indexOf(overId);
+      if (overIndex !== -1) itemsInTarget.splice(overIndex, 0, activeId);
+      else itemsInTarget.push(activeId);
 
-      const overCardIndex = orderedIds.indexOf(over.id as string);
-      if (overCardIndex !== -1) orderedIds.splice(overCardIndex, 0, cardId);
-      else orderedIds.push(cardId);
-
-      board.moveCard(cardId, targetColumnId, orderedIds);
+      board.moveGroupToColumn(groupId, targetColumnId, itemsInTarget.map(stripPrefix));
+      return;
     }
+
+    if (activeType === 'card') {
+      const cardId = activeId.replace('card:', '');
+
+      // caso 1: soltou em cima de um grupo (ou dentro da área droppable do grupo) → entra no grupo
+      if (overType === 'group') {
+        const groupId = over.data.current?.groupId as string;
+        const cardsInGroup = (board.cardsByGroup.get(groupId) ?? []).map((c) => c.id).filter((id) => id !== cardId);
+        cardsInGroup.push(cardId); // solto em qualquer ponto do grupo entra no fim, por simplicidade
+        board.moveCardIntoGroup(cardId, groupId, cardsInGroup);
+        return;
+      }
+
+      // caso 2: soltou em cima de outro card que já está dentro de um grupo → entra nesse grupo, na posição certa
+      if (overId.startsWith('card:')) {
+        const overCardId = overId.replace('card:', '');
+        const overCard = board.cards.find((c) => c.id === overCardId);
+        if (overCard?.cardGroupId) {
+          const cardsInGroup = (board.cardsByGroup.get(overCard.cardGroupId) ?? []).map((c) => c.id).filter((id) => id !== cardId);
+          const idx = cardsInGroup.indexOf(overCardId);
+          if (idx !== -1) cardsInGroup.splice(idx, 0, cardId); else cardsInGroup.push(cardId);
+          board.moveCardIntoGroup(cardId, overCard.cardGroupId, cardsInGroup);
+          return;
+        }
+      }
+
+      // caso 3: soltou solto na coluna (fora de qualquer grupo) → sai do grupo se estava em um, ou só reordena
+      const targetColumnId =
+        (over.data.current?.type === 'column' && (over.data.current?.columnId as string)) ||
+        findColumnOfSortableItem(overId);
+      if (!targetColumnId) return;
+
+      const cardsInTarget = (board.ungroupedCardsByColumn.get(targetColumnId) ?? []).map((c) => c.id).filter((id) => id !== cardId);
+      const overIndex = cardsInTarget.indexOf(overId.replace('card:', ''));
+      if (overIndex !== -1) cardsInTarget.splice(overIndex, 0, cardId); else cardsInTarget.push(cardId);
+
+      const activeCard = board.cards.find((c) => c.id === cardId);
+      if (activeCard?.cardGroupId) {
+        board.moveCardOutOfGroup(cardId, targetColumnId, cardsInTarget);
+      } else {
+        board.moveCard(cardId, targetColumnId, cardsInTarget);
+      }
+    }
+  }
+
+  function findColumnOfSortableItem(id: string): string | undefined {
+    if (id.startsWith('card:')) {
+      const cardId = id.replace('card:', '');
+      return board.cards.find((c) => c.id === cardId && c.columnId)?.columnId ?? undefined;
+    }
+    if (id.startsWith('group:')) {
+      const groupId = id.replace('group:', '');
+      return board.groups.find((g) => g.id === groupId)?.columnId;
+    }
+    return undefined;
+  }
+
+
+  function combinedItemIdsForColumn(columnId: string): string[] {
+    const groupIds = (board.groupsByColumn.get(columnId) ?? []).map((g) => `group:${g.id}`);
+    const cardIds = (board.ungroupedCardsByColumn.get(columnId) ?? []).map((c) => `card:${c.id}`);
+    return [...groupIds, ...cardIds];
+  }
+
+  function stripPrefix(id: string): string {
+    return id.replace('group:', '').replace('card:', '');
   }
 
   async function handleCreateCard() {
     if (!newCardColumnId || !newCardTitle.trim()) return;
     await board.createCard(newCardColumnId, newCardTitle.trim());
     setNewCardTitle('');
-    setNewCardColumnId(null);
+    newCardInputRef.current?.focus();
   }
 
   return (
@@ -93,7 +180,7 @@ export default function KanbanBoard({ kanban }: KanbanBoardProps) {
         onFiltersChange={board.setFilters}
         filtersActive={board.filtersActive}
         availableLabels={allLabels}
-        density={kanban.viewPrefs.density}
+        density={board.viewPrefs.density}
         onDensityChange={(density) => board.saveViewPrefs({ density })}
         onOpenColumnSettings={() => setColumnSettingsOpen(true)}
       />
@@ -105,35 +192,110 @@ export default function KanbanBoard({ kanban }: KanbanBoardProps) {
               <div key={col.id} style={{ display: 'flex', flexDirection: 'column' }}>
                 <KanbanColumn
                   column={col}
-                  cards={board.cardsByColumn.get(col.id) ?? []}
-                  density={kanban.viewPrefs.density}
-                  width={kanban.viewPrefs.columnWidths[col.id] ?? DEFAULT_COLUMN_WIDTH}
+                  cards={board.ungroupedCardsByColumn.get(col.id) ?? []}
+                  groups={board.groupsByColumn.get(col.id) ?? []}
+                  cardsByGroup={board.cardsByGroup}
+                  collapsedGroupIds={collapsedGroupIds}
+                  onToggleGroupCollapsed={toggleGroupCollapsed}
+                  density={board.viewPrefs.density}
+                  width={board.viewPrefs.columnWidths[col.id] ?? DEFAULT_COLUMN_WIDTH}
                   collapsed={collapsedIds.has(col.id)}
                   onToggleCollapsed={() => toggleColumnCollapsed(col.id)}
                   onCardClick={(cardId) => setSelectedCardId(cardId)}
                   onRename={(name) => board.updateColumn(col.id, { name })}
                   onColumnMenu={() => setColumnSettingsOpen(true)}
                   cardsWithSubKanban={board.cardsWithSubKanban}
+                  onCardDuplicate={board.duplicateCard}
+                  onCardRequestDelete={(id, title) => setDeleteTarget({ id, title })}
+                  onRenameGroup={board.renameGroup}
+                  onRequestDeleteGroup={(groupId) => setDeleteGroupTarget(groupId)}
                 />
                 {!collapsedIds.has(col.id) && (
                   newCardColumnId === col.id ? (
-                    <div style={{ display: 'flex', gap: 4, marginTop: 4 }}>
-                      <input
-                        autoFocus
-                        value={newCardTitle}
-                        onChange={(e) => setNewCardTitle(e.target.value)}
-                        onKeyDown={(e) => e.key === 'Enter' && handleCreateCard()}
-                        onBlur={() => !newCardTitle.trim() && setNewCardColumnId(null)}
-                        placeholder="Título do card..."
-                        style={{ flex: 1, padding: 6, fontSize: 12 }}
-                      />
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginTop: 4 }}>
+                      <div style={{ display: 'flex', gap: 4 }}>
+                        <input
+                          ref={newCardInputRef}
+                          autoFocus
+                          value={newCardTitle}
+                          onChange={(e) => setNewCardTitle(e.target.value)}
+                          onKeyDown={(e) => e.key === 'Enter' && handleCreateCard()}
+                          onBlur={() => !newCardTitle.trim() && setNewCardColumnId(null)}
+                          placeholder="Título do card..."
+                          style={{ flex: 1, padding: 6, fontSize: 12 }}
+                        />
+
+                        <button
+                          onClick={handleCreateCard}
+                          disabled={!newCardTitle.trim()}
+                          title="Adicionar card"
+                          style={{
+                            padding: '6px 10px', fontSize: 12, border: 'none', borderRadius: 4,
+                            backgroundColor: newCardTitle.trim() ? '#1a73e8' : '#ccc',
+                            color: '#fff', cursor: newCardTitle.trim() ? 'pointer' : 'default',
+                          }}
+                        >
+                          +
+                        </button>
+                      </div>
+                      <button
+                        onClick={() => { setNewCardColumnId(null); setNewCardTitle(''); }}
+                        style={{ fontSize: 11, color: '#666', background: 'none', border: 'none', cursor: 'pointer', textAlign: 'left', padding: 0 }}
+                      >
+                        ✕ Cancelar
+                      </button>
                     </div>
+
                   ) : (
                     <button
                       onClick={() => setNewCardColumnId(col.id)}
                       style={{ marginTop: 4, padding: '6px', fontSize: 12, color: '#666', background: 'none', border: '1px dashed #ccc', borderRadius: 4, cursor: 'pointer' }}
                     >
                       + Novo card
+                    </button>
+
+                  )
+                )}
+
+                {!collapsedIds.has(col.id) && !newCardColumnId && (
+                  newGroupColumnId === col.id ? (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginTop: 4 }}>
+                      <div style={{ display: 'flex', gap: 4 }}>
+                        <input
+                          ref={newGroupInputRef}
+                          autoFocus
+                          value={newGroupName}
+                          onChange={(e) => setNewGroupName(e.target.value)}
+                          onKeyDown={(e) => e.key === 'Enter' && handleCreateGroup()}
+                          placeholder="Nome do grupo..."
+                          style={{ flex: 1, padding: 6, fontSize: 12 }}
+                        />
+                        <button
+                          onClick={handleCreateGroup}
+                          disabled={!newGroupName.trim()}
+                          title="Adicionar grupo"
+                          style={{
+                            padding: '6px 10px', fontSize: 12, border: 'none', borderRadius: 4,
+                            backgroundColor: newGroupName.trim() ? '#666' : '#ccc',
+                            color: '#fff', cursor: newGroupName.trim() ? 'pointer' : 'default',
+                          }}
+                        >
+                          +
+                        </button>
+                      </div>
+                      <button
+                        onClick={() => { setNewGroupColumnId(null); setNewGroupName(''); }}
+                        style={{ fontSize: 11, color: '#666', background: 'none', border: 'none', cursor: 'pointer', textAlign: 'left', padding: 0 }}
+                      >
+                        ✕ Cancelar
+                      </button>
+                    </div>
+                  ) : (
+                    <button
+                      onClick={() => setNewGroupColumnId(col.id)}
+                      style={{ marginTop: 4, padding: '4px', fontSize: 11, color: '#999', background: 'none', border: 'none', cursor: 'pointer' }}
+                    >
+                      + Novo grupo
                     </button>
                   )
                 )}
@@ -181,6 +343,22 @@ export default function KanbanBoard({ kanban }: KanbanBoardProps) {
         }}
         onCancel={() => setDeleteTarget(null)}
       />
+
+      <ConfirmDialog
+        isOpen={deleteGroupTarget !== null}
+        title="Desagrupar cards?"
+        message="O grupo será removido, mas os cards dentro dele voltam soltos pra coluna — nenhum card é apagado."
+        confirmLabel="Desagrupar"
+        onConfirm={() => {
+          if (deleteGroupTarget) {
+            const group = board.groups.find((g) => g.id === deleteGroupTarget);
+            if (group) board.deleteGroup(group.id, group.columnId);
+          }
+          setDeleteGroupTarget(null);
+        }}
+        onCancel={() => setDeleteGroupTarget(null)}
+      />
     </div>
   );
 }
+

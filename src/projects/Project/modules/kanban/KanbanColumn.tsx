@@ -8,33 +8,51 @@ import KanbanCard from './KanbanCard';
 import type {
   KanbanColumn as ColumnType,
   KanbanCard as CardType,
-  KanbanDensity
+  KanbanDensity,
+  KanbanCardGroup
 } from '@/types/kanban.types';
+import GroupBlock from './GroupBlock';
 
 interface KanbanColumnProps {
   column: ColumnType;
   cards: CardType[];
+  groups: KanbanCardGroup[];
+  cardsByGroup: Map<string, CardType[]>;
+  collapsedGroupIds: Set<string>;
+  onToggleGroupCollapsed: (groupId: string) => void;
   density: KanbanDensity;
   width: number;
   cardsWithSubKanban: Set<string>;
   onCardClick: (cardId: string) => void;
+  onCardDuplicate: (cardId: string) => void;
+  onCardRequestDelete: (cardId: string, title: string) => void;
   onRename: (name: string) => void;
   onColumnMenu: () => void;
   collapsed: boolean;
   onToggleCollapsed: () => void;
+  onRenameGroup: (groupId: string, name: string) => void;
+  onRequestDeleteGroup: (groupId: string) => void;
 }
 
 export default function KanbanColumn({
   column,
   cards,
+  groups,
+  cardsByGroup,
   density,
   width,
   onCardClick,
+  onCardDuplicate,
+  onCardRequestDelete,
+  collapsedGroupIds,
+  onToggleGroupCollapsed,
   onRename,
   onColumnMenu,
   collapsed,
   onToggleCollapsed,
-  cardsWithSubKanban
+  cardsWithSubKanban,
+  onRenameGroup,
+  onRequestDeleteGroup
 }: KanbanColumnProps) {
   const { attributes, listeners, setNodeRef: setSortableRef, transform, transition, isDragging } = useSortable({
     id: column.id,
@@ -87,9 +105,36 @@ export default function KanbanColumn({
 
         {!collapsed && (
           <div ref={setDroppableRef} style={{ flex: 1, overflowY: 'auto', minHeight: 40, borderRadius: 6, backgroundColor: isOver ? '#e8f0fe' : 'transparent', padding: 2 }}>
-            <SortableContext items={cards.map((c) => c.id)} strategy={verticalListSortingStrategy}>
+            <SortableContext
+              items={[...groups.map((g) => `group:${g.id}`), ...cards.map((c) => `card:${c.id}`)]}
+              strategy={verticalListSortingStrategy}
+            >
+              {groups.map((g) => (
+                <GroupBlock
+                  key={g.id}
+                  group={g}
+                  cards={cardsByGroup.get(g.id) ?? []}
+                  density={density}
+                  cardsWithSubKanban={cardsWithSubKanban}
+                  collapsed={collapsedGroupIds.has(g.id)}
+                  onToggleCollapsed={() => onToggleGroupCollapsed(g.id)}
+                  onCardClick={onCardClick}
+                  onCardDuplicate={onCardDuplicate}
+                  onCardRequestDelete={onCardRequestDelete}
+                  onRename={(name) => onRenameGroup(g.id, name)}
+                  onRequestDelete={() => onRequestDeleteGroup(g.id)}
+                />
+              ))}
               {cards.map((c) => (
-                <KanbanCard key={c.id} card={c} density={density} hasSubKanban={cardsWithSubKanban.has(c.id)} onClick={() => onCardClick(c.id)} />
+                <KanbanCard
+                  key={c.id}
+                  card={c}
+                  density={density}
+                  hasSubKanban={cardsWithSubKanban.has(c.id)}
+                  onClick={() => onCardClick(c.id)}
+                  onDuplicate={() => onCardDuplicate(c.id)}
+                  onRequestDelete={() => onCardRequestDelete(c.id, c.title)}
+                />
               ))}
             </SortableContext>
           </div>

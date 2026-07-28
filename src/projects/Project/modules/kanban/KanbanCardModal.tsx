@@ -7,6 +7,8 @@ import { createKanban, getSubKanbanByCardId, getKanbanById } from '@/lib/api/kan
 import { PRIORITY_LABELS } from '@/types/kanban.types';
 import type { KanbanCard, TaskPriority, Kanban } from '@/types/kanban.types';
 import KanbanBoard from './KanbanBoard';
+import MarkdownField from '@/components/ui/MarkdownField';
+import ChecklistSection from '@/Kanban/ChecklistSection';
 
 type Tab = 'details' | 'meta';
 
@@ -82,6 +84,7 @@ export default function KanbanCardModal({ isOpen, onClose, card, onUpdate, onDup
   async function handleCreateSubKanban() {
     if (!card) return;
     const parentKanban = await getKanbanById(card.kanbanId);
+
     if (!parentKanban) return;
     const id = await createKanban({
       projectId: parentKanban.projectId,
@@ -123,13 +126,11 @@ export default function KanbanCardModal({ isOpen, onClose, card, onUpdate, onDup
 
               <div>
                 <label style={{ fontSize: 12, fontWeight: 600, color: '#666', display: 'block', marginBottom: 4 }}>Descrição (Markdown)</label>
-                <textarea
+                <MarkdownField
                   value={description}
-                  onChange={(e) => setDescription(e.target.value)}
+                  onChange={setDescription}
                   onBlur={saveDescription}
                   rows={6}
-                  style={{ width: '100%', padding: 8, fontSize: 13, resize: 'vertical', fontFamily: 'monospace' }}
-                  placeholder="Suporta sintaxe Markdown (renderização visual ainda não implementada — texto puro por ora)"
                 />
               </div>
 
@@ -148,6 +149,11 @@ export default function KanbanCardModal({ isOpen, onClose, card, onUpdate, onDup
                     + Criar sub-kanban pra dividir esse card
                   </Button>
                 )}
+              </div>
+
+              <div style={{ borderTop: '1px solid #eee', paddingTop: 12 }}>
+                <label style={{ fontSize: 12, fontWeight: 600, color: '#666', display: 'block', marginBottom: 6 }}>Lista de tarefas</label>
+                <ChecklistSection cardId={card.id} />
               </div>
             </>
           ) : (

@@ -1,3 +1,36 @@
 @import "tailwindcss";
 
 @custom-variant dark (&:where(.dark, .dark *));
+
+.markdown-preview h1, .markdown-preview h2, .markdown-preview h3 {
+  margin: 8px 0 4px;
+  font-weight: 600;
+}
+.markdown-preview p {
+  margin: 4px 0;
+}
+.markdown-preview ul, .markdown-preview ol {
+  margin: 4px 0;
+  padding-left: 20px;
+}
+.markdown-preview code {
+  background: #eee;
+  padding: 1px 4px;
+  border-radius: 3px;
+  font-size: 12px;
+}
+.markdown-preview pre {
+  background: #eee;
+  padding: 8px;
+  border-radius: 4px;
+  overflow-x: auto;
+}
+.markdown-preview blockquote {
+  border-left: 3px solid #ccc;
+  margin: 4px 0;
+  padding-left: 8px;
+  color: #666;
+}
+.markdown-preview a {
+  color: #1a73e8;
+}

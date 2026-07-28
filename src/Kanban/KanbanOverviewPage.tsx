@@ -6,13 +6,15 @@ import KanbanTile from './KanbanTile';
 import KanbanBoardModal from './KanbanBoardModal';
 import CreateKanbanModal from './CreateKanbanModal';
 import type { KanbanWithProject } from '@/types/kanban.types';
+import KanbanProjectGroup from './KanbanProjectGroup';
+import { buildKanbanGroupTree } from './utils/kanbanGrouping';
 
 export default function KanbanOverviewPage() {
-  const { kanbans, columnCounts, loading, reload } = useAllKanbans();
+  const { kanbans, columnCounts, tree, loading, reload } = useAllKanbans();
   const { prefs, loading: loadingPrefs, togglePinned, toggleHidden } = useKanbanOverviewPrefs();
 
   const [search, setSearch] = useState('');
-  const [groupByProject, setGroupByProject] = useState(true);
+  const [groupByHierarchy, setGroupByHierarchy] = useState(true);
   const [showArchived, setShowArchived] = useState(true);
   const [showHidden, setShowHidden] = useState(false);
   const [selectedKanban, setSelectedKanban] = useState<KanbanWithProject | null>(null);
@@ -37,16 +39,16 @@ export default function KanbanOverviewPage() {
     [visible, prefs.pinnedKanbanIds]
   );
 
-  const grouped = useMemo(() => {
-    if (!groupByProject) return { '': unpinned };
-    const map: Record<string, KanbanWithProject[]> = {};
+  const kanbanGroupTree = useMemo(() => {
+    if (!groupByHierarchy) return [];
+    const byProjectId = new Map<string, KanbanWithProject[]>();
     for (const k of unpinned) {
-      const key = k.projectName;
-      if (!map[key]) map[key] = [];
-      map[key].push(k);
+      const list = byProjectId.get(k.projectId) ?? [];
+      list.push(k);
+      byProjectId.set(k.projectId, list);
     }
-    return map;
-  }, [unpinned, groupByProject]);
+    return buildKanbanGroupTree(tree, byProjectId);
+  }, [unpinned, tree, groupByHierarchy]);
 
   function renderTile(k: KanbanWithProject) {
     return (
@@ -80,8 +82,8 @@ export default function KanbanOverviewPage() {
           style={{ flex: 1, minWidth: 200, padding: 8, fontSize: 14 }}
         />
         <label style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 13 }}>
-          <input type="checkbox" checked={groupByProject} onChange={(e) => setGroupByProject(e.target.checked)} />
-          Agrupar por projeto
+          <input type="checkbox" checked={groupByHierarchy} onChange={(e) => setGroupByHierarchy(e.target.checked)} />
+          Agrupar por hierarquia
         </label>
         <label style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 13 }}>
           <input type="checkbox" checked={showArchived} onChange={(e) => setShowArchived(e.target.checked)} />
@@ -108,18 +110,17 @@ export default function KanbanOverviewPage() {
         </div>
       )}
 
-      {Object.entries(grouped).map(([groupName, items]) => (
-        items.length > 0 && (
-          <div key={groupName} style={{ marginBottom: 20 }}>
-            {groupByProject && groupName && (
-              <h3 style={{ fontSize: 13, color: '#666', marginBottom: 8 }}>{groupName}</h3>
-            )}
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: 10 }}>
-              {items.map(renderTile)}
-            </div>
-          </div>
-        )
-      ))}
+      {groupByHierarchy ? (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+          {kanbanGroupTree.map((group: any) => (
+            <KanbanProjectGroup key={group.project.id} group={group} renderTile={renderTile} />
+          ))}
+        </div>
+      ) : (
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: 10 }}>
+          {unpinned.map(renderTile)}
+        </div>
+      )}
 
       <KanbanBoardModal
         isOpen={selectedKanban !== null}

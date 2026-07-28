@@ -15,8 +15,9 @@ export interface Kanban {
 
 export interface KanbanCard {
   id: string;
-  kanbanId: string;
-  columnId: string;
+  kanbanId: string | null;
+  columnId: string | null;
+  cardGroupId: string | null;
   title: string;
   description: string | null;
   coverPath: string | null;
@@ -33,8 +34,9 @@ export interface KanbanCard {
 }
 
 export interface CreateKanbanCardInput {
-  kanbanId: string;
-  columnId: string;
+  kanbanId?: string;
+  columnId?: string;
+  cardGroupId?: string;
   title: string;
   description?: string | null;
   color?: string | null;
@@ -70,11 +72,12 @@ export interface KanbanViewPrefs {
   density: KanbanDensity;
   columnWidths: Record<string, number>; // columnId -> px
   collapsedColumnIds: string[];
+  collapsedGroupIds: string[];
   savedFilters: KanbanSavedFilter[];
 }
 
 export function defaultViewPrefs(): KanbanViewPrefs {
-  return { density: 'normal', columnWidths: {}, collapsedColumnIds: [], savedFilters: [] };
+  return { density: 'normal', columnWidths: {}, collapsedColumnIds: [], collapsedGroupIds: [], savedFilters: [] };
 }
 
 export interface KanbanColumn {
@@ -91,7 +94,8 @@ export interface KanbanColumn {
 
 export interface CreateKanbanInput {
   projectId: string;
-  parentCardId?: string | null;
+  kanbanId: string;
+  columnId: string;
   name: string;
   description?: string | null;
   color?: string | null;
@@ -158,4 +162,26 @@ export interface KanbanWithProject extends Kanban {
   projectColor: string | null;
   projectCoverPath: string | null;
   projectArchived: boolean;
+}
+
+export interface KanbanCardGroup {
+  id: string;
+  kanbanId: string;
+  columnId: string;
+  name: string;
+  position: number;
+}
+
+export interface KanbanChecklistItem {
+  id: string;
+  cardId: string;
+  parentItemId: string | null;
+  title: string;
+  checked: boolean;
+  position: number;
+}
+
+export interface ChecklistProgress {
+  done: number;
+  total: number;
 }
