@@ -1,7 +1,8 @@
 CREATE TABLE IF NOT EXISTS kanban_cards (
     id TEXT PRIMARY KEY,
-    kanban_id TEXT NOT NULL,
-    column_id TEXT NOT NULL,
+    kanban_id TEXT,
+    column_id TEXT,
+    card_group_id TEXT,
     title TEXT NOT NULL,
     description TEXT,
     cover_path TEXT,
@@ -16,8 +17,10 @@ CREATE TABLE IF NOT EXISTS kanban_cards (
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL,
     FOREIGN KEY (kanban_id) REFERENCES kanbans (id) ON DELETE CASCADE,
-    FOREIGN KEY (column_id) REFERENCES kanban_columns (id) ON DELETE CASCADE
+    FOREIGN KEY (column_id) REFERENCES kanban_columns (id) ON DELETE CASCADE,
+    FOREIGN KEY (card_group_id) REFERENCES kanban_card_groups (id) ON DELETE CASCADE
 );
 
 CREATE INDEX IF NOT EXISTS idx_kanban_cards_kanban_id ON kanban_cards (kanban_id);
 CREATE INDEX IF NOT EXISTS idx_kanban_cards_column_id ON kanban_cards (column_id);
+CREATE INDEX IF NOT EXISTS idx_kanban_cards_card_group_id ON kanban_cards (card_group_id);

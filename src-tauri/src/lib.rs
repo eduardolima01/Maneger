@@ -73,6 +73,31 @@ fn save_kanban_overview_prefs(data: String) -> Result<(), String> {
     fs::write(&path, data).map_err(|e| e.to_string())
 }
 
+#[tauri::command]
+fn save_cover_from_bytes(
+    entity_id: String,
+    bytes: Vec<u8>,
+    extension: String,
+) -> Result<String, String> {
+    let dir = std::env::current_dir().map_err(|e| e.to_string())?;
+    let covers_dir = dir.join("covers");
+    fs::create_dir_all(&covers_dir).map_err(|e| e.to_string())?;
+
+    if let Ok(entries) = fs::read_dir(&covers_dir) {
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.file_stem().and_then(|s| s.to_str()) == Some(entity_id.as_str()) {
+                let _ = fs::remove_file(&path);
+            }
+        }
+    }
+
+    let dest = covers_dir.join(format!("{}.{}", entity_id, extension));
+    fs::write(&dest, bytes).map_err(|e| e.to_string())?;
+
+    Ok(dest.to_string_lossy().to_string())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let migrations = vec![Migration {
@@ -101,7 +126,8 @@ pub fn run() {
             save_project_cover,
             delete_project_cover,
             load_kanban_overview_prefs,
-            save_kanban_overview_prefs
+            save_kanban_overview_prefs,
+            save_cover_from_bytes
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

@@ -6,6 +6,7 @@ import * as projectsApi from '@/lib/api/projects';
 import { setProjectArchived } from '@/lib/api/projects';
 import { getProjectColor, PALETTE } from '@/lib/utils/projectColor';
 import type { ProjectType } from '@/types/project.types';
+import ImageUploadField from '@/components/ImageUploadField';
 
 interface ProjectInlineEditFormProps {
   project: ProjectType;
@@ -129,9 +130,11 @@ export default function ProjectInlineEditForm({ project, onSaved, onDeleted, onC
             style={{ width: '100%', height: 100, objectFit: 'cover', borderRadius: 6, marginBottom: 8 }}
           />
         )}
-        <Button variant="secondary" onClick={handlePickCover}>
-          {project.cover_path ? 'Trocar capa' : 'Escolher capa'}
-        </Button>
+        <ImageUploadField
+          entityId={project.id}
+          currentPath={project.cover_path}
+          onUploaded={(path) => { projectsApi.updateProject(project.id, { cover_path: path }); onSaved(); }}
+        />
       </div>
 
       <div style={{ borderTop: '1px solid #eee', paddingTop: 12 }}>

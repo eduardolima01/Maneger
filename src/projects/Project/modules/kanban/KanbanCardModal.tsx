@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { invoke, convertFileSrc } from '@tauri-apps/api/core';
+import { invoke } from '@tauri-apps/api/core';
 import { open } from '@tauri-apps/plugin-dialog';
 import Modal from '@/components/ui/Modal';
 import Button from '@/components/layout/Button';
@@ -9,6 +9,7 @@ import type { KanbanCard, TaskPriority, Kanban } from '@/types/kanban.types';
 import KanbanBoard from './KanbanBoard';
 import MarkdownField from '@/components/ui/MarkdownField';
 import ChecklistSection from '@/Kanban/ChecklistSection';
+import ImageUploadField from '@/components/ImageUploadField';
 
 type Tab = 'details' | 'meta';
 
@@ -158,9 +159,12 @@ export default function KanbanCardModal({ isOpen, onClose, card, onUpdate, onDup
             </>
           ) : (
             <>
-              {card.coverPath && (
-                <img src={convertFileSrc(card.coverPath)} style={{ width: '100%', height: 120, objectFit: 'cover', borderRadius: 6 }} />
-              )}
+              <ImageUploadField
+                entityId={card.id}
+                currentPath={card.coverPath}
+                onUploaded={(path) => onUpdate(card.id, { coverPath: path })}
+                height={120}
+              />
               <Button variant="secondary" onClick={handlePickCover}>{card.coverPath ? 'Trocar capa' : 'Adicionar capa'}</Button>
 
               <div style={{ display: 'flex', gap: 12 }}>

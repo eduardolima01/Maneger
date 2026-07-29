@@ -8,8 +8,8 @@ import type { ModuleStatus } from '../../lib/api/modules';
 import type { ModuleKey } from '../../types/module.types';
 
 import { setProjectArchived } from '../../lib/api/projects';
-import { open } from '@tauri-apps/plugin-dialog';
-import { invoke, convertFileSrc } from '@tauri-apps/api/core';
+import { invoke } from '@tauri-apps/api/core';
+import ImageUploadField from '@/components/ImageUploadField';
 
 import { getProjectColor, PALETTE } from '@/lib/utils/projectColor';
 
@@ -85,18 +85,7 @@ export default function ProjectSettingsModal({
     onClose();
   }
 
-  async function handlePickCover() {
-    const selected = await open({
-      multiple: false,
-      filters: [{ name: 'Imagens', extensions: ['png', 'jpg', 'jpeg', 'webp', 'gif'] }],
-    });
-    if (!selected || Array.isArray(selected)) return;
-
-    const newPath = await invoke<string>('save_project_cover', {
-      projectId: project.id,
-      sourcePath: selected,
-    });
-
+  async function handleCoverUploaded(newPath: string) {
     await projectsApi.updateProject(project.id, { cover_path: newPath });
     onUpdated();
   }
@@ -158,15 +147,11 @@ export default function ProjectSettingsModal({
             style={{ fontSize: 13, fontWeight: 600, display: 'block', marginBottom: 4 }}>
             Capa
           </label>
-          {project.cover_path && (
-            <img
-              src={convertFileSrc(project.cover_path)}
-              style={{ width: '100%', height: 100, objectFit: 'cover', borderRadius: 6, marginBottom: 8 }}
-            />
-          )}
-          <Button variant="secondary" onClick={handlePickCover}>
-            {project.cover_path ? 'Trocar capa' : 'Escolher capa'}
-          </Button>
+          <ImageUploadField
+            entityId={project.id}
+            currentPath={project.cover_path}
+            onUploaded={handleCoverUploaded}
+          />
         </div>
 
         {modules && <ModuleToggles modules={modules} onToggle={onToggleModule} />}
