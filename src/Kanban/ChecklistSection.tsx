@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import {
   DndContext, PointerSensor, useSensor, useSensors, closestCenter,
   type DragEndEvent,
@@ -39,6 +39,7 @@ function ChecklistNodeRow({ node, onToggle, onRename, onDelete, onCreateSub, onR
   const [titleDraft, setTitleDraft] = useState(node.title);
   const [expanded, setExpanded] = useState(node.children.length > 0);
   const [newSubTitle, setNewSubTitle] = useState('');
+  const newSubInputRef = useRef<HTMLInputElement>(null);
 
   const style: React.CSSProperties = { transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.5 : 1 };
   const hasChildren = node.children.length > 0;
@@ -59,6 +60,7 @@ function ChecklistNodeRow({ node, onToggle, onRename, onDelete, onCreateSub, onR
     onCreateSub(node.id, newSubTitle.trim());
     setNewSubTitle('');
     setExpanded(true);
+    newSubInputRef.current?.focus();
   }
 
   return (
@@ -73,6 +75,7 @@ function ChecklistNodeRow({ node, onToggle, onRename, onDelete, onCreateSub, onR
         </button>
         <input type="checkbox" checked={node.checked} onChange={(e) => onToggle(node.id, e.target.checked)} />
         <input
+          ref={newSubInputRef}
           value={titleDraft}
           onChange={(e) => setTitleDraft(e.target.value)}
           onBlur={() => titleDraft.trim() && titleDraft !== node.title && onRename(node.id, titleDraft.trim())}
@@ -129,6 +132,7 @@ function ChecklistNodeRow({ node, onToggle, onRename, onDelete, onCreateSub, onR
 export default function ChecklistSection({ cardId }: ChecklistSectionProps) {
   const { items, loading, create, createSubItem, toggle, rename, remove, reorder } = useCardChecklist(cardId);
   const [newTitle, setNewTitle] = useState('');
+  const newItemInputRef = useRef<HTMLInputElement>(null);
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 8 } }));
 
   const tree = buildChecklistTree(items);
@@ -158,6 +162,7 @@ export default function ChecklistSection({ cardId }: ChecklistSectionProps) {
     if (!newTitle.trim()) return;
     await create(newTitle);
     setNewTitle('');
+    newItemInputRef.current?.focus();
   }
 
   if (loading) return <p style={{ fontSize: 12, color: '#999' }}>Carregando...</p>;
@@ -195,6 +200,7 @@ export default function ChecklistSection({ cardId }: ChecklistSectionProps) {
 
       <div style={{ display: 'flex', gap: 6, marginTop: 4 }}>
         <input
+          ref={newItemInputRef}
           value={newTitle}
           onChange={(e) => setNewTitle(e.target.value)}
           onKeyDown={(e) => e.key === 'Enter' && handleAdd()}

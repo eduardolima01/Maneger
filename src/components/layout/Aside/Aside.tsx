@@ -8,6 +8,7 @@ import {
   MdChevronLeft,
   MdChevronRight,
   MdViewKanban,
+  MdChat,
 } from 'react-icons/md'
 import { ThemeToggle } from '@/components/layout/ThemeToggle'
 import { LuLogs } from 'react-icons/lu'
@@ -20,6 +21,7 @@ const menuItems = [
   { label: 'Agenda', icon: MdCalendarMonth, to: '/agenda' },
   { label: 'Projetos', icon: MdFolder, to: '/projects' },
   { label: 'Kanban', icon: MdViewKanban, to: '/kanban' },
+  { label: 'Chat', icon: MdChat, to: '/chat' },
   { label: 'Tarefas', icon: MdTask, to: '/tasks' },
   { label: 'Notas', icon: MdNotes, to: '/notes' },
   { label: 'Logs', icon: LuLogs, to: '/logs' },
@@ -62,8 +64,8 @@ export function Aside() {
         </ul>
       </nav>
 
-      <div className={`flex items-center border-t border-zinc-200 p-4 dark:border-zinc-800 ${collapsed ? 'flex-col gap-3' : 'justify-between'}`}>
-        <AsideNavItem to="/settings" label="Configurações" icon={MdSettings} collapsed={collapsed} />
+      <div className={`flex items-center justify-end border-t border-zinc-200 p-4 dark:border-zinc-800 ${collapsed ? 'flex-col gap-3' : 'justify-between'}`}>
+        <AsideNavItem to="/settings" label="" icon={MdSettings} collapsed={collapsed} />
         <ThemeToggle />
       </div>
     </aside>

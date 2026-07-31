@@ -34,3 +34,11 @@ pub const SCHEMA: &str = concat!(
     include_str!("../migrations/schema/project_modules.sql"),
     "\n",
 );
+
+pub const CHAT_SCHEMA: &str = concat!(
+    include_str!("../migrations/chat_schema/messages.sql"),
+    "\n",
+    include_str!("../migrations/chat_schema/conversations.sql"),
+    "\n",
+    include_str!("../migrations/chat_schema/settings.sql"),
+);

@@ -16,6 +16,12 @@ fn get_db_url() -> String {
 }
 
 #[tauri::command]
+fn get_chat_db_url() -> String {
+    let dir = std::env::current_dir().expect("não foi possível obter o diretório atual");
+    format!("sqlite:{}/chat.db", dir.display())
+}
+
+#[tauri::command]
 fn save_project_cover(project_id: String, source_path: String) -> Result<String, String> {
     let dir = std::env::current_dir().map_err(|e| e.to_string())?;
     let covers_dir = dir.join("covers");
@@ -107,9 +113,21 @@ pub fn run() {
         kind: MigrationKind::Up,
     }];
 
+    let chat_migrations = vec![Migration {
+        version: 1,
+        description: "chat_initial_schema",
+        sql: schema::CHAT_SCHEMA,
+        kind: MigrationKind::Up,
+    }];
+
     let db_url = {
         let dir = std::env::current_dir().expect("não foi possível obter o diretório atual");
         format!("sqlite:{}/app.db", dir.display())
+    };
+
+    let chat_db_url = {
+        let dir = std::env::current_dir().expect("não foi possível obter o diretório atual");
+        format!("sqlite:{}/chat.db", dir.display())
     };
 
     tauri::Builder::default()
@@ -118,11 +136,13 @@ pub fn run() {
         .plugin(
             tauri_plugin_sql::Builder::default()
                 .add_migrations(&db_url, migrations)
+                .add_migrations(&chat_db_url, chat_migrations)
                 .build(),
         )
         .invoke_handler(tauri::generate_handler![
             greet,
             get_db_url,
+            get_chat_db_url,
             save_project_cover,
             delete_project_cover,
             load_kanban_overview_prefs,

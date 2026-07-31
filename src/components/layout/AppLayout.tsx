@@ -1,5 +1,6 @@
 import { Outlet } from '@tanstack/react-router'
 import { Aside } from './Aside/Aside'
+import GlobalChatWidget from '@/Chat/components/GlobalChatWidget'
 
 export function AppLayout() {
   return (
@@ -11,6 +12,7 @@ export function AppLayout() {
           <Outlet />
         </div>
       </main>
+      <GlobalChatWidget />
     </div>
   )
 }
