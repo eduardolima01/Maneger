@@ -1,16 +1,22 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import * as api from '@/lib/api/kanban/kanbanChecklist';
 import type { KanbanChecklistItem } from '@/types/kanban.types';
 
 export function useCardChecklist(cardId: string) {
   const [items, setItems] = useState<KanbanChecklistItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const hasLoadedOnce = useRef(false);
 
   const reload = useCallback(async () => {
-    setLoading(true);
+    if (!hasLoadedOnce.current) setLoading(true);
     const data = await api.getItemsByCard(cardId);
     setItems(data);
     setLoading(false);
+    hasLoadedOnce.current = true;
+  }, [cardId]);
+
+  useEffect(() => {
+    hasLoadedOnce.current = false; // trocou de card → próxima carga volta a mostrar "Carregando..."
   }, [cardId]);
 
   useEffect(() => { reload(); }, [reload]);

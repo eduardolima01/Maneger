@@ -26,7 +26,7 @@ export default function ChatOverlay({ open, focusToken, onClose }: ChatOverlayPr
         style={{
           position: 'fixed',
           bottom: 24,
-          left: 24,
+          right: 24,
           width: 380,
           maxWidth: 'calc(100vw - 48px)',
           height: 520,

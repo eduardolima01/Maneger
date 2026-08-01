@@ -17,6 +17,7 @@ interface KanbanBoardProps {
 }
 
 const DEFAULT_COLUMN_WIDTH = 280;
+const EMPTY_COLUMN_WIDTH = 160;
 
 export default function KanbanBoard({ kanban }: KanbanBoardProps) {
 
@@ -190,26 +191,35 @@ export default function KanbanBoard({ kanban }: KanbanBoardProps) {
           <div style={{ display: 'flex', gap: 12, overflowX: 'auto', paddingBottom: 8, alignItems: 'stretch', minHeight: 400 }}>
             {visibleColumns.map((col) => (
               <div key={col.id} style={{ display: 'flex', flexDirection: 'column' }}>
-                <KanbanColumn
-                  column={col}
-                  cards={board.ungroupedCardsByColumn.get(col.id) ?? []}
-                  groups={board.groupsByColumn.get(col.id) ?? []}
-                  cardsByGroup={board.cardsByGroup}
-                  collapsedGroupIds={collapsedGroupIds}
-                  onToggleGroupCollapsed={toggleGroupCollapsed}
-                  density={board.viewPrefs.density}
-                  width={board.viewPrefs.columnWidths[col.id] ?? DEFAULT_COLUMN_WIDTH}
-                  collapsed={collapsedIds.has(col.id)}
-                  onToggleCollapsed={() => toggleColumnCollapsed(col.id)}
-                  onCardClick={(cardId) => setSelectedCardId(cardId)}
-                  onRename={(name) => board.updateColumn(col.id, { name })}
-                  onColumnMenu={() => setColumnSettingsOpen(true)}
-                  cardsWithSubKanban={board.cardsWithSubKanban}
-                  onCardDuplicate={board.duplicateCard}
-                  onCardRequestDelete={(id, title) => setDeleteTarget({ id, title })}
-                  onRenameGroup={board.renameGroup}
-                  onRequestDeleteGroup={(groupId) => setDeleteGroupTarget(groupId)}
-                />
+                {(() => {
+                  const columnCards = board.ungroupedCardsByColumn.get(col.id) ?? [];
+                  const columnGroups = board.groupsByColumn.get(col.id) ?? [];
+                  const isEmpty = columnCards.length === 0 && columnGroups.length === 0;
+                  const customWidth = board.viewPrefs.columnWidths[col.id];
+                  const resolvedWidth = customWidth ?? (isEmpty ? EMPTY_COLUMN_WIDTH : DEFAULT_COLUMN_WIDTH);
+                  return (
+                    <KanbanColumn
+                      column={col}
+                      cards={columnCards}
+                      groups={columnGroups}
+                      cardsByGroup={board.cardsByGroup}
+                      collapsedGroupIds={collapsedGroupIds}
+                      onToggleGroupCollapsed={toggleGroupCollapsed}
+                      density={board.viewPrefs.density}
+                      width={resolvedWidth}
+                      collapsed={collapsedIds.has(col.id)}
+                      onToggleCollapsed={() => toggleColumnCollapsed(col.id)}
+                      onCardClick={(cardId) => setSelectedCardId(cardId)}
+                      onRename={(name) => board.updateColumn(col.id, { name })}
+                      onColumnMenu={() => setColumnSettingsOpen(true)}
+                      cardsWithSubKanban={board.cardsWithSubKanban}
+                      onCardDuplicate={board.duplicateCard}
+                      onCardRequestDelete={(id, title) => setDeleteTarget({ id, title })}
+                      onRenameGroup={board.renameGroup}
+                      onRequestDeleteGroup={(groupId) => setDeleteGroupTarget(groupId)}
+                    />
+                  );
+                })()}
                 {!collapsedIds.has(col.id) && (
                   newCardColumnId === col.id ? (
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginTop: 4 }}>

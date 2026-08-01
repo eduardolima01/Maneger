@@ -38,3 +38,12 @@ export async function deleteNote(id: string): Promise<void> {
   const db = await getDb();
   await db.execute('DELETE FROM notes WHERE id = $1', [id]);
 }
+
+export async function getAllNotesForSearch(): Promise<{ id: string; projectId: string; title: string; content: string }[]> {
+  const db = await getDb();
+  const rows = await db.select<{ id: string; project_id: string; title: string; content: string }[]>(
+    'SELECT id, project_id, title, content FROM notes'
+  );
+  return rows.map((r) => ({ id: r.id, projectId: r.project_id, title: r.title, content: r.content }));
+}
+

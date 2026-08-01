@@ -128,3 +128,11 @@ export async function deleteTask(id: string): Promise<void> {
   const db = await getDb();
   await db.execute('DELETE FROM tasks WHERE id = $1', [id]);
 }
+
+export async function getAllTasksForSearch(): Promise<{ id: string; projectId: string; title: string; description: string | null }[]> {
+  const db = await getDb();
+  const rows = await db.select<{ id: string; project_id: string; title: string; description: string | null }[]>(
+    'SELECT id, project_id, title, description FROM tasks'
+  );
+  return rows.map((r) => ({ id: r.id, projectId: r.project_id, title: r.title, description: r.description }));
+}

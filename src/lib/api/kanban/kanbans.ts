@@ -57,7 +57,7 @@ export async function getKanbanById(id: string): Promise<Kanban | null> {
   return rows[0] ? rowToKanban(rows[0]) : null;
 }
 
-const DEFAULT_COLUMN_NAMES = ['Backlog', 'Todo', 'Doing', 'Review', 'Done'];
+const DEFAULT_COLUMN_NAMES = ['Pendências', 'Fazer', 'Fazendo', 'Feito'];
 
 export async function createKanban(input: CreateKanbanInput): Promise<string> {
   const db = await getDb();

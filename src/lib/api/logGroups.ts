@@ -69,3 +69,12 @@ export async function deleteLogGroup(id: string): Promise<void> {
   const db = await getDb();
   await db.execute('DELETE FROM log_groups WHERE id = $1', [id]);
 }
+
+export async function getAllLogGroupsForSearch(): Promise<{ id: string; projectId: string; name: string; templateName: string }[]> {
+  const db = await getDb();
+  const rows = await db.select<{ id: string; project_id: string; name: string; template_name: string }[]>(
+    `SELECT g.id as id, g.project_id as project_id, g.name as name, t.name as template_name
+     FROM log_groups g JOIN templates t ON t.id = g.template_id`
+  );
+  return rows.map((r) => ({ id: r.id, projectId: r.project_id, name: r.name, templateName: r.template_name }));
+}

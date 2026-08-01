@@ -12,7 +12,7 @@ export default function ChatFloatingButton({ open, onClick }: ChatFloatingButton
       style={{
         position: 'fixed',
         bottom: 24,
-        left: 24,
+        right: 24,
         width: 52,
         height: 52,
         borderRadius: '50%',
