@@ -73,9 +73,19 @@ fn load_kanban_overview_prefs() -> Result<String, String> {
 }
 
 #[tauri::command]
-fn save_kanban_overview_prefs(data: String) -> Result<(), String> {
+fn load_tabs_state() -> Result<String, String> {
     let dir = std::env::current_dir().map_err(|e| e.to_string())?;
-    let path = dir.join("kanban-overview-prefs.json");
+    let path = dir.join("tabs-state.json");
+    if !path.exists() {
+        return Ok("{}".to_string());
+    }
+    fs::read_to_string(&path).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn save_tabs_state(data: String) -> Result<(), String> {
+    let dir = std::env::current_dir().map_err(|e| e.to_string())?;
+    let path = dir.join("tabs-state.json");
     fs::write(&path, data).map_err(|e| e.to_string())
 }
 
@@ -102,6 +112,25 @@ fn save_cover_from_bytes(
     fs::write(&dest, bytes).map_err(|e| e.to_string())?;
 
     Ok(dest.to_string_lossy().to_string())
+}
+
+#[tauri::command]
+fn load_pomodoro_data(project_id: String) -> Result<String, String> {
+    let dir = std::env::current_dir().map_err(|e| e.to_string())?;
+    let path = dir.join("projects").join(&project_id).join("pomodoro.json");
+    if !path.exists() {
+        return Ok("{}".to_string());
+    }
+    fs::read_to_string(&path).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn save_pomodoro_data(project_id: String, data: String) -> Result<(), String> {
+    let dir = std::env::current_dir().map_err(|e| e.to_string())?;
+    let project_dir = dir.join("projects").join(&project_id);
+    fs::create_dir_all(&project_dir).map_err(|e| e.to_string())?;
+    let path = project_dir.join("pomodoro.json");
+    fs::write(&path, data).map_err(|e| e.to_string())
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -146,7 +175,10 @@ pub fn run() {
             save_project_cover,
             delete_project_cover,
             load_kanban_overview_prefs,
-            save_kanban_overview_prefs,
+            load_tabs_state,
+            save_tabs_state,
+            load_pomodoro_data,
+            save_pomodoro_data,
             save_cover_from_bytes
         ])
         .run(tauri::generate_context!())

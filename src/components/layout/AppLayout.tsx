@@ -8,6 +8,7 @@ import TabBar from './tabs/TabBar';
 import TabRouterHost from './tabs/TabRouterHost';
 import { useTabs, initTabsFromDisk } from './tabs/tabStore';
 import TabBreadcrumbBar from './tabs/TabBreadcrumbBar';
+import GlobalPomodoroWidget from '@/Projects/Project/modules/pomodoro/components/GlobalPomodoroWidget';
 
 export function AppLayout() {
   const { activeTabId } = useTabs();
@@ -32,6 +33,7 @@ export function AppLayout() {
       <GlobalChatWidget />
       <GlobalSearchWidget />
       <GlobalKanbanModalHost />
+      <GlobalPomodoroWidget />
     </div>
   )
 }

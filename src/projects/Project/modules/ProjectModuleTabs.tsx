@@ -72,7 +72,7 @@ export default function ProjectModuleTabs({ projectId, projectName, modules }: P
         {activeTab === 'notes' && <NotesSection projectId={projectId} />}
         {activeTab === 'agenda' && <AgendaSection projectId={projectId} projectName={projectName} />}
         {activeTab === 'logs' && <LogsSection projectId={projectId} />}
-        {activeTab === 'pomodoro' && <PomodoroSection projectId={projectId} />}
+        {activeTab === 'pomodoro' && <PomodoroSection projectId={projectId} projectName={projectName} />}
       </div>
     </div>
   );

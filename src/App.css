@@ -34,3 +34,7 @@
 .markdown-preview a {
   color: #1a73e8;
 }
+
+button {
+  cursor: pointer
+}
