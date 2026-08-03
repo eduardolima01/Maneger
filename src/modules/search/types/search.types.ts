@@ -10,6 +10,7 @@ export interface SearchResultItem {
   icon: string;
   matchScore: number; // 0 = match perfeito, 1 = pior — vem do Fuse, ajustado por recência/frequência depois
   onSelect: () => void;
+  onAltSelect?: () => void; // Alt+Enter — abertura alternativa (ex: aba em vez de modal); opcional, nem toda categoria precisa
 }
 
 export interface SearchProvider {

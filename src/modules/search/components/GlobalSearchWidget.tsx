@@ -14,6 +14,7 @@ import { createSettingsProvider } from '../providers/settings.provider';
 import { getKanbanById } from '@/lib/api/kanban/kanbans';
 import { openGlobalKanbanModal } from '@/Kanban/globalKanbanModal';
 import type { RecentEntry } from '../types/search.types';
+import { activateNextTab, activatePrevTab, closeActiveTab, reopenLastClosedTab } from '@/components/layout/tabs/tabStore';
 
 let providersRegistered = false;
 
@@ -46,6 +47,23 @@ export default function GlobalSearchWidget() {
       }
       if (e.key === 'Escape' && open) {
         closeSearch();
+        return;
+      }
+
+      if (e.ctrlKey && e.key === 'Tab') {
+        e.preventDefault();
+        if (e.shiftKey) activatePrevTab(); else activateNextTab();
+        return;
+      }
+      if (e.ctrlKey && !e.shiftKey && e.key.toLowerCase() === 'w') {
+        e.preventDefault();
+        closeActiveTab();
+        return;
+      }
+      if (e.ctrlKey && e.shiftKey && e.key.toLowerCase() === 't') {
+        e.preventDefault();
+        reopenLastClosedTab();
+        return;
       }
     }
 

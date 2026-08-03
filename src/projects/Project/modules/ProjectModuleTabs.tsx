@@ -6,6 +6,7 @@ import AgendaSection from './agenda/AgendaSection';
 import LogsSection from './logs/LogsSection';
 import type { ModuleStatus } from '@/lib/api/modules';
 import type { ModuleKey } from '../../../types/module.types';
+import PomodoroSection from './pomodoro/PromodoroSection';
 
 interface ProjectModuleTabsProps {
   projectId: string;
@@ -19,9 +20,10 @@ const MODULE_LABELS: Record<ModuleKey, string> = {
   notes: 'Notas',
   agenda: 'Agenda',
   logs: 'Logs',
+  pomodoro: 'Pomodoro',
 };
 
-const MODULE_ORDER: ModuleKey[] = ['kanban', 'tasks', 'notes', 'agenda', 'logs'];
+const MODULE_ORDER: ModuleKey[] = ['kanban', 'tasks', 'notes', 'agenda', 'logs', 'pomodoro'];
 
 export default function ProjectModuleTabs({ projectId, projectName, modules }: ProjectModuleTabsProps) {
   const [activeTab, setActiveTab] = useState<ModuleKey | null>(null);
@@ -70,7 +72,9 @@ export default function ProjectModuleTabs({ projectId, projectName, modules }: P
         {activeTab === 'notes' && <NotesSection projectId={projectId} />}
         {activeTab === 'agenda' && <AgendaSection projectId={projectId} projectName={projectName} />}
         {activeTab === 'logs' && <LogsSection projectId={projectId} />}
+        {activeTab === 'pomodoro' && <PomodoroSection projectId={projectId} />}
       </div>
     </div>
   );
 }
+

@@ -1,6 +1,7 @@
 import type { SearchProvider, SearchResultItem } from '../types/search.types';
 import { NAVIGATION_ITEMS } from '../indexers/navigationIndexer';
 import { fuzzySearch } from '../services/fuzzyMatch';
+import { openEntityTab } from '@/components/layout/tabs/tabStore';
 
 export function createNavigationProvider(navigate: (path: string) => void): SearchProvider {
   return {
@@ -15,6 +16,7 @@ export function createNavigationProvider(navigate: (path: string) => void): Sear
           icon: item.icon,
           matchScore: score,
           onSelect: () => navigate(item.path),
+          onAltSelect: () => openEntityTab(item.path),
         })
       );
     },

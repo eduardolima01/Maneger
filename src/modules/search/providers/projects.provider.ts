@@ -2,6 +2,7 @@ import type { SearchProvider, SearchResultItem } from '../types/search.types';
 import { getAllProjects } from '@/lib/api/projects';
 import { fuzzySearch } from '../services/fuzzyMatch';
 import { buildProjectBreadcrumbPath } from '@/Projects/utils/projectBreadcrumb';
+import { openEntityTab } from '@/components/layout/tabs/tabStore';
 
 export function createProjectsProvider(navigate: (path: string) => void): SearchProvider {
   return {
@@ -19,6 +20,7 @@ export function createProjectsProvider(navigate: (path: string) => void): Search
           icon: '📁',
           matchScore: score,
           onSelect: () => navigate(`/projects/${item.id}`),
+          onAltSelect: () => openEntityTab(`/projects/${item.id}`),
         })
       );
     },
@@ -45,6 +47,7 @@ export function createSubprojectsProvider(navigate: (path: string) => void): Sea
           icon: '📂',
           matchScore: score,
           onSelect: () => navigate(`/projects/${item.id}`),
+          onAltSelect: () => openEntityTab(`/projects/${item.id}`),
         };
       });
     },

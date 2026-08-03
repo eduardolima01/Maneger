@@ -2,6 +2,7 @@ import type { SearchProvider, SearchResultItem } from '../types/search.types';
 import { fuzzySearch } from '../services/fuzzyMatch';
 import { getAllKanbansWithProject } from '@/lib/api/kanban/kanbans';
 import { openGlobalKanbanModal } from '@/Kanban/globalKanbanModal';
+import { openKanbanTab } from '@/components/layout/tabs/tabStore';
 
 export function createKanbansProvider(): SearchProvider {
   return {
@@ -18,6 +19,7 @@ export function createKanbansProvider(): SearchProvider {
           icon: '📋',
           matchScore: score,
           onSelect: () => openGlobalKanbanModal(item),
+          onAltSelect: () => openKanbanTab(item.id),
         })
       );
     },

@@ -15,6 +15,7 @@ import { LuLogs } from 'react-icons/lu'
 import Tooltip from '@/components/ui/Tooltip'
 import AsideNavItem from './AsideNavItem'
 import { useAsideCollapsed } from './useAsideCollapsed'
+import { useActivePathname, useActiveRouter } from './useActiveRouter'
 
 const menuItems = [
   { label: 'Dashboard', icon: MdDashboard, to: '/' },
@@ -29,6 +30,8 @@ const menuItems = [
 
 export function Aside() {
   const { collapsed, toggle } = useAsideCollapsed()
+  const activeRouter = useActiveRouter()
+  const activePathname = useActivePathname(activeRouter)
 
   return (
     <aside
@@ -58,14 +61,14 @@ export function Aside() {
         <ul className="space-y-2">
           {menuItems.map((item) => (
             <li key={item.to}>
-              <AsideNavItem to={item.to} label={item.label} icon={item.icon} collapsed={collapsed} />
+              <AsideNavItem to={item.to} label={item.label} icon={item.icon} collapsed={collapsed} router={activeRouter} activePathname={activePathname} />
             </li>
           ))}
         </ul>
       </nav>
 
       <div className={`flex items-center justify-end border-t border-zinc-200 p-4 dark:border-zinc-800 ${collapsed ? 'flex-col gap-3' : 'justify-between'}`}>
-        <AsideNavItem to="/settings" label="" icon={MdSettings} collapsed={collapsed} />
+        <AsideNavItem to="/settings" label="" icon={MdSettings} collapsed={collapsed} router={activeRouter} activePathname={activePathname} />
         <ThemeToggle />
       </div>
     </aside>

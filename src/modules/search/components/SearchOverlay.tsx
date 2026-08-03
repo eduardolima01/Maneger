@@ -19,6 +19,14 @@ export default function SearchOverlay({ open, focusToken, onClose, resolveRecent
     if (e.key === 'ArrowDown') { e.preventDefault(); search.moveSelection(1); }
     else if (e.key === 'ArrowUp') { e.preventDefault(); search.moveSelection(-1); }
     else if (e.key === 'Enter') { e.preventDefault(); search.confirmSelection(); handleAfterSelect(); }
+    else if (e.key === 'Enter' && e.altKey) {
+      e.preventDefault();
+      const highlighted = search.results[search.selectedIndex];
+      if (highlighted?.onAltSelect) {
+        highlighted.onAltSelect();
+        handleAfterSelect();
+      }
+    }
   }
 
   function handleAfterSelect() {

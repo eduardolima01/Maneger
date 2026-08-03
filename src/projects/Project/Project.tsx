@@ -9,6 +9,7 @@ import ProjectModuleTabs from './modules/ProjectModuleTabs';
 import { convertFileSrc } from '@tauri-apps/api/core';
 import SubprojectsSection from './SubProject/SubprojectsSection'
 import ProjectBreadcrumb from '../components/ProjectBreadcrumb'
+import { useTabMeta } from '@/components/layout/tabs/useTabMeta'
 
 export function Project() {
   const [project, setProject] = useState<ProjectType | null>(null)
@@ -27,6 +28,15 @@ export function Project() {
   useEffect(() => {
     getProject()
   }, [projectId])
+
+
+  useTabMeta({
+    title: loadingProject ? 'Carregando...' : project ? project.name : 'Projeto não encontrado',
+    icon: '📁',
+    status: loadingProject ? 'loading' : project ? 'ready' : 'not-found',
+    breadcrumb: project ? [project.name] : undefined,
+  })
+
   if (loadingProject || !project) return <p>Carregando projeto...</p>
   return (
     <div style={{ width: '100%', maxWidth: '95vw', margin: '2rem auto', padding: '0 24px' }}>
@@ -82,3 +92,4 @@ export function Project() {
     </div>
   )
 }
+

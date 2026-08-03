@@ -1,5 +1,6 @@
 import type { SearchProvider, SearchResultItem } from '../types/search.types';
 import { fuzzySearch } from '../services/fuzzyMatch';
+import { openEntityTab } from '@/components/layout/tabs/tabStore';
 
 const SETTINGS_PAGES = [
   { id: 'settings-appearance', title: 'Aparência' },
@@ -24,6 +25,7 @@ export function createSettingsProvider(navigate: (path: string) => void): Search
           icon: '⚙️',
           matchScore: score,
           onSelect: () => navigate('/settings'),
+          onAltSelect: () => openEntityTab('/settings'),
         })
       );
     },
