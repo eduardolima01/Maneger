@@ -217,6 +217,7 @@ export default function KanbanBoard({ kanban }: KanbanBoardProps) {
                       onCardRequestDelete={(id, title) => setDeleteTarget({ id, title })}
                       onRenameGroup={board.renameGroup}
                       onRequestDeleteGroup={(groupId) => setDeleteGroupTarget(groupId)}
+                      onAddCardToGroup={board.createCardInGroup}
                     />
                   );
                 })()}

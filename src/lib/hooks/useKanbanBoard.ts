@@ -137,6 +137,11 @@ export function useKanbanBoard(kanban: Kanban) {
     await reload();
   }, [kanbanId, reload]);
 
+  const createCardInGroup = useCallback(async (groupId: string, title: string) => {
+    await cardsApi.createCard({ cardGroupId: groupId, title });
+    await reload();
+  }, [kanbanId, reload]);
+
   const updateCard = useCallback(async (id: string, input: Parameters<typeof cardsApi.updateCard>[1]) => {
     await cardsApi.updateCard(id, input);
     await reload();
@@ -206,6 +211,7 @@ export function useKanbanBoard(kanban: Kanban) {
     columns, ungroupedCardsByColumn, cardsByGroup, groupsByColumn, cards, groups, cardsWithSubKanban, checklistProgress, loading, reload,
     search, setSearch, filters, setFilters, filtersActive: hasActiveFilters(filters),
     moveCard, createCard, updateCard, duplicateCard, archiveCard, removeCard,
+    createCardInGroup,
     createGroup, renameGroup, deleteGroup, moveCardIntoGroup, moveCardOutOfGroup, moveGroupToColumn,
     createColumn, updateColumn, removeColumn, duplicateColumn, reorderColumns,
     viewPrefs, saveViewPrefs,

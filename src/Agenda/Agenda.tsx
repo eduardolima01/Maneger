@@ -15,6 +15,7 @@ import { useNavigate } from '@tanstack/react-router';
 import { useProjectBreadcrumbs } from '../lib/hooks/useProjectBreadcrumbs';
 import ProjectQuickModal from '@/Projects/Project/ProjectQuickModal';
 import { getProjectById } from '@/lib/api/projects';
+import { ProjectType } from '@/types/project.types';
 
 export default function Agenda() {
   const navigate = useNavigate();

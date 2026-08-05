@@ -11,6 +11,8 @@ interface EventFormModalProps {
   projectName: string;
   onSave: (data: { title: string; start_at: string; end_at: string }) => void;
   onDelete?: () => void;
+  draftStart?: Date | null;
+  draftEnd?: Date | null;
 }
 
 
@@ -30,7 +32,9 @@ export default function EventFormModal({
   editingEvent,
   onSave,
   onDelete,
-  projectName
+  projectName,
+  draftStart,
+  draftEnd,
 }: EventFormModalProps) {
   const [title, setTitle] = useState('');
   const [date, setDate] = useState('');
@@ -47,14 +51,18 @@ export default function EventFormModal({
       setDate(toDateInput(start));
       setStartTime(toTimeInput(start));
       setEndTime(toTimeInput(end));
-    } else {
+    } else if (draftStart && draftEnd) {
+      setTitle('');
+      setDate(toDateInput(draftStart));
+      setStartTime(toTimeInput(draftStart));
+      setEndTime(toTimeInput(draftEnd));
       const now = new Date();
       setTitle('');
       setDate(toDateInput(now));
       setStartTime('09:00');
       setEndTime('10:00');
     }
-  }, [isOpen, editingEvent]);
+  }, [isOpen, editingEvent, draftStart, draftEnd]);
 
   function handleSubmit() {
     const finalTitle = title.trim() || projectName;

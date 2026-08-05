@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { useSortable } from '@dnd-kit/sortable';
 import { useDroppable } from '@dnd-kit/core';
 import { CSS } from '@dnd-kit/utilities';
@@ -18,10 +18,12 @@ interface GroupBlockProps {
   onCardRequestDelete: (cardId: string, title: string) => void;
   onRename: (name: string) => void;
   onRequestDelete: () => void;
+  onAddCard: (title: string) => void;
 }
 
 export default function GroupBlock({
   group, cards, density, cardsWithSubKanban, collapsed, onToggleCollapsed, onCardClick, onCardDuplicate, onCardRequestDelete, onRename, onRequestDelete,
+  onAddCard
 }: GroupBlockProps) {
   const { attributes, listeners, setNodeRef: setSortableRef, transform, transition, isDragging } = useSortable({
     id: `group:${group.id}`,
@@ -33,11 +35,23 @@ export default function GroupBlock({
   });
   const [nameDraft, setNameDraft] = useState(group.name);
 
+  const [addingCard, setAddingCard] = useState(false);
+  const [newCardTitle, setNewCardTitle] = useState('');
+  const newCardInputRef = useRef<HTMLInputElement>(null);
+
   const style: React.CSSProperties = {
     transform: CSS.Transform.toString(transform),
     transition,
     opacity: isDragging ? 0.5 : 1,
   };
+
+  function submitNewCard() {
+    const trimmed = newCardTitle.trim();
+    if (!trimmed) { setAddingCard(false); return; }
+    onAddCard(trimmed);
+    setNewCardTitle('');
+    newCardInputRef.current?.focus(); // mantém o input focado — permite criar vários em sequência
+  }
 
   return (
     <div ref={setSortableRef} style={{ ...style, marginBottom: 8 }}>
@@ -77,8 +91,34 @@ export default function GroupBlock({
               ))}
             </SortableContext>
           )}
+
           {cards.length === 0 && (
             <div style={{ fontSize: 11, color: '#bbb', textAlign: 'center', padding: 8 }}>Arraste cards pra cá</div>
+          )}
+
+          {!collapsed && (
+            addingCard ? (
+              <input
+                ref={newCardInputRef}
+                autoFocus
+                value={newCardTitle}
+                onChange={(e) => setNewCardTitle(e.target.value)}
+                onBlur={submitNewCard}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') submitNewCard();
+                  if (e.key === 'Escape') { setNewCardTitle(''); setAddingCard(false); }
+                }}
+                placeholder="Título do card..."
+                style={{ width: '100%', fontSize: 12, padding: 6, marginTop: 4, boxSizing: 'border-box' }}
+              />
+            ) : (
+              <button
+                onClick={() => setAddingCard(true)}
+                style={{ width: '100%', textAlign: 'left', fontSize: 11, color: '#999', border: 'none', background: 'none', cursor: 'pointer', padding: '4px 2px', marginTop: 2 }}
+              >
+                + Adicionar card
+              </button>
+            )
           )}
         </div>
       </div>

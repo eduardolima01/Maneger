@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { generateId } from '@/lib/utils/uuid';
 import { toLocalISO } from '@/lib/utils/date';
 import { usePomodoroData } from './hooks/usePomodoroData';
@@ -9,6 +9,7 @@ import {
 } from './store/pomodoroTimerStore';
 import type { PomodoroSession, PomodoroSettings } from './types/pomodoro.types';
 import ConfirmDialog from '@/components/ui/ConfirmDialog';
+import { formatDayLabel, groupSessionsByDay } from './utils/groupSessionsByDay';
 
 interface PomodoroSectionProps {
   projectId: string;
@@ -29,6 +30,7 @@ export default function PomodoroSection({ projectId, projectName }: PomodoroSect
   const [editingSessionId, setEditingSessionId] = useState<string | null>(null);
   const [editingDescription, setEditingDescription] = useState('');
   const [deletingSession, setDeletingSession] = useState<PomodoroSession | null>(null);
+  const [collapsedDays, setCollapsedDays] = useState<Set<string>>(new Set());
 
   useEffect(() => { setSettingsDraft(data.settings); }, [data.settings]);
 
@@ -38,6 +40,17 @@ export default function PomodoroSection({ projectId, projectName }: PomodoroSect
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pomodoro.persistTick]);
 
+
+
+  const dayGroups = useMemo(() => groupSessionsByDay(data.sessions), [data.sessions]);
+
+  function toggleDay(date: string) {
+    setCollapsedDays((prev) => {
+      const next = new Set(prev);
+      if (next.has(date)) next.delete(date); else next.add(date);
+      return next;
+    });
+  }
   if (loading) return <p>Carregando...</p>;
 
   const displayType = pomodoro.activeProjectId === projectId ? pomodoro.currentType : 'work';
@@ -138,26 +151,50 @@ export default function PomodoroSection({ projectId, projectName }: PomodoroSect
 
         {data.sessions.length === 0 && <p style={{ fontSize: 13, color: '#999' }}>Nenhuma sessão ainda.</p>}
 
-        {data.sessions.map((s) => (
-          <div key={s.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 0', borderBottom: '1px solid #f0f0f0' }}>
-            <div style={{ flex: 1, fontSize: 13 }}>
-              <div>{TYPE_LABELS[s.type]} — {s.durationMinutes}min {s.completedAt ? '✓' : '(interrompida)'}</div>
-              {editingSessionId === s.id ? (
-                <input
-                  autoFocus value={editingDescription} onChange={(e) => setEditingDescription(e.target.value)}
-                  onBlur={commitEditingSession}
-                  onKeyDown={(e) => { if (e.key === 'Enter') commitEditingSession(); if (e.key === 'Escape') setEditingSessionId(null); }}
-                  style={{ width: '100%', fontSize: 12, padding: 2, marginTop: 2 }}
-                />
-              ) : (
-                <div onClick={() => startEditingSession(s)} style={{ fontSize: 12, color: s.description ? '#666' : '#bbb', cursor: 'pointer', marginTop: 2 }}>
-                  {s.description || 'sem descrição — clique pra adicionar'}
+        <div className="h-80 overflow-y-scroll">
+          {dayGroups.map((group: any) => {
+            const collapsed = collapsedDays.has(group.date);
+            return (
+              <div key={group.date} style={{ marginBottom: 10 }}>
+                <div
+                  onClick={() => toggleDay(group.date)}
+                  style={{
+                    display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                    padding: '6px 10px', background: '#f7f7f7', borderRadius: 6, cursor: 'pointer',
+                  }}
+                >
+                  <span style={{ fontSize: 13, fontWeight: 600 }}>
+                    {collapsed ? '▸' : '▾'} {formatDayLabel(group.date)}
+                  </span>
+                  <span style={{ fontSize: 12, color: '#888' }}>
+                    {group.completedWorkCount} {group.completedWorkCount === 1 ? 'rodada' : 'rodadas'} · {group.totalFocusMinutes}min de foco
+                  </span>
                 </div>
-              )}
-            </div>
-            <button onClick={() => setDeletingSession(s)} aria-label="Excluir sessão" style={{ border: 'none', background: 'none', cursor: 'pointer', color: '#c00', fontSize: 13 }}>🗑</button>
-          </div>
-        ))}
+
+                {!collapsed && group.sessions.map((s: any) => (
+                  <div key={s.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 10px', borderBottom: '1px solid #f0f0f0' }}>
+                    <div style={{ flex: 1, fontSize: 13 }}>
+                      <div>{TYPE_LABELS[s.type]} — {s.durationMinutes}min {s.completedAt ? '✓' : '(interrompida)'}</div>
+                      {editingSessionId === s.id ? (
+                        <input
+                          autoFocus value={editingDescription} onChange={(e) => setEditingDescription(e.target.value)}
+                          onBlur={commitEditingSession}
+                          onKeyDown={(e) => { if (e.key === 'Enter') commitEditingSession(); if (e.key === 'Escape') setEditingSessionId(null); }}
+                          style={{ width: '100%', fontSize: 12, padding: 2, marginTop: 2 }}
+                        />
+                      ) : (
+                        <div onClick={() => startEditingSession(s)} style={{ fontSize: 12, color: s.description ? '#666' : '#bbb', cursor: 'pointer', marginTop: 2 }}>
+                          {s.description || 'sem descrição — clique pra adicionar'}
+                        </div>
+                      )}
+                    </div>
+                    <button onClick={() => setDeletingSession(s)} aria-label="Excluir sessão" style={{ border: 'none', background: 'none', cursor: 'pointer', color: '#c00', fontSize: 13 }}>🗑</button>
+                  </div>
+                ))}
+              </div>
+            );
+          })}
+        </div>
       </div>
 
       <ConfirmDialog

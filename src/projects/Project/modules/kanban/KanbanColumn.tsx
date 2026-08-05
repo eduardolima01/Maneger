@@ -32,6 +32,7 @@ interface KanbanColumnProps {
   onToggleCollapsed: () => void;
   onRenameGroup: (groupId: string, name: string) => void;
   onRequestDeleteGroup: (groupId: string) => void;
+  onAddCardToGroup: (groupId: string, title: string) => void;
 }
 
 export default function KanbanColumn({
@@ -52,7 +53,8 @@ export default function KanbanColumn({
   onToggleCollapsed,
   cardsWithSubKanban,
   onRenameGroup,
-  onRequestDeleteGroup
+  onRequestDeleteGroup,
+  onAddCardToGroup,
 }: KanbanColumnProps) {
   const { attributes, listeners, setNodeRef: setSortableRef, transform, transition, isDragging } = useSortable({
     id: column.id,
@@ -123,6 +125,7 @@ export default function KanbanColumn({
                   onCardRequestDelete={onCardRequestDelete}
                   onRename={(name) => onRenameGroup(g.id, name)}
                   onRequestDelete={() => onRequestDeleteGroup(g.id)}
+                  onAddCard={(title) => onAddCardToGroup(g.id, title)}
                 />
               ))}
               {cards.map((c) => (

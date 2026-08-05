@@ -1,33 +1,30 @@
 import { useRef, useState } from 'react';
-import { convertFileSrc } from '@tauri-apps/api/core';
 import type { Event } from '@/types/event.types';
-import { fromLocalISO, toLocalISO, minutesSinceMidnight, snapMinutes, formatMinutesLabel, formatDuration, isSameDay } from '../lib/utils/date';
+import {
+  fromLocalISO, toLocalISO, minutesSinceMidnight, snapMinutes,
+  formatMinutesLabel, formatDuration, isSameDay,
+} from '@/lib/utils/date';
 
-interface EventBlockProps {
+interface ProjectEventBlockProps {
   event: Event;
   hourHeight: number;
   color: string;
-  coverPath: string | null;
-  breadcrumb: { name: string }[];
   days: Date[];
   dayIndex: number;
   getColumnWidth: () => number;
   segmentKind?: 'start' | 'continuation';
   overlapLevel?: number;
   onEditClick: (event: Event) => void;
-  onProjectClick: (event: Event) => void;
   onDoubleClick: (event: Event) => void;
   onChange: (id: string, startAt: string, endAt: string) => void;
   onDuplicate: (event: Event, startAt: string, endAt: string) => void;
-  onProjectAssign: (eventId: string, projectId: string | null) => void;
 }
 
-export default function EventBlock({
-  event, hourHeight, color, coverPath, breadcrumb, days, dayIndex, getColumnWidth,
-  overlapLevel = 0,
-  segmentKind = 'start',
-  onEditClick, onProjectClick, onDoubleClick, onChange, onDuplicate,
-}: EventBlockProps) {
+export default function ProjectEventBlock({
+  event, hourHeight, color, days, dayIndex, getColumnWidth,
+  overlapLevel = 0, segmentKind = 'start',
+  onEditClick, onDoubleClick, onChange, onDuplicate,
+}: ProjectEventBlockProps) {
   const start = fromLocalISO(event.start_at);
   const end = fromLocalISO(event.end_at);
   const startMin = minutesSinceMidnight(start);
@@ -124,8 +121,6 @@ export default function EventBlock({
   const isDraggingMove = dragOffsetMin !== 0 || dragOffsetX !== 0;
   const isResizing = resizeExtraMin !== 0;
   const showHoverTooltip = isHovering && !isDraggingMove && !isResizing;
-  const fullPath = breadcrumb.map((p) => p.name).join(' / ');
-  const assignedName = breadcrumb.length > 0 ? breadcrumb[breadcrumb.length - 1].name : null;
 
   const previewStartMin = visualStartMin + dragOffsetMin;
   const previewEndMin = previewStartMin + visualDurationMin;
@@ -139,22 +134,13 @@ export default function EventBlock({
       onDoubleClick={(e) => { e.stopPropagation(); onDoubleClick(event); }}
       className="group"
       style={{
-        position: 'absolute',
-        top,
-        height,
-        left: leftInset,
-        right: 2,
-        backgroundColor: color,
-        color: '#fff',
-        borderRadius: 4,
+        position: 'absolute', top, height, left: leftInset, right: 2,
+        backgroundColor: color, color: '#fff', borderRadius: 4,
         borderTop: segmentKind === 'continuation' ? '2px dashed rgba(255,255,255,0.7)' : undefined,
         borderBottom: segmentKind === 'start' && spansMidnight ? '2px dashed rgba(255,255,255,0.7)' : undefined,
         outline: overlapLevel > 0 ? '2px solid #fff' : undefined,
-        padding: '2px 6px',
-        fontSize: 12,
-        cursor: canMove ? 'pointer' : 'default',
-        userSelect: 'none',
-        zIndex: 2 + overlapLevel,
+        padding: '2px 6px', fontSize: 12, cursor: canMove ? 'pointer' : 'default',
+        userSelect: 'none', zIndex: 2 + overlapLevel,
         transform: dragOffsetX ? `translateX(${dragOffsetX}px)` : undefined,
         boxShadow: dragOffsetX ? '0 4px 12px rgba(0,0,0,0.3)' : undefined,
       }}
@@ -168,8 +154,7 @@ export default function EventBlock({
 
       {showHoverTooltip && (
         <div style={{ position: 'absolute', top: -22, left: 0, backgroundColor: '#333', color: '#fff', fontSize: 11, padding: '2px 6px', borderRadius: 4, whiteSpace: 'nowrap', zIndex: 10, pointerEvents: 'none' }}>
-          <div>{formatMinutesLabel(minutesSinceMidnight(start))} – {formatMinutesLabel(minutesSinceMidnight(start) + (minutesSinceMidnight(end) - minutesSinceMidnight(start) + (spansMidnight ? 24 * 60 : 0)))} · {formatDuration(minutesSinceMidnight(end) - minutesSinceMidnight(start) + (spansMidnight ? 24 * 60 : 0))}</div>
-          {fullPath && <div style={{ opacity: 0.8, fontSize: 10 }}>📁 {fullPath}</div>}
+          {formatMinutesLabel(minutesSinceMidnight(start))} – {formatMinutesLabel(minutesSinceMidnight(start) + (minutesSinceMidnight(end) - minutesSinceMidnight(start) + (spansMidnight ? 24 * 60 : 0)))} · {formatDuration(minutesSinceMidnight(end) - minutesSinceMidnight(start) + (spansMidnight ? 24 * 60 : 0))}
         </div>
       )}
 
@@ -185,25 +170,14 @@ export default function EventBlock({
         </div>
       )}
 
-      <span className="truncate flex items-center gap-1 pr-10">
-        {coverPath && <img src={convertFileSrc(coverPath)} className="w-3.5 h-3.5 rounded-full object-cover shrink-0" />}
+      <span className="truncate flex items-center gap-1 pr-6">
         <span className="truncate">{event.title}</span>
       </span>
-
-      {assignedName && (
-        <span className="flex items-center gap-1 text-[10px] opacity-90 truncate">
-          {coverPath && <img src={convertFileSrc(coverPath)} className="w-3 h-3 rounded-full object-cover shrink-0" />}
-          <span className="truncate">{assignedName}</span>
-        </span>
-      )}
 
       {height >= 36 && (
         <span className="block text-[10px] opacity-80 truncate">
           {formatDuration(minutesSinceMidnight(end) - minutesSinceMidnight(start) + (spansMidnight ? 24 * 60 : 0))}
         </span>
-      )}
-      {height >= 65 && fullPath.includes(' / ') && (
-        <span className="block text-[10px] opacity-70 truncate">📁 {fullPath}</span>
       )}
 
       <div className="absolute top-0.5 right-0.5 flex gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
@@ -218,21 +192,6 @@ export default function EventBlock({
             <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4Z" />
           </svg>
         </button>
-
-        {event.project_id && (
-          <button
-            onPointerDown={(e) => e.stopPropagation()}
-            onClick={(e) => { e.stopPropagation(); onProjectClick(event); }}
-            title="Ir para o projeto"
-            className="w-4 h-4 flex items-center justify-center rounded bg-black/25 hover:bg-black/40"
-          >
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="w-2.5 h-2.5">
-              <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
-              <path d="M15 3h6v6" />
-              <path d="M10 14 21 3" />
-            </svg>
-          </button>
-        )}
       </div>
 
       {canResizeBottom && (

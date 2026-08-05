@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import * as eventsApi from '@/lib/api/events';
+import * as agendaApi from '@/Projects/Project/modules/agenda/api/agenda';
 import type { Event, CreateEventInput, UpdateEventInput } from '@/types/event.types';
 
 export function useProjectEvents(projectId: string) {
@@ -10,8 +10,8 @@ export function useProjectEvents(projectId: string) {
   const reload = useCallback(async () => {
     setLoading(true);
     try {
-      const data = await eventsApi.getEventsByProject(projectId);
-      setEvents(data);
+      const data = await agendaApi.loadAgendaData(projectId);
+      setEvents(data.events);
       setError(null);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Erro ao carregar eventos');
@@ -25,19 +25,19 @@ export function useProjectEvents(projectId: string) {
   }, [reload]);
 
   const create = useCallback(async (input: Omit<CreateEventInput, 'project_id'>) => {
-    await eventsApi.createEvent({ ...input, project_id: projectId });
+    await agendaApi.createProjectEvent(projectId, input);
     await reload();
   }, [projectId, reload]);
 
   const update = useCallback(async (id: string, input: UpdateEventInput) => {
-    await eventsApi.updateEvent(id, input);
+    await agendaApi.updateProjectEvent(projectId, id, input);
     await reload();
-  }, [reload]);
+  }, [projectId, reload]);
 
   const remove = useCallback(async (id: string) => {
-    await eventsApi.deleteEvent(id);
+    await agendaApi.deleteProjectEvent(projectId, id);
     await reload();
-  }, [reload]);
+  }, [projectId, reload]);
 
   return { events, loading, error, create, update, remove, reload };
 }
