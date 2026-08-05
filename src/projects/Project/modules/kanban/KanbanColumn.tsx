@@ -12,6 +12,7 @@ import type {
   KanbanCardGroup
 } from '@/types/kanban.types';
 import GroupBlock from './GroupBlock';
+import { ParsedLabel } from '@/Kanban/utils/kanbanLabels';
 
 interface KanbanColumnProps {
   column: ColumnType;
@@ -33,6 +34,8 @@ interface KanbanColumnProps {
   onRenameGroup: (groupId: string, name: string) => void;
   onRequestDeleteGroup: (groupId: string) => void;
   onAddCardToGroup: (groupId: string, title: string) => void;
+  allLabels: ParsedLabel[];
+  onUpdateCardLabels: (cardId: string, labels: string[]) => void;
 }
 
 export default function KanbanColumn({
@@ -51,10 +54,8 @@ export default function KanbanColumn({
   onColumnMenu,
   collapsed,
   onToggleCollapsed,
-  cardsWithSubKanban,
-  onRenameGroup,
-  onRequestDeleteGroup,
-  onAddCardToGroup,
+  cardsWithSubKanban, onRenameGroup, onRequestDeleteGroup, onAddCardToGroup,
+  allLabels, onUpdateCardLabels,
 }: KanbanColumnProps) {
   const { attributes, listeners, setNodeRef: setSortableRef, transform, transition, isDragging } = useSortable({
     id: column.id,
@@ -126,6 +127,8 @@ export default function KanbanColumn({
                   onRename={(name) => onRenameGroup(g.id, name)}
                   onRequestDelete={() => onRequestDeleteGroup(g.id)}
                   onAddCard={(title) => onAddCardToGroup(g.id, title)}
+                  allLabels={allLabels}
+                  onUpdateCardLabels={onUpdateCardLabels}
                 />
               ))}
               {cards.map((c) => (
@@ -137,6 +140,8 @@ export default function KanbanColumn({
                   onClick={() => onCardClick(c.id)}
                   onDuplicate={() => onCardDuplicate(c.id)}
                   onRequestDelete={() => onCardRequestDelete(c.id, c.title)}
+                  allLabels={allLabels}
+                  onUpdateLabels={onUpdateCardLabels}
                 />
               ))}
             </SortableContext>

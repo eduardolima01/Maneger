@@ -13,6 +13,7 @@ interface KanbanToolbarProps {
   density: KanbanDensity;
   onDensityChange: (d: KanbanDensity) => void;
   onOpenColumnSettings: () => void;
+  onOpenLabelManager: () => void;
 }
 
 const DENSITY_OPTIONS: { key: KanbanDensity; label: string }[] = [
@@ -23,7 +24,7 @@ const DENSITY_OPTIONS: { key: KanbanDensity; label: string }[] = [
 
 export default function KanbanToolbar({
   search, onSearchChange, filters, onFiltersChange, filtersActive, availableLabels,
-  density, onDensityChange, onOpenColumnSettings,
+  density, onDensityChange, onOpenColumnSettings, onOpenLabelManager,
 }: KanbanToolbarProps) {
   const [filtersOpen, setFiltersOpen] = useState(false);
 
@@ -51,6 +52,7 @@ export default function KanbanToolbar({
         )}
       </div>
 
+      <Button variant="secondary" onClick={onOpenLabelManager}>🏷 Etiquetas</Button>
       <Button variant="secondary" onClick={onOpenColumnSettings}>⚙ Colunas</Button>
     </div>
   );

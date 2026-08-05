@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import {
   DndContext, PointerSensor, useSensor, useSensors, closestCorners,
   type DragEndEvent,
@@ -11,6 +11,8 @@ import KanbanCardModal from './KanbanCardModal';
 import ConfirmDialog from '@/components/ui/ConfirmDialog';
 import { useKanbanBoard } from '@/lib/hooks/useKanbanBoard';
 import type { Kanban } from '@/types/kanban.types';
+import { ParsedLabel, parseLabel } from '@/Kanban/utils/kanbanLabels';
+import LabelManagerModal from './LabelManagerModal';
 
 interface KanbanBoardProps {
   kanban: Kanban;
@@ -22,6 +24,7 @@ const EMPTY_COLUMN_WIDTH = 160;
 export default function KanbanBoard({ kanban }: KanbanBoardProps) {
 
   const [columnSettingsOpen, setColumnSettingsOpen] = useState(false);
+  const [labelManagerOpen, setLabelManagerOpen] = useState(false);
   const [selectedCardId, setSelectedCardId] = useState<string | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<{ id: string; title: string } | null>(null);
   const [deleteGroupTarget, setDeleteGroupTarget] = useState<string | null>(null);
@@ -37,6 +40,24 @@ export default function KanbanBoard({ kanban }: KanbanBoardProps) {
 
   const visibleColumns = board.columns.filter((c) => c.visible);
   const allLabels = Array.from(new Set(board.cards.flatMap((c) => c.labels)));
+
+  const allParsedLabels: ParsedLabel[] = useMemo(() => {
+    const map = new Map<string, string>(); // nome -> cor (primeira ocorrência vence)
+    for (const raw of board.cards.flatMap((c) => c.labels)) {
+      const { name, color } = parseLabel(raw);
+      if (!map.has(name)) map.set(name, color);
+    }
+    return Array.from(map.entries()).map(([name, color]) => ({ name, color }));
+  }, [board.cards]);
+
+  const labelCardCounts: Record<string, number> = useMemo(() => {
+    const counts: Record<string, number> = {};
+    for (const raw of board.cards.flatMap((c) => c.labels)) {
+      const { name } = parseLabel(raw);
+      counts[name] = (counts[name] ?? 0) + 1;
+    }
+    return counts;
+  }, [board.cards]);
   const collapsedIds = new Set(board.viewPrefs.collapsedColumnIds);
   const collapsedGroupIds = new Set(board.viewPrefs.collapsedGroupIds);
   const selectedCard = selectedCardId ? board.cards.find((c) => c.id === selectedCardId) ?? null : null;
@@ -184,6 +205,7 @@ export default function KanbanBoard({ kanban }: KanbanBoardProps) {
         density={board.viewPrefs.density}
         onDensityChange={(density) => board.saveViewPrefs({ density })}
         onOpenColumnSettings={() => setColumnSettingsOpen(true)}
+        onOpenLabelManager={() => setLabelManagerOpen(true)}
       />
 
       <DndContext sensors={sensors} collisionDetection={closestCorners} onDragEnd={handleDragEnd}>
@@ -218,6 +240,8 @@ export default function KanbanBoard({ kanban }: KanbanBoardProps) {
                       onRenameGroup={board.renameGroup}
                       onRequestDeleteGroup={(groupId) => setDeleteGroupTarget(groupId)}
                       onAddCardToGroup={board.createCardInGroup}
+                      allLabels={allParsedLabels}
+                      onUpdateCardLabels={(id, labels) => board.updateCard(id, { labels })}
                     />
                   );
                 })()}
@@ -331,6 +355,15 @@ export default function KanbanBoard({ kanban }: KanbanBoardProps) {
         onDuplicate={board.duplicateColumn}
         onDelete={board.removeColumn}
         onReorder={board.reorderColumns}
+      />
+
+      <LabelManagerModal
+        isOpen={labelManagerOpen}
+        onClose={() => setLabelManagerOpen(false)}
+        labels={allParsedLabels}
+        cardCounts={labelCardCounts}
+        onRename={board.renameLabel}
+        onDelete={board.deleteLabel}
       />
 
       <KanbanCardModal

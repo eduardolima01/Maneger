@@ -162,6 +162,29 @@ export function useKanbanBoard(kanban: Kanban) {
     await reload();
   }, [reload]);
 
+  const renameLabel = useCallback(async (oldName: string, newName: string, color: string) => {
+    const affected = cards.filter((c) => c.labels.some((l) => parseLabel(l).name === oldName));
+    await Promise.all(
+      affected.map((c) => {
+        const nextLabels = c.labels.map((l) =>
+          parseLabel(l).name === oldName ? serializeLabel(newName, color) : l
+        );
+        return cardsApi.updateCard(c.id, { labels: nextLabels });
+      })
+    );
+    await reload();
+  }, [cards, reload]);
+
+  const deleteLabel = useCallback(async (name: string) => {
+    const affected = cards.filter((c) => c.labels.some((l) => parseLabel(l).name === name));
+    await Promise.all(
+      affected.map((c) => {
+        const nextLabels = c.labels.filter((l) => parseLabel(l).name !== name);
+        return cardsApi.updateCard(c.id, { labels: nextLabels });
+      })
+    );
+    await reload();
+  }, [cards, reload]);
   const createColumn = useCallback(async (name: string) => {
     await columnsApi.createColumn({ kanbanId, name });
     await reload();
@@ -212,6 +235,7 @@ export function useKanbanBoard(kanban: Kanban) {
     search, setSearch, filters, setFilters, filtersActive: hasActiveFilters(filters),
     moveCard, createCard, updateCard, duplicateCard, archiveCard, removeCard,
     createCardInGroup,
+    renameLabel, deleteLabel,
     createGroup, renameGroup, deleteGroup, moveCardIntoGroup, moveCardOutOfGroup, moveGroupToColumn,
     createColumn, updateColumn, removeColumn, duplicateColumn, reorderColumns,
     viewPrefs, saveViewPrefs,

@@ -5,6 +5,7 @@ import { CSS } from '@dnd-kit/utilities';
 import { SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import KanbanCard from './KanbanCard';
 import type { KanbanCardGroup, KanbanCard as CardType, KanbanDensity } from '@/types/kanban.types';
+import { ParsedLabel } from '@/Kanban/utils/kanbanLabels';
 
 interface GroupBlockProps {
   group: KanbanCardGroup;
@@ -12,6 +13,7 @@ interface GroupBlockProps {
   density: KanbanDensity;
   cardsWithSubKanban: Set<string>;
   collapsed: boolean;
+  allLabels: ParsedLabel[];
   onToggleCollapsed: () => void;
   onCardClick: (cardId: string) => void;
   onCardDuplicate: (cardId: string) => void;
@@ -19,11 +21,12 @@ interface GroupBlockProps {
   onRename: (name: string) => void;
   onRequestDelete: () => void;
   onAddCard: (title: string) => void;
+  onUpdateCardLabels: (cardId: string, labels: string[]) => void;
 }
 
 export default function GroupBlock({
   group, cards, density, cardsWithSubKanban, collapsed, onToggleCollapsed, onCardClick, onCardDuplicate, onCardRequestDelete, onRename, onRequestDelete,
-  onAddCard
+  onAddCard, allLabels, onUpdateCardLabels,
 }: GroupBlockProps) {
   const { attributes, listeners, setNodeRef: setSortableRef, transform, transition, isDragging } = useSortable({
     id: `group:${group.id}`,
@@ -87,6 +90,8 @@ export default function GroupBlock({
                   onClick={() => onCardClick(c.id)}
                   onDuplicate={() => onCardDuplicate(c.id)}
                   onRequestDelete={() => onCardRequestDelete(c.id, c.title)}
+                  allLabels={allLabels}
+                  onUpdateLabels={onUpdateCardLabels}
                 />
               ))}
             </SortableContext>

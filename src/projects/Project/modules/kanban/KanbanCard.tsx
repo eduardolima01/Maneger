@@ -4,20 +4,27 @@ import { convertFileSrc } from '@tauri-apps/api/core';
 import { PRIORITY_LABELS, PRIORITY_COLORS } from '@/types/kanban.types';
 import type { KanbanCard as CardType, ChecklistProgress, KanbanDensity } from '@/types/kanban.types';
 import ContextMenu from '@/components/ui/ContextMenu';
+import CardLabelMenu from './CardLabelMenu';
 import { useState } from 'react';
+import { ParsedLabel, parseLabel, serializeLabel } from '@/Kanban/utils/kanbanLabels';
+
 
 interface KanbanCardProps {
   card: CardType;
   density: KanbanDensity;
   hasSubKanban: boolean;
   checklistProgress?: ChecklistProgress;
+  allLabels: ParsedLabel[];
   onClick: () => void;
   onDuplicate: () => void;
   onRequestDelete: () => void;
+  onUpdateLabels: (cardId: string, labels: string[]) => void;
 }
 
-
-export default function KanbanCard({ card, density, hasSubKanban, onClick, onDuplicate, onRequestDelete, checklistProgress }: KanbanCardProps) {
+export default function KanbanCard({
+  card, density, hasSubKanban, onClick, onDuplicate, onRequestDelete, checklistProgress,
+  allLabels, onUpdateLabels,
+}: KanbanCardProps) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: `card:${card.id}`,
     data: { type: 'card' },
@@ -26,6 +33,7 @@ export default function KanbanCard({ card, density, hasSubKanban, onClick, onDup
   const compact = density === 'compact';
 
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null);
+  const [labelMenu, setLabelMenu] = useState<{ x: number; y: number } | null>(null);
 
   function handleContextMenu(e: React.MouseEvent) {
     e.preventDefault();
@@ -33,8 +41,20 @@ export default function KanbanCard({ card, density, hasSubKanban, onClick, onDup
     setContextMenu({ x: e.clientX, y: e.clientY });
   }
 
-  return (
+  function handleToggleLabel(name: string, color: string) {
+    const hasIt = card.labels.some((l) => parseLabel(l).name === name);
+    const nextLabels = hasIt
+      ? card.labels.filter((l) => parseLabel(l).name !== name)
+      : [...card.labels, serializeLabel(name, color)];
+    onUpdateLabels(card.id, nextLabels);
+  }
 
+  function handleCreateLabel(name: string, color: string) {
+    if (card.labels.some((l) => parseLabel(l).name === name)) return;
+    onUpdateLabels(card.id, [...card.labels, serializeLabel(name, color)]);
+  }
+
+  return (
     <>
       <div
         ref={setNodeRef}
@@ -80,9 +100,14 @@ export default function KanbanCard({ card, density, hasSubKanban, onClick, onDup
 
         {!compact && (card.labels.length > 0 || card.dueDate) && (
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, fontSize: 10 }}>
-            {card.labels.map((label) => (
-              <span key={label} style={{ backgroundColor: '#eef2ff', color: '#4338ca', borderRadius: 3, padding: '1px 5px' }}>{label}</span>
-            ))}
+            {card.labels.map((raw) => {
+              const { name, color } = parseLabel(raw);
+              return (
+                <span key={raw} style={{ backgroundColor: color, color: '#fff', borderRadius: 3, padding: '1px 5px' }}>
+                  {name}
+                </span>
+              );
+            })}
 
             {checklistProgress && checklistProgress.total > 0 && (
               <span style={{ color: checklistProgress.done === checklistProgress.total ? '#33b679' : '#666' }}>
@@ -101,9 +126,22 @@ export default function KanbanCard({ card, density, hasSubKanban, onClick, onDup
           y={contextMenu.y}
           onClose={() => setContextMenu(null)}
           items={[
+            { label: '🏷 Etiquetas', onClick: () => setLabelMenu({ x: contextMenu.x, y: contextMenu.y }) },
             { label: '⧉ Duplicar', onClick: onDuplicate },
             { label: '🗑 Excluir', onClick: onRequestDelete, danger: true },
           ]}
+        />
+      )}
+
+      {labelMenu && (
+        <CardLabelMenu
+          x={labelMenu.x}
+          y={labelMenu.y}
+          cardLabels={card.labels}
+          allLabels={allLabels}
+          onToggle={handleToggleLabel}
+          onCreate={handleCreateLabel}
+          onClose={() => setLabelMenu(null)}
         />
       )}
     </>

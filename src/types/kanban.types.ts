@@ -34,8 +34,8 @@ export interface KanbanCard {
 }
 
 export interface CreateKanbanCardInput {
-  kanbanId?: string;
-  columnId?: string;
+  kanbanId?: string | null;
+  columnId?: string | null;
   cardGroupId?: string;
   title: string;
   description?: string | null;

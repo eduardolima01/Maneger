@@ -2,3 +2,12 @@ app.db
 app.db-journal
 app.db-wal
 app.db-shm
+
+chat.db
+chat.db-wal
+chat.db-shm
+
+covers/
+kanban-overview-prefs.json
+tabs-state.json
+projects/
