@@ -1,6 +1,5 @@
 import Modal from '@/components/ui/Modal';
-import Button from '@/components/layout/Button';
-import ProjectQuickView from './ProjectQuickView';
+import { ProjectFullView } from './ProjectFullView';
 import type { ProjectType } from '../../types/project.types';
 
 interface ProjectQuickModalProps {
@@ -10,19 +9,16 @@ interface ProjectQuickModalProps {
   onGoToProject: (projectId: string) => void;
 }
 
-export default function ProjectQuickModal({ isOpen, onClose, project, onGoToProject }: ProjectQuickModalProps) {
+export default function ProjectQuickModal({ isOpen, onClose, project }: ProjectQuickModalProps) {
   if (!project) return null;
-
   return (
     <Modal open={isOpen} onClose={onClose}>
-      <div style={{ padding: 16, minWidth: 480, maxWidth: '90vw' }}>
-        <ProjectQuickView
-          project={project}
-          onGoToProject={onGoToProject}
+      <div style={{ padding: 16, width: '85vw', maxWidth: 1100, maxHeight: '85vh', overflowY: 'auto' }}>
+        <ProjectFullView
+          projectId={project.id}
+          reportTabMeta={false}
+          onInternalNavigate={onClose}
         />
-        <div style={{ display: 'flex', justifyContent: 'flex-end', borderTop: '1px solid #eee', paddingTop: 12, marginTop: 12 }}>
-          <Button variant="secondary" onClick={onClose}>Fechar</Button>
-        </div>
       </div>
     </Modal>
   );

@@ -1,11 +1,10 @@
 import { useEffect, useState } from 'react';
 import Modal from '@/components/ui/Modal';
 import Button from '@/components/layout/Button';
-import { getProjectById } from '@/lib/api/projects';
 import type { ProjectType } from '../types/project.types';
 import { addDays, startOfDay, toLocalISO, formatDuration } from '../lib/utils/date';
 import { Event } from '@/types/event.types';
-import ProjectQuickView from '@/Projects/Project/ProjectQuickView';
+import { ProjectFullView } from '@/Projects/Project/ProjectFullView';
 import ProjectSearchSelect from '@/Projects/components/ProjectSearchSelect';
 import TimePicker from '@/components/ui/TimePicker';
 
@@ -72,8 +71,6 @@ export default function CreateEventModal({
   const [projectId, setProjectId] = useState<string | null>(null);
   const [selectedProject, setSelectedProject] = useState<ProjectType | null>(null);
   const [activeTab, setActiveTab] = useState<EditorTab>('event');
-  const [linkedProject, setLinkedProject] = useState<ProjectType | null>(null);
-  const [loadingProject, setLoadingProject] = useState(false);
 
   const [anchorDate, setAnchorDate] = useState<Date>(() => new Date());
   const [startDayOffset, setStartDayOffset] = useState(0);
@@ -99,18 +96,6 @@ export default function CreateEventModal({
     setEndTime(toTimeInputValue(initialEnd));
   }, [isOpen, editingEvent, draftStart, draftEnd, initialTab]);
 
-  useEffect(() => {
-    if (isOpen && editingEvent?.project_id) {
-      setLoadingProject(true);
-      getProjectById(editingEvent.project_id).then((p) => {
-        setLinkedProject(p);
-        setLoadingProject(false);
-      });
-    } else {
-      setLinkedProject(null);
-    }
-  }, [isOpen, editingEvent?.project_id]);
-
   const start = combineDateTime(anchorDate, startDayOffset, startTime);
   const end = combineDateTime(anchorDate, endDayOffset, endTime);
   const isValidRange = end.getTime() > start.getTime();
@@ -120,11 +105,6 @@ export default function CreateEventModal({
     const newEnd = new Date(start.getTime() + minutes * 60000);
     setEndDayOffset(dayOffsetBetween(anchorDate, newEnd));
     setEndTime(toTimeInputValue(newEnd));
-  }
-
-  function handleGoToProject(projectId: string) {
-    onClose();
-    onGoToProject(projectId);
   }
 
   return (
@@ -149,12 +129,11 @@ export default function CreateEventModal({
         )}
 
         {activeTab === 'project' && hasProjectTab ? (
-          <>
-            {loadingProject && <p style={{ color: '#666', fontSize: 14 }}>Carregando projeto...</p>}
-            {!loadingProject && linkedProject && (
-              <ProjectQuickView project={linkedProject} onGoToProject={handleGoToProject} />
-            )}
-          </>
+          <ProjectFullView
+            projectId={editingEvent!.project_id!}
+            reportTabMeta={false}
+            onInternalNavigate={onClose}
+          />
         ) : (
           <>
             <h3 style={{ marginTop: 0 }}>{editingEvent ? 'Editar evento' : 'Novo evento'}</h3>
