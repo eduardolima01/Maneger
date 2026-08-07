@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { convertFileSrc } from '@tauri-apps/api/core';
 import type { Event } from '@/types/event.types';
 import { fromLocalISO, toLocalISO, minutesSinceMidnight, snapMinutes, formatMinutesLabel, formatDuration, isSameDay } from '../lib/utils/date';
@@ -26,7 +26,7 @@ export default function EventBlock({
   event, hourHeight, color, coverPath, breadcrumb, days, dayIndex, getColumnWidth,
   overlapLevel = 0,
   segmentKind = 'start',
-  onEditClick, onProjectClick, onDoubleClick, onChange, onDuplicate,
+  onEditClick, onProjectClick, onDoubleClick, onChange, onDuplicate, onRequestDelete,
 }: EventBlockProps) {
   const start = fromLocalISO(event.start_at);
   const end = fromLocalISO(event.end_at);
@@ -54,6 +54,21 @@ export default function EventBlock({
   const dragMode = useRef<'move' | 'resize' | null>(null);
   const dragStartY = useRef(0);
   const dragStartX = useRef(0);
+
+
+  const isDraggingActive = dragOffsetMin !== 0 || dragOffsetX !== 0 || resizeExtraMin !== 0;
+
+  useEffect(() => {
+    if (!isHovering || isDraggingActive) return;
+    function handleKeyDown(e: KeyboardEvent) {
+      if (e.key === 'q' || e.key === 'Q') {
+        e.preventDefault();
+        onRequestDelete(event);
+      }
+    }
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [isHovering, isDraggingActive, event, onRequestDelete]);
 
   const pxPerMin = hourHeight / 60;
 

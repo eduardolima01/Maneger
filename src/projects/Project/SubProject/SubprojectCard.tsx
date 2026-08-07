@@ -3,7 +3,7 @@ import { CSS } from '@dnd-kit/utilities';
 import { useState } from 'react';
 import type { ProjectType } from '@/types/project.types';
 import type { ModuleCounts } from '@/lib/api/projectModuleCounts';
-import CardProject from '@/Projects/components/CardProject';
+import CardProject, { CARD_PROJECT_WIDTH } from '@/Projects/components/CardProject';
 
 interface SubprojectCardProps {
   project: ProjectType;
@@ -27,18 +27,19 @@ export default function SubprojectCard({ project, counts, onOpen, onEditInPlace,
   };
 
   return (
-    <div ref={setNodeRef} style={{ ...style, display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
+    <div ref={setNodeRef} style={{ ...style, display: 'flex', alignItems: 'center', gap: 6, width: CARD_PROJECT_WIDTH + 28 }}>
       <span {...attributes} {...listeners} style={{ color: '#bbb', fontSize: 12, cursor: 'grab', touchAction: 'none', flexShrink: 0 }} title="Arrastar">⠿</span>
 
       <div style={{ flex: 1 }}>
-        <CardProject project={project} onClick={onOpen} />
-        {counts && (
-          <div style={{ display: 'flex', gap: 8, fontSize: 11, color: '#999', marginTop: -4, marginLeft: 4 }}>
-            <span>{counts.tasks} tasks</span>
-            <span>{counts.kanban} kanban</span>
-            <span>{counts.logs} logs</span>
-          </div>
-        )}
+        <CardProject
+          project={project}
+          onClick={onOpen}
+          badges={counts ? [
+            { label: `${counts.tasks} tasks` },
+            { label: `${counts.kanban} kanban` },
+            { label: `${counts.logs} logs` },
+          ] : undefined}
+        />
       </div>
 
       <div style={{ position: 'relative', flexShrink: 0 }}>

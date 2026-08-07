@@ -152,6 +152,77 @@ fn save_agenda_data(project_id: String, data: String) -> Result<(), String> {
     fs::write(&path, data).map_err(|e| e.to_string())
 }
 
+#[tauri::command]
+fn list_modifications(project_id: String) -> Result<Vec<String>, String> {
+    let dir = std::env::current_dir().map_err(|e| e.to_string())?;
+    let mods_dir = dir.join("projects").join(&project_id).join("modifications");
+    if !mods_dir.exists() {
+        return Ok(vec![]);
+    }
+    let mut keys = vec![];
+    if let Ok(entries) = fs::read_dir(&mods_dir) {
+        for entry in entries.flatten() {
+            if entry.path().is_dir() {
+                if let Some(name) = entry.file_name().to_str() {
+                    keys.push(name.to_string());
+                }
+            }
+        }
+    }
+    Ok(keys)
+}
+
+#[tauri::command]
+fn load_modification_file(
+    project_id: String,
+    mod_key: String,
+    file_name: String,
+) -> Result<String, String> {
+    let dir = std::env::current_dir().map_err(|e| e.to_string())?;
+    let path = dir
+        .join("projects")
+        .join(&project_id)
+        .join("modifications")
+        .join(&mod_key)
+        .join(&file_name);
+    if !path.exists() {
+        return Ok(String::new());
+    }
+    fs::read_to_string(&path).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn save_modification_file(
+    project_id: String,
+    mod_key: String,
+    file_name: String,
+    data: String,
+) -> Result<(), String> {
+    let dir = std::env::current_dir().map_err(|e| e.to_string())?;
+    let mod_dir = dir
+        .join("projects")
+        .join(&project_id)
+        .join("modifications")
+        .join(&mod_key);
+    fs::create_dir_all(&mod_dir).map_err(|e| e.to_string())?;
+    let path = mod_dir.join(&file_name);
+    fs::write(&path, data).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn delete_modification(project_id: String, mod_key: String) -> Result<(), String> {
+    let dir = std::env::current_dir().map_err(|e| e.to_string())?;
+    let mod_dir = dir
+        .join("projects")
+        .join(&project_id)
+        .join("modifications")
+        .join(&mod_key);
+    if mod_dir.exists() {
+        fs::remove_dir_all(&mod_dir).map_err(|e| e.to_string())?;
+    }
+    Ok(())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let migrations = vec![Migration {
@@ -178,6 +249,27 @@ pub fn run() {
         format!("sqlite:{}/chat.db", dir.display())
     };
 
+    #[tauri::command]
+    fn load_project_section_config(project_id: String) -> Result<String, String> {
+        let dir = std::env::current_dir().map_err(|e| e.to_string())?;
+        let path = dir
+            .join("projects")
+            .join(&project_id)
+            .join("project-config.json");
+        if !path.exists() {
+            return Ok("{}".to_string());
+        }
+        fs::read_to_string(&path).map_err(|e| e.to_string())
+    }
+
+    #[tauri::command]
+    fn save_project_section_config(project_id: String, data: String) -> Result<(), String> {
+        let dir = std::env::current_dir().map_err(|e| e.to_string())?;
+        let project_dir = dir.join("projects").join(&project_id);
+        fs::create_dir_all(&project_dir).map_err(|e| e.to_string())?;
+        let path = project_dir.join("project-config.json");
+        fs::write(&path, data).map_err(|e| e.to_string())
+    }
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
@@ -200,7 +292,13 @@ pub fn run() {
             save_pomodoro_data,
             load_agenda_data,
             save_agenda_data,
-            save_cover_from_bytes
+            save_cover_from_bytes,
+            list_modifications,
+            load_modification_file,
+            save_modification_file,
+            delete_modification,
+            load_project_section_config,
+            save_project_section_config
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

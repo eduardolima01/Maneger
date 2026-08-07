@@ -25,12 +25,13 @@ interface TimeGridViewProps {
   onEventDuplicate: (event: Event, startAt: string, endAt: string) => void;
   onProjectAssign: (eventId: string, projectId: string | null) => void;
   onProjectSummaryClick: (projectId: string | null) => void;
+  onEventRequestDelete: (event: Event) => void;
 }
 
 export default function TimeGridView({
   days, events, resolveColor, resolveCover, onCreateEvent, resolveBreadcrumb,
   onEventEdit, onEventProjectClick, onEventDoubleClick, onEventChange, onEventDuplicate,
-  onProjectAssign, onProjectSummaryClick
+  onProjectAssign, onProjectSummaryClick, onEventRequestDelete,
 }: TimeGridViewProps) {
   const [draft, setDraft] = useState<{ dayIndex: number; startMin: number; currentMin: number } | null>(null);
   const columnRefs = useRef<(HTMLDivElement | null)[]>([]);
@@ -290,6 +291,7 @@ export default function TimeGridView({
                   onChange={onEventChange}
                   onDuplicate={onEventDuplicate}
                   onProjectAssign={onProjectAssign}
+                  onRequestDelete={onEventRequestDelete}
                 />
               ));
             })()}

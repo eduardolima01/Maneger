@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { convertFileSrc } from '@tauri-apps/api/core';
 import {
   fromLocalISO,
@@ -19,6 +19,7 @@ interface MonthEventChipProps {
   onProjectClick: (event: Event) => void;
   onDoubleClick: (event: Event) => void;
   onProjectAssign: (eventId: string, projectId: string | null) => void;
+  onRequestDelete: (event: Event) => void;
 }
 
 export function MonthEventChip({
@@ -29,7 +30,8 @@ export function MonthEventChip({
   onEdit,
   onProjectClick,
   onDoubleClick,
-  onProjectAssign
+  onProjectAssign,
+  onRequestDelete,
 }: MonthEventChipProps) {
   const [isHovering, setIsHovering] = useState(false);
   const start = fromLocalISO(event.start_at);
@@ -40,6 +42,18 @@ export function MonthEventChip({
   const assignedName = breadcrumb.length > 0 ? breadcrumb[breadcrumb.length - 1].name : null;
   const fullPath = breadcrumb.map((p) => p.name).join(' / ');
   const [assignOpen, setAssignOpen] = useState(false);
+
+  useEffect(() => {
+    if (!isHovering) return;
+    function handleKeyDown(e: KeyboardEvent) {
+      if (e.key === 'q' || e.key === 'Q') {
+        e.preventDefault();
+        onRequestDelete(event);
+      }
+    }
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [isHovering, event, onRequestDelete]);
 
   return (
     <div

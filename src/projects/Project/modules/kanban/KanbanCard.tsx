@@ -5,7 +5,7 @@ import { PRIORITY_LABELS, PRIORITY_COLORS } from '@/types/kanban.types';
 import type { KanbanCard as CardType, ChecklistProgress, KanbanDensity } from '@/types/kanban.types';
 import ContextMenu from '@/components/ui/ContextMenu';
 import CardLabelMenu from './CardLabelMenu';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { ParsedLabel, parseLabel, serializeLabel } from '@/Kanban/utils/kanbanLabels';
 
 
@@ -34,6 +34,19 @@ export default function KanbanCard({
 
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null);
   const [labelMenu, setLabelMenu] = useState<{ x: number; y: number } | null>(null);
+  const [hovering, setHovering] = useState(false);
+
+  useEffect(() => {
+    if (!hovering) return;
+    function handleKeyDown(e: KeyboardEvent) {
+      if ((e.key === 'q' || e.key === 'Q') && !contextMenu && !labelMenu) {
+        e.preventDefault();
+        onRequestDelete();
+      }
+    }
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [hovering, contextMenu, labelMenu, onRequestDelete]);
 
   function handleContextMenu(e: React.MouseEvent) {
     e.preventDefault();
@@ -62,6 +75,8 @@ export default function KanbanCard({
         {...listeners}
         onClick={onClick}
         onContextMenu={handleContextMenu}
+        onMouseEnter={() => setHovering(true)}
+        onMouseLeave={() => setHovering(false)}
         style={{
           transform: CSS.Transform.toString(transform),
           transition,

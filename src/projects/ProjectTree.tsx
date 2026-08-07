@@ -79,20 +79,22 @@ export default function ProjectTree({ api }: ProjectTreeProps) {
           items={tree.map((n) => n.id)}
           strategy={verticalListSortingStrategy}
         >
-          {tree.map((node) => (
-            <ProjectTreeNode
-              key={node.id}
-              node={node}
-              depth={0}
-              expandedIds={expandedIds}
-              onToggleExpanded={toggleExpanded}
-              onNewSubproject={handleNewSubproject}
-              onRename={handleRename}
-              onDuplicate={duplicate}
-              onMove={setMoveTargetId}
-              onRequestDelete={(id, name, descendantCount) => setPendingDelete({ id, name, descendantCount })}
-            />
-          ))}
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12, alignItems: 'flex-start' }}>
+            {tree.map((node) => (
+              <ProjectTreeNode
+                key={node.id}
+                node={node}
+                depth={0}
+                expandedIds={expandedIds}
+                onToggleExpanded={toggleExpanded}
+                onNewSubproject={handleNewSubproject}
+                onRename={handleRename}
+                onDuplicate={duplicate}
+                onMove={setMoveTargetId}
+                onRequestDelete={(id, name, descendantCount) => setPendingDelete({ id, name, descendantCount })}
+              />
+            ))}
+          </div>
         </SortableContext>
       </DndContext>
 

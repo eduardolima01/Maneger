@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable';
-import CardProject from './components/CardProject';
+import CardProject, { CARD_PROJECT_WIDTH } from './components/CardProject';
 import type { ProjectTreeNode as TreeNode } from '@/lib/utils/projectTree';
 
 interface ProjectTreeNodeProps {
@@ -37,8 +37,8 @@ export default function ProjectTreeNode({
   const hasChildren = node.children.length > 0;
 
   return (
-    <div ref={setNodeRef} style={style}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginLeft: depth * 24, marginBottom: 8 }}>
+    <div ref={setNodeRef} style={{ ...style, width: CARD_PROJECT_WIDTH + 28, marginLeft: depth * 24 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2, flexShrink: 0 }}>
           <span {...attributes} {...listeners} style={{ color: '#bbb', fontSize: 12, cursor: 'grab', touchAction: 'none' }} title="Arrastar">
             ⠿
@@ -52,12 +52,11 @@ export default function ProjectTreeNode({
         </div>
 
         <div style={{ flex: 1 }}>
-          <CardProject project={node} />
-          {hasChildren && (
-            <span style={{ fontSize: 11, color: '#999', marginLeft: 4 }}>
-              {node.children.length} subprojeto{node.children.length > 1 ? 's' : ''}
-            </span>
-          )}
+          <CardProject
+            project={node}
+            subAvatars={hasChildren ? node.children.map((c) => ({ id: c.id, name: c.name, color: c.color, coverPath: c.cover_path })) : undefined}
+            footerText={hasChildren ? `${node.children.length} subprojeto${node.children.length > 1 ? 's' : ''}` : undefined}
+          />
         </div>
 
         <div style={{ position: 'relative', flexShrink: 0 }}>
@@ -90,20 +89,22 @@ export default function ProjectTreeNode({
 
       {hasChildren && isExpanded && (
         <SortableContext items={node.children.map((c) => c.id)} strategy={verticalListSortingStrategy}>
-          {node.children.map((child) => (
-            <ProjectTreeNode
-              key={child.id}
-              node={child}
-              depth={depth + 1}
-              expandedIds={expandedIds}
-              onToggleExpanded={onToggleExpanded}
-              onNewSubproject={onNewSubproject}
-              onRename={onRename}
-              onDuplicate={onDuplicate}
-              onMove={onMove}
-              onRequestDelete={onRequestDelete}
-            />
-          ))}
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12, alignItems: 'flex-start' }}>
+            {node.children.map((child) => (
+              <ProjectTreeNode
+                key={child.id}
+                node={child}
+                depth={depth + 1}
+                expandedIds={expandedIds}
+                onToggleExpanded={onToggleExpanded}
+                onNewSubproject={onNewSubproject}
+                onRename={onRename}
+                onDuplicate={onDuplicate}
+                onMove={onMove}
+                onRequestDelete={onRequestDelete}
+              />
+            ))}
+          </div>
         </SortableContext>
       )}
     </div>

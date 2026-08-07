@@ -25,6 +25,7 @@ interface MonthViewProps {
   onEventChange: (id: string, startAt: string, endAt: string) => void;
   onEventDuplicate: (event: Event, startAt: string, endAt: string) => void;
   onProjectAssign: (eventId: string, projectId: string | null) => void;
+  onEventRequestDelete: (event: Event) => void;
 }
 
 function moveEventToDay(event: Event, targetDay: Date) {
@@ -52,7 +53,8 @@ export default function MonthView({
   onEventProjectClick,
   onEventChange,
   onEventDuplicate,
-  onProjectAssign
+  onProjectAssign,
+  onEventRequestDelete,
 }: MonthViewProps) {
   const weeks = getMonthMatrix(anchor);
   const [hoveredDayKey, setHoveredDayKey] = useState<string | null>(null);
@@ -138,6 +140,7 @@ export default function MonthView({
                     onProjectClick={onEventProjectClick}
                     onDoubleClick={onEventDoubleClick}
                     onProjectAssign={onProjectAssign}
+                    onRequestDelete={onEventRequestDelete}
                   />
                 ))}
                 {dayEvents.length > 3 && (

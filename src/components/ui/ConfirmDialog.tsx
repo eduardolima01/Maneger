@@ -1,5 +1,6 @@
 import Modal from '@/components/ui/Modal';
 import Button from '@/components/layout/Button';
+import { useEffect } from 'react';
 
 interface ConfirmDialogProps {
   isOpen: boolean;
@@ -11,6 +12,19 @@ interface ConfirmDialogProps {
 }
 
 export default function ConfirmDialog({ isOpen, title, message, confirmLabel = 'Excluir', onConfirm, onCancel }: ConfirmDialogProps) {
+  useEffect(() => {
+    if (!isOpen) return;
+    function handleKeyDown(e: KeyboardEvent) {
+      if (e.key === 'q' || e.key === 'Q') {
+        e.preventDefault();
+        e.stopPropagation(); // impede que listeners por baixo (ex: KanbanCardModal) também reajam ao mesmo "q"
+        onConfirm();
+      }
+    }
+    document.addEventListener('keydown', handleKeyDown, true); // fase de captura: roda antes dos listeners de fase de bolha
+    return () => document.removeEventListener('keydown', handleKeyDown, true);
+  }, [isOpen, onConfirm]);
+
   return (
     <Modal open={isOpen} onClose={onCancel}>
       <div style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 12 }}>

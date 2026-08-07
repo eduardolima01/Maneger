@@ -16,6 +16,7 @@ import { useProjectBreadcrumbs } from '../lib/hooks/useProjectBreadcrumbs';
 import ProjectQuickModal from '@/Projects/Project/ProjectQuickModal';
 import { getProjectById } from '@/lib/api/projects';
 import { ProjectType } from '@/types/project.types';
+import ConfirmDialog from '@/components/ui/ConfirmDialog';
 
 export default function Agenda() {
   const navigate = useNavigate();
@@ -25,6 +26,7 @@ export default function Agenda() {
   const [draft, setDraft] = useState<{ start: Date; end: Date } | null>(null);
   const [editingEvent, setEditingEvent] = useState<Event | null>(null);
   const [modalOpen, setModalOpen] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<{ id: string; title: string } | null>(null);
 
   const [modalInitialTab, setModalInitialTab] = useState<'event' | 'project'>('event');
   const [quickViewProject, setQuickViewProject] = useState<ProjectType | null>(null);
@@ -115,6 +117,10 @@ export default function Agenda() {
     }
   }
 
+  function requestDeleteEvent(event: Event) {
+    setDeleteTarget({ id: event.id, title: event.title });
+  }
+
   async function handleDuplicateEvent(sourceEvent: Event, startAt: string, endAt: string) {
     await create({
       title: sourceEvent.title,
@@ -164,6 +170,7 @@ export default function Agenda() {
             onEventChange={(id, startAt, endAt) => update(id, { start_at: startAt, end_at: endAt })}
             onEventDuplicate={handleDuplicateEvent}
             onProjectAssign={handleQuickAssignProject}
+            onEventRequestDelete={requestDeleteEvent}
           />
         ) : (
           <TimeGridView
@@ -180,6 +187,7 @@ export default function Agenda() {
             onEventDuplicate={handleDuplicateEvent}
             onProjectAssign={handleQuickAssignProject}
             onProjectSummaryClick={openProjectSummary}
+            onEventRequestDelete={requestDeleteEvent}
           />
         )}
       </div>
@@ -208,6 +216,17 @@ export default function Agenda() {
           setQuickViewOpen(false);
           navigate({ to: '/projects/$projectId', params: { projectId: quickViewProject.id } });
         }}
+      />
+
+      <ConfirmDialog
+        isOpen={deleteTarget !== null}
+        title="Excluir evento?"
+        message={`Deseja realmente excluir "${deleteTarget?.title}"? Esta ação não pode ser desfeita.`}
+        onConfirm={async () => {
+          if (deleteTarget) await remove(deleteTarget.id);
+          setDeleteTarget(null);
+        }}
+        onCancel={() => setDeleteTarget(null)}
       />
     </div>
   );
