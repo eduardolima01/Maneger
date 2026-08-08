@@ -42,12 +42,19 @@ export default function KanbanBoard({ kanban }: KanbanBoardProps) {
   const allLabels = Array.from(new Set(board.cards.flatMap((c) => c.labels)));
 
   const allParsedLabels: ParsedLabel[] = useMemo(() => {
-    const map = new Map<string, string>(); // nome -> cor (primeira ocorrência vence)
+    const map = new Map<string, { color: string; isGroup: boolean }>();
     for (const raw of board.cards.flatMap((c) => c.labels)) {
-      const { name, color } = parseLabel(raw);
-      if (!map.has(name)) map.set(name, color);
+      const { name, color, isGroup } = parseLabel(raw);
+      const existing = map.get(name);
+      if (!existing) {
+        map.set(name, { color, isGroup });
+      } else if (isGroup && !existing.isGroup) {
+        // se QUALQUER ocorrência do nome for "de grupo", trata a etiqueta como de grupo
+        // (mesmo critério usado em fixInconsistentGroupLabels — evita mostrar desmarcado por causa de uma ocorrência antiga não corrigida)
+        map.set(name, { color: existing.color, isGroup: true });
+      }
     }
-    return Array.from(map.entries()).map(([name, color]) => ({ name, color }));
+    return Array.from(map.entries()).map(([name, v]) => ({ name, color: v.color, isGroup: v.isGroup }));
   }, [board.cards]);
 
   const labelCardCounts: Record<string, number> = useMemo(() => {
@@ -236,6 +243,7 @@ export default function KanbanBoard({ kanban }: KanbanBoardProps) {
                       onColumnMenu={() => setColumnSettingsOpen(true)}
                       cardsWithSubKanban={board.cardsWithSubKanban}
                       onCardDuplicate={board.duplicateCard}
+                      checklistProgress={board.checklistProgress}
                       onCardRequestDelete={(id, title) => setDeleteTarget({ id, title })}
                       onRenameGroup={board.renameGroup}
                       onRequestDeleteGroup={(groupId) => setDeleteGroupTarget(groupId)}
@@ -364,6 +372,7 @@ export default function KanbanBoard({ kanban }: KanbanBoardProps) {
         cardCounts={labelCardCounts}
         onRename={board.renameLabel}
         onDelete={board.deleteLabel}
+        onFixInconsistentGroupLabels={board.fixInconsistentGroupLabels}
       />
 
       <KanbanCardModal

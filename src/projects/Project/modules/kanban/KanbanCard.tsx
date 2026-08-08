@@ -54,17 +54,17 @@ export default function KanbanCard({
     setContextMenu({ x: e.clientX, y: e.clientY });
   }
 
-  function handleToggleLabel(name: string, color: string) {
+  function handleToggleLabel(name: string, color: string, isGroup: boolean) {
     const hasIt = card.labels.some((l) => parseLabel(l).name === name);
     const nextLabels = hasIt
       ? card.labels.filter((l) => parseLabel(l).name !== name)
-      : [...card.labels, serializeLabel(name, color)];
+      : [...card.labels, serializeLabel(name, color, isGroup)];
     onUpdateLabels(card.id, nextLabels);
   }
 
-  function handleCreateLabel(name: string, color: string) {
+  function handleCreateLabel(name: string, color: string, isGroup: boolean) {
     if (card.labels.some((l) => parseLabel(l).name === name)) return;
-    onUpdateLabels(card.id, [...card.labels, serializeLabel(name, color)]);
+    onUpdateLabels(card.id, [...card.labels, serializeLabel(name, color, isGroup)]);
   }
 
   return (

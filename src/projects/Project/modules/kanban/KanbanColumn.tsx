@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable';
@@ -9,10 +9,12 @@ import type {
   KanbanColumn as ColumnType,
   KanbanCard as CardType,
   KanbanDensity,
-  KanbanCardGroup
+  KanbanCardGroup,
+  ChecklistProgress
 } from '@/types/kanban.types';
 import GroupBlock from './GroupBlock';
-import { ParsedLabel } from '@/Kanban/utils/kanbanLabels';
+import { clusterCardsByGroupLabel, ParsedLabel } from '@/Kanban/utils/kanbanLabels';
+import LabelGroupBlock from '@/Kanban/utils/LabelGroupBlock';
 
 interface KanbanColumnProps {
   column: ColumnType;
@@ -34,6 +36,7 @@ interface KanbanColumnProps {
   onRenameGroup: (groupId: string, name: string) => void;
   onRequestDeleteGroup: (groupId: string) => void;
   onAddCardToGroup: (groupId: string, title: string) => void;
+  checklistProgress: Record<string, ChecklistProgress>;
   allLabels: ParsedLabel[];
   onUpdateCardLabels: (cardId: string, labels: string[]) => void;
 }
@@ -54,7 +57,7 @@ export default function KanbanColumn({
   onColumnMenu,
   collapsed,
   onToggleCollapsed,
-  cardsWithSubKanban, onRenameGroup, onRequestDeleteGroup, onAddCardToGroup,
+  cardsWithSubKanban, onRenameGroup, onRequestDeleteGroup, onAddCardToGroup, checklistProgress,
   allLabels, onUpdateCardLabels,
 }: KanbanColumnProps) {
   const { attributes, listeners, setNodeRef: setSortableRef, transform, transition, isDragging } = useSortable({
@@ -74,6 +77,7 @@ export default function KanbanColumn({
   };
 
   const overLimit = column.wipLimit !== null && cards.length > column.wipLimit;
+  const { clusters, loose } = useMemo(() => clusterCardsByGroupLabel(cards), [cards]);
 
   return (
     <div ref={setSortableRef} style={style}>
@@ -129,14 +133,34 @@ export default function KanbanColumn({
                   onAddCard={(title) => onAddCardToGroup(g.id, title)}
                   allLabels={allLabels}
                   onUpdateCardLabels={onUpdateCardLabels}
+                  checklistProgress={checklistProgress}
                 />
               ))}
-              {cards.map((c) => (
+
+              {clusters.map((cluster) => (
+                <LabelGroupBlock
+                  key={`label-group:${cluster.name}`}
+                  name={cluster.name}
+                  color={cluster.color}
+                  cards={cluster.cards}
+                  density={density}
+                  cardsWithSubKanban={cardsWithSubKanban}
+                  checklistProgress={checklistProgress}
+                  allLabels={allLabels}
+                  onCardClick={onCardClick}
+                  onCardDuplicate={onCardDuplicate}
+                  onCardRequestDelete={onCardRequestDelete}
+                  onUpdateCardLabels={onUpdateCardLabels}
+                />
+              ))}
+
+              {loose.map((c) => (
                 <KanbanCard
                   key={c.id}
                   card={c}
                   density={density}
                   hasSubKanban={cardsWithSubKanban.has(c.id)}
+                  checklistProgress={checklistProgress[c.id]}
                   onClick={() => onCardClick(c.id)}
                   onDuplicate={() => onCardDuplicate(c.id)}
                   onRequestDelete={() => onCardRequestDelete(c.id, c.title)}

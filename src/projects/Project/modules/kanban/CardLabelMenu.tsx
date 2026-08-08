@@ -6,8 +6,8 @@ interface CardLabelMenuProps {
   y: number;
   cardLabels: string[];
   allLabels: ParsedLabel[];
-  onToggle: (name: string, color: string) => void;
-  onCreate: (name: string, color: string) => void;
+  onToggle: (name: string, color: string, isGroup: boolean) => void;
+  onCreate: (name: string, color: string, isGroup: boolean) => void;
   onClose: () => void;
 }
 
@@ -16,6 +16,7 @@ export default function CardLabelMenu({ x, y, cardLabels, allLabels, onToggle, o
   const [creating, setCreating] = useState(false);
   const [newName, setNewName] = useState('');
   const [newColor, setNewColor] = useState(LABEL_COLOR_PALETTE[0]);
+  const [newIsGroup, setNewIsGroup] = useState(false);
 
   useEffect(() => {
     function handleClickOutside(e: MouseEvent) {
@@ -37,8 +38,9 @@ export default function CardLabelMenu({ x, y, cardLabels, allLabels, onToggle, o
   function submitCreate() {
     const trimmed = newName.trim();
     if (!trimmed) return;
-    onCreate(trimmed, newColor);
+    onCreate(trimmed, newColor, newIsGroup);
     setNewName('');
+    setNewIsGroup(false);
     setCreating(false);
   }
 
@@ -57,12 +59,12 @@ export default function CardLabelMenu({ x, y, cardLabels, allLabels, onToggle, o
       )}
 
       <div style={{ maxHeight: 200, overflowY: 'auto' }}>
-        {allLabels.map(({ name, color }) => {
+        {allLabels.map(({ name, color, isGroup }) => {
           const checked = cardLabelNames.has(name);
           return (
             <button
               key={name}
-              onClick={() => onToggle(name, color)}
+              onClick={() => onToggle(name, color, isGroup)}
               style={{
                 display: 'flex', alignItems: 'center', gap: 6, width: '100%', textAlign: 'left',
                 padding: '6px 6px', fontSize: 13, border: 'none', background: 'none', cursor: 'pointer', borderRadius: 4,
@@ -72,6 +74,7 @@ export default function CardLabelMenu({ x, y, cardLabels, allLabels, onToggle, o
             >
               <span style={{ width: 10, height: 10, borderRadius: 3, backgroundColor: color, flexShrink: 0 }} />
               <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{name}</span>
+              {isGroup && <span title="Etiqueta de grupo" style={{ fontSize: 10 }}>🏷</span>}
               {checked && <span style={{ fontSize: 12, color: '#1a73e8' }}>✓</span>}
             </button>
           );
@@ -101,6 +104,10 @@ export default function CardLabelMenu({ x, y, cardLabels, allLabels, onToggle, o
                 />
               ))}
             </div>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, cursor: 'pointer' }}>
+              <input type="checkbox" checked={newIsGroup} onChange={(e) => setNewIsGroup(e.target.checked)} />
+              🏷 É uma etiqueta de grupo (agrupa cards na coluna)
+            </label>
             <div style={{ display: 'flex', gap: 4, justifyContent: 'flex-end' }}>
               <button
                 onClick={() => { setCreating(false); setNewName(''); }}

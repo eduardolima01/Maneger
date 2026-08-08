@@ -8,28 +8,33 @@ interface LabelManagerModalProps {
   onClose: () => void;
   labels: ParsedLabel[];
   cardCounts: Record<string, number>;
-  onRename: (oldName: string, newName: string, color: string) => Promise<void>;
+  onRename: (oldName: string, newName: string, color: string, isGroup: boolean) => Promise<void>;
   onDelete: (name: string) => Promise<void>;
+  onFixInconsistentGroupLabels: () => Promise<void>;
 }
 
-export default function LabelManagerModal({ isOpen, onClose, labels, cardCounts, onRename, onDelete }: LabelManagerModalProps) {
+export default function LabelManagerModal({ isOpen, onClose, labels, cardCounts, onRename, onDelete, onFixInconsistentGroupLabels }: LabelManagerModalProps) {
+  const [fixing, setFixing] = useState(false);
   const [editingName, setEditingName] = useState<string | null>(null);
   const [nameDraft, setNameDraft] = useState('');
   const [colorDraft, setColorDraft] = useState(LABEL_COLOR_PALETTE[0]);
+  const [isGroupDraft, setIsGroupDraft] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
 
   function startEdit(label: ParsedLabel) {
     setEditingName(label.name);
     setNameDraft(label.name);
     setColorDraft(label.color);
+    setIsGroupDraft(label.isGroup);
   }
 
   async function submitEdit() {
     if (!editingName) return;
     const trimmed = nameDraft.trim();
     if (!trimmed) return;
-    if (trimmed !== editingName || colorDraft !== labels.find((l) => l.name === editingName)?.color) {
-      await onRename(editingName, trimmed, colorDraft);
+    const original = labels.find((l) => l.name === editingName);
+    if (trimmed !== editingName || colorDraft !== original?.color || isGroupDraft !== original?.isGroup) {
+      await onRename(editingName, trimmed, colorDraft, isGroupDraft);
     }
     setEditingName(null);
   }
@@ -39,6 +44,15 @@ export default function LabelManagerModal({ isOpen, onClose, labels, cardCounts,
       <Modal open={isOpen} onClose={onClose}>
         <div style={{ padding: 16, minWidth: 320 }}>
           <h3 style={{ marginTop: 0 }}>Etiquetas do Kanban</h3>
+
+
+          <button
+            onClick={async () => { setFixing(true); await onFixInconsistentGroupLabels(); setFixing(false); }}
+            disabled={fixing}
+            style={{ fontSize: 11, color: '#1a73e8', background: 'none', border: 'none', cursor: fixing ? 'default' : 'pointer', padding: '0 0 8px', textAlign: 'left' }}
+          >
+            {fixing ? 'Corrigindo...' : '🔧 Corrigir agrupamento de etiquetas antigas'}
+          </button>
 
           {labels.length === 0 && (
             <p style={{ color: '#999', fontSize: 13 }}>Nenhuma etiqueta criada ainda neste kanban.</p>
@@ -79,6 +93,9 @@ export default function LabelManagerModal({ isOpen, onClose, labels, cardCounts,
                         }}
                         style={{ flex: 1, fontSize: 13, padding: 4, border: '1px solid #ddd', borderRadius: 4 }}
                       />
+                      <label title="Etiqueta de grupo" style={{ display: 'flex', alignItems: 'center', cursor: 'pointer' }}>
+                        <input type="checkbox" checked={isGroupDraft} onChange={(e) => setIsGroupDraft(e.target.checked)} />
+                      </label>
                       <button
                         onClick={submitEdit}
                         title="Salvar"
@@ -98,6 +115,7 @@ export default function LabelManagerModal({ isOpen, onClose, labels, cardCounts,
                     <>
                       <span style={{ width: 12, height: 12, borderRadius: 3, backgroundColor: label.color, flexShrink: 0 }} />
                       <span style={{ flex: 1, fontSize: 13 }}>{label.name}</span>
+                      {label.isGroup && <span title="Etiqueta de grupo — agrupa cards na coluna" style={{ fontSize: 11 }}>🏷</span>}
                       <span style={{ fontSize: 11, color: '#999' }}>
                         {cardCounts[label.name] ?? 0} card{(cardCounts[label.name] ?? 0) !== 1 ? 's' : ''}
                       </span>

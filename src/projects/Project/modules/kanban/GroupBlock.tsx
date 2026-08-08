@@ -1,11 +1,12 @@
-import { useRef, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { useSortable } from '@dnd-kit/sortable';
 import { useDroppable } from '@dnd-kit/core';
 import { CSS } from '@dnd-kit/utilities';
 import { SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import KanbanCard from './KanbanCard';
-import type { KanbanCardGroup, KanbanCard as CardType, KanbanDensity } from '@/types/kanban.types';
-import { ParsedLabel } from '@/Kanban/utils/kanbanLabels';
+import type { KanbanCardGroup, KanbanCard as CardType, KanbanDensity, ChecklistProgress } from '@/types/kanban.types';
+import { clusterCardsByGroupLabel, ParsedLabel } from '@/Kanban/utils/kanbanLabels';
+import LabelGroupBlock from '@/Kanban/utils/LabelGroupBlock';
 
 interface GroupBlockProps {
   group: KanbanCardGroup;
@@ -13,6 +14,7 @@ interface GroupBlockProps {
   density: KanbanDensity;
   cardsWithSubKanban: Set<string>;
   collapsed: boolean;
+  checklistProgress: Record<string, ChecklistProgress>;
   allLabels: ParsedLabel[];
   onToggleCollapsed: () => void;
   onCardClick: (cardId: string) => void;
@@ -26,7 +28,7 @@ interface GroupBlockProps {
 
 export default function GroupBlock({
   group, cards, density, cardsWithSubKanban, collapsed, onToggleCollapsed, onCardClick, onCardDuplicate, onCardRequestDelete, onRename, onRequestDelete,
-  onAddCard, allLabels, onUpdateCardLabels,
+  onAddCard, allLabels, onUpdateCardLabels, checklistProgress,
 }: GroupBlockProps) {
   const { attributes, listeners, setNodeRef: setSortableRef, transform, transition, isDragging } = useSortable({
     id: `group:${group.id}`,
@@ -37,6 +39,7 @@ export default function GroupBlock({
     data: { type: 'group', groupId: group.id },
   });
   const [nameDraft, setNameDraft] = useState(group.name);
+  const { clusters, loose } = useMemo(() => clusterCardsByGroupLabel(cards), [cards]);
 
   const [addingCard, setAddingCard] = useState(false);
   const [newCardTitle, setNewCardTitle] = useState('');
@@ -81,12 +84,30 @@ export default function GroupBlock({
 
           {!collapsed && (
             <SortableContext items={cards.map((c) => `card:${c.id}`)} strategy={verticalListSortingStrategy}>
-              {cards.map((c) => (
+              {clusters.map((cluster) => (
+                <LabelGroupBlock
+                  key={`label-group:${cluster.name}`}
+                  name={cluster.name}
+                  color={cluster.color}
+                  cards={cluster.cards}
+                  density={density}
+                  cardsWithSubKanban={cardsWithSubKanban}
+                  checklistProgress={checklistProgress}
+                  allLabels={allLabels}
+                  onCardClick={onCardClick}
+                  onCardDuplicate={onCardDuplicate}
+                  onCardRequestDelete={onCardRequestDelete}
+                  onUpdateCardLabels={onUpdateCardLabels}
+                />
+              ))}
+
+              {loose.map((c) => (
                 <KanbanCard
                   key={c.id}
                   card={c}
                   density={density}
                   hasSubKanban={cardsWithSubKanban.has(c.id)}
+                  checklistProgress={checklistProgress[c.id]}
                   onClick={() => onCardClick(c.id)}
                   onDuplicate={() => onCardDuplicate(c.id)}
                   onRequestDelete={() => onCardRequestDelete(c.id, c.title)}

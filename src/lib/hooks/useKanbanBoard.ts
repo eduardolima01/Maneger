@@ -7,6 +7,7 @@ import { emptyFilters, hasActiveFilters } from '@/types/kanban.types';
 
 import * as groupsApi from '@/lib/api/kanban/kanbanCardGroups';
 import { getProgressByCardIds } from '../api/kanban/kanbanChecklist';
+import { parseLabel, serializeLabel } from '@/Kanban/utils/kanbanLabels';
 
 export function useKanbanBoard(kanban: Kanban) {
   const kanbanId = kanban.id;
@@ -162,12 +163,12 @@ export function useKanbanBoard(kanban: Kanban) {
     await reload();
   }, [reload]);
 
-  const renameLabel = useCallback(async (oldName: string, newName: string, color: string) => {
+  const renameLabel = useCallback(async (oldName: string, newName: string, color: string, isGroup: boolean) => {
     const affected = cards.filter((c) => c.labels.some((l) => parseLabel(l).name === oldName));
     await Promise.all(
       affected.map((c) => {
         const nextLabels = c.labels.map((l) =>
-          parseLabel(l).name === oldName ? serializeLabel(newName, color) : l
+          parseLabel(l).name === oldName ? serializeLabel(newName, color, isGroup) : l
         );
         return cardsApi.updateCard(c.id, { labels: nextLabels });
       })
@@ -230,12 +231,44 @@ export function useKanbanBoard(kanban: Kanban) {
     });
   }, [kanbanId]);
 
+  const fixInconsistentGroupLabels = useCallback(async () => {
+    // descobre, por nome de etiqueta, se ELA é "de grupo" em qualquer card onde aparece
+    const groupNames = new Set<string>();
+    for (const card of cards) {
+      for (const raw of card.labels) {
+        const { name, isGroup } = parseLabel(raw);
+        if (isGroup) groupNames.add(name);
+      }
+    }
+    if (groupNames.size === 0) return;
+
+    const affected = cards.filter((c) =>
+      c.labels.some((l) => {
+        const p = parseLabel(l);
+        return groupNames.has(p.name) && !p.isGroup;
+      })
+    );
+    if (affected.length === 0) return;
+
+    await Promise.all(
+      affected.map((c) => {
+        const nextLabels = c.labels.map((l) => {
+          const p = parseLabel(l);
+          return groupNames.has(p.name) && !p.isGroup ? serializeLabel(p.name, p.color, true) : l;
+        });
+        return cardsApi.updateCard(c.id, { labels: nextLabels });
+      })
+    );
+    await reload();
+  }, [cards, reload]);
+
   return {
     columns, ungroupedCardsByColumn, cardsByGroup, groupsByColumn, cards, groups, cardsWithSubKanban, checklistProgress, loading, reload,
     search, setSearch, filters, setFilters, filtersActive: hasActiveFilters(filters),
     moveCard, createCard, updateCard, duplicateCard, archiveCard, removeCard,
     createCardInGroup,
     renameLabel, deleteLabel,
+    fixInconsistentGroupLabels,
     createGroup, renameGroup, deleteGroup, moveCardIntoGroup, moveCardOutOfGroup, moveGroupToColumn,
     createColumn, updateColumn, removeColumn, duplicateColumn, reorderColumns,
     viewPrefs, saveViewPrefs,
