@@ -11,7 +11,7 @@ import KanbanCardModal from './KanbanCardModal';
 import ConfirmDialog from '@/components/ui/ConfirmDialog';
 import { useKanbanBoard } from '@/lib/hooks/useKanbanBoard';
 import type { Kanban } from '@/types/kanban.types';
-import { ParsedLabel, parseLabel } from '@/Kanban/utils/kanbanLabels';
+import { clearGroupLabels, ParsedLabel, parseLabel, setSingleGroupLabel } from '@/Kanban/utils/kanbanLabels';
 import LabelManagerModal from './LabelManagerModal';
 
 interface KanbanBoardProps {
@@ -33,7 +33,7 @@ export default function KanbanBoard({ kanban }: KanbanBoardProps) {
   const [newGroupColumnId, setNewGroupColumnId] = useState<string | null>(null);
   const [newGroupName, setNewGroupName] = useState('');
   const newGroupInputRef = useRef<HTMLInputElement>(null);
-  const newCardInputRef = useRef<HTMLInputElement>(null);
+  const newCardInputRef = useRef<HTMLTextAreaElement>(null);
   const board = useKanbanBoard(kanban);
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 8 } }));
@@ -129,43 +129,73 @@ export default function KanbanBoard({ kanban }: KanbanBoardProps) {
     if (activeType === 'card') {
       const cardId = activeId.replace('card:', '');
 
-      // caso 1: soltou em cima de um grupo (ou dentro da área droppable do grupo) → entra no grupo
-      if (overType === 'group') {
-        const groupId = over.data.current?.groupId as string;
-        const cardsInGroup = (board.cardsByGroup.get(groupId) ?? []).map((c) => c.id).filter((id) => id !== cardId);
-        cardsInGroup.push(cardId); // solto em qualquer ponto do grupo entra no fim, por simplicidade
-        board.moveCardIntoGroup(cardId, groupId, cardsInGroup);
-        return;
-      }
+      const activeCard = board.cards.find((c) => c.id === cardId);
 
-      // caso 2: soltou em cima de outro card que já está dentro de um grupo → entra nesse grupo, na posição certa
-      if (overId.startsWith('card:')) {
+      // resolve pra onde estruturalmente o card vai (grupo manual ou coluna solta) e, se for o caso,
+      // qual etiqueta de subgrupo o alvo representa (pra sincronizar a etiqueta do card com o destino)
+      let targetKind: 'group' | 'column' | null = null;
+      let targetScopeId: string | null = null;
+      let targetLabel: { name: string; color: string } | null = null;
+
+      if (overType === 'label-group') {
+        const data = over.data.current as { scopeType: 'group' | 'column'; scopeId: string; labelName: string; labelColor: string };
+        targetKind = data.scopeType;
+        targetScopeId = data.scopeId;
+        targetLabel = { name: data.labelName, color: data.labelColor };
+      } else if (overType === 'group') {
+        targetKind = 'group';
+        targetScopeId = over.data.current?.groupId as string;
+      } else if (overId.startsWith('card:')) {
         const overCardId = overId.replace('card:', '');
         const overCard = board.cards.find((c) => c.id === overCardId);
-        if (overCard?.cardGroupId) {
-          const cardsInGroup = (board.cardsByGroup.get(overCard.cardGroupId) ?? []).map((c) => c.id).filter((id) => id !== cardId);
-          const idx = cardsInGroup.indexOf(overCardId);
-          if (idx !== -1) cardsInGroup.splice(idx, 0, cardId); else cardsInGroup.push(cardId);
-          board.moveCardIntoGroup(cardId, overCard.cardGroupId, cardsInGroup);
-          return;
+        if (overCard) {
+          if (overCard.cardGroupId) {
+            targetKind = 'group';
+            targetScopeId = overCard.cardGroupId;
+          } else if (overCard.columnId) {
+            targetKind = 'column';
+            targetScopeId = overCard.columnId;
+          }
+          // se o card sobre o qual soltou já pertence a um subgrupo por etiqueta, entrar ali também herda a etiqueta
+          const overGroupLabel = overCard.labels
+            .map(parseLabel)
+            .filter((l) => l.isGroup)
+            .sort((a, b) => a.name.localeCompare(b.name))[0];
+          if (overGroupLabel) targetLabel = { name: overGroupLabel.name, color: overGroupLabel.color };
+        }
+      } else {
+        const columnId =
+          (over.data.current?.type === 'column' && (over.data.current?.columnId as string)) ||
+          findColumnOfSortableItem(overId);
+        if (columnId) { targetKind = 'column'; targetScopeId = columnId; }
+      }
+
+      if (!targetKind || !targetScopeId) return;
+
+      if (targetKind === 'group') {
+        const cardsInGroup = (board.cardsByGroup.get(targetScopeId) ?? []).map((c) => c.id).filter((id) => id !== cardId);
+        const overIndex = overId.startsWith('card:') ? cardsInGroup.indexOf(overId.replace('card:', '')) : -1;
+        if (overIndex !== -1) cardsInGroup.splice(overIndex, 0, cardId); else cardsInGroup.push(cardId);
+        board.moveCardIntoGroup(cardId, targetScopeId, cardsInGroup);
+      } else {
+        const cardsInTarget = (board.ungroupedCardsByColumn.get(targetScopeId) ?? []).map((c) => c.id).filter((id) => id !== cardId);
+        const overIndex = overId.startsWith('card:') ? cardsInTarget.indexOf(overId.replace('card:', '')) : -1;
+        if (overIndex !== -1) cardsInTarget.splice(overIndex, 0, cardId); else cardsInTarget.push(cardId);
+
+        if (activeCard?.cardGroupId) {
+          board.moveCardOutOfGroup(cardId, targetScopeId, cardsInTarget);
+        } else {
+          board.moveCard(cardId, targetScopeId, cardsInTarget);
         }
       }
 
-      // caso 3: soltou solto na coluna (fora de qualquer grupo) → sai do grupo se estava em um, ou só reordena
-      const targetColumnId =
-        (over.data.current?.type === 'column' && (over.data.current?.columnId as string)) ||
-        findColumnOfSortableItem(overId);
-      if (!targetColumnId) return;
-
-      const cardsInTarget = (board.ungroupedCardsByColumn.get(targetColumnId) ?? []).map((c) => c.id).filter((id) => id !== cardId);
-      const overIndex = cardsInTarget.indexOf(overId.replace('card:', ''));
-      if (overIndex !== -1) cardsInTarget.splice(overIndex, 0, cardId); else cardsInTarget.push(cardId);
-
-      const activeCard = board.cards.find((c) => c.id === cardId);
-      if (activeCard?.cardGroupId) {
-        board.moveCardOutOfGroup(cardId, targetColumnId, cardsInTarget);
-      } else {
-        board.moveCard(cardId, targetColumnId, cardsInTarget);
+      // sincroniza a etiqueta de grupo: entrou num subgrupo → recebe a etiqueta; saiu de qualquer subgrupo → perde a etiqueta
+      if (activeCard) {
+        const nextLabels = targetLabel
+          ? setSingleGroupLabel(activeCard.labels, targetLabel.name, targetLabel.color)
+          : clearGroupLabels(activeCard.labels);
+        const changed = nextLabels.length !== activeCard.labels.length || nextLabels.some((l, i) => l !== activeCard.labels[i]);
+        if (changed) board.updateCard(cardId, { labels: nextLabels });
       }
     }
   }
@@ -194,8 +224,12 @@ export default function KanbanBoard({ kanban }: KanbanBoardProps) {
   }
 
   async function handleCreateCard() {
-    if (!newCardColumnId || !newCardTitle.trim()) return;
-    await board.createCard(newCardColumnId, newCardTitle.trim());
+    if (!newCardColumnId) return;
+    const lines = newCardTitle.split('\n').map((l) => l.trim()).filter(Boolean);
+    if (lines.length === 0) return;
+    for (const line of lines) {
+      await board.createCard(newCardColumnId, line); // sequencial: evita colisão de posição entre criações simultâneas
+    }
     setNewCardTitle('');
     newCardInputRef.current?.focus();
   }
@@ -257,17 +291,22 @@ export default function KanbanBoard({ kanban }: KanbanBoardProps) {
                   newCardColumnId === col.id ? (
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginTop: 4 }}>
                       <div style={{ display: 'flex', gap: 4 }}>
-                        <input
+                        <textarea
                           ref={newCardInputRef}
                           autoFocus
                           value={newCardTitle}
                           onChange={(e) => setNewCardTitle(e.target.value)}
-                          onKeyDown={(e) => e.key === 'Enter' && handleCreateCard()}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter' && !e.shiftKey) {
+                              e.preventDefault();
+                              handleCreateCard();
+                            }
+                          }}
                           onBlur={() => !newCardTitle.trim() && setNewCardColumnId(null)}
-                          placeholder="Título do card..."
-                          style={{ flex: 1, padding: 6, fontSize: 12 }}
+                          placeholder="Título do card... (Shift+Enter = várias linhas viram vários cards)"
+                          rows={2}
+                          style={{ flex: 1, padding: 6, fontSize: 12, resize: 'vertical', fontFamily: 'inherit' }}
                         />
-
                         <button
                           onClick={handleCreateCard}
                           disabled={!newCardTitle.trim()}

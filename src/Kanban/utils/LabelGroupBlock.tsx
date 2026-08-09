@@ -2,6 +2,7 @@ import { useState } from 'react';
 import type { KanbanCard as CardType, ChecklistProgress, KanbanDensity } from '@/types/kanban.types';
 import { ParsedLabel } from './kanbanLabels';
 import KanbanCard from '@/Projects/Project/modules/kanban/KanbanCard';
+import { useDroppable } from '@dnd-kit/core';
 
 interface LabelGroupBlockProps {
   name: string;
@@ -11,6 +12,8 @@ interface LabelGroupBlockProps {
   cardsWithSubKanban: Set<string>;
   checklistProgress: Record<string, ChecklistProgress>;
   allLabels: ParsedLabel[];
+  scopeType: 'column' | 'group';
+  scopeId: string;
   onCardClick: (cardId: string) => void;
   onCardDuplicate: (cardId: string) => void;
   onCardRequestDelete: (cardId: string, title: string) => void;
@@ -19,13 +22,19 @@ interface LabelGroupBlockProps {
 
 export default function LabelGroupBlock({
   name, color, cards, density, cardsWithSubKanban, checklistProgress, allLabels,
+  scopeType, scopeId,
   onCardClick, onCardDuplicate, onCardRequestDelete, onUpdateCardLabels,
 }: LabelGroupBlockProps) {
   const [collapsed, setCollapsed] = useState(false);
+  const droppableId = `labelgroup:${scopeType}:${scopeId}:${name}`;
+  const { setNodeRef, isOver } = useDroppable({
+    id: droppableId,
+    data: { type: 'label-group', scopeType, scopeId, labelName: name, labelColor: color },
+  });
 
   return (
     <div style={{ marginBottom: 8 }}>
-      <div style={{ border: '2px dashed #c7c7c7', borderRadius: 6, padding: 6, backgroundColor: '#f5f5f5' }}>
+      <div ref={setNodeRef} style={{ border: '2px dashed #c7c7c7', borderRadius: 6, padding: 6, backgroundColor: isOver ? '#e8f0fe' : '#f5f5f5' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginBottom: 6 }}>
           <button
             onClick={() => setCollapsed((v) => !v)}

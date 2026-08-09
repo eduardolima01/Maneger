@@ -147,6 +147,8 @@ export default function KanbanColumn({
                   cardsWithSubKanban={cardsWithSubKanban}
                   checklistProgress={checklistProgress}
                   allLabels={allLabels}
+                  scopeType="column"
+                  scopeId={column.id}
                   onCardClick={onCardClick}
                   onCardDuplicate={onCardDuplicate}
                   onCardRequestDelete={onCardRequestDelete}

@@ -28,6 +28,15 @@ export interface LabelCluster {
   cards: KanbanCard[];
 }
 
+export function setSingleGroupLabel(labels: string[], name: string, color: string): string[] {
+  const withoutGroupLabels = labels.filter((l) => !parseLabel(l).isGroup);
+  return [...withoutGroupLabels, serializeLabel(name, color, true)];
+}
+
+export function clearGroupLabels(labels: string[]): string[] {
+  return labels.filter((l) => !parseLabel(l).isGroup);
+}
+
 /** Separa os cards soltos de uma coluna em clusters (por etiqueta de grupo) + os que sobraram sem etiqueta de grupo. */
 export function clusterCardsByGroupLabel(cards: KanbanCard[]): { clusters: LabelCluster[]; loose: KanbanCard[] } {
   const clusterMap = new Map<string, LabelCluster>();

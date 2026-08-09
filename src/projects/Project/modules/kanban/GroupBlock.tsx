@@ -43,7 +43,7 @@ export default function GroupBlock({
 
   const [addingCard, setAddingCard] = useState(false);
   const [newCardTitle, setNewCardTitle] = useState('');
-  const newCardInputRef = useRef<HTMLInputElement>(null);
+  const newCardInputRef = useRef<HTMLTextAreaElement>(null);
 
   const style: React.CSSProperties = {
     transform: CSS.Transform.toString(transform),
@@ -51,10 +51,12 @@ export default function GroupBlock({
     opacity: isDragging ? 0.5 : 1,
   };
 
-  function submitNewCard() {
-    const trimmed = newCardTitle.trim();
-    if (!trimmed) { setAddingCard(false); return; }
-    onAddCard(trimmed);
+  async function submitNewCard() {
+    const lines = newCardTitle.split('\n').map((l) => l.trim()).filter(Boolean);
+    if (lines.length === 0) { setAddingCard(false); return; }
+    for (const line of lines) {
+      onAddCard(line); // sequencial: evita colisão de posição entre criações simultâneas
+    }
     setNewCardTitle('');
     newCardInputRef.current?.focus(); // mantém o input focado — permite criar vários em sequência
   }
@@ -94,6 +96,8 @@ export default function GroupBlock({
                   cardsWithSubKanban={cardsWithSubKanban}
                   checklistProgress={checklistProgress}
                   allLabels={allLabels}
+                  scopeType="group"
+                  scopeId={group.id}
                   onCardClick={onCardClick}
                   onCardDuplicate={onCardDuplicate}
                   onCardRequestDelete={onCardRequestDelete}
@@ -124,18 +128,22 @@ export default function GroupBlock({
 
           {!collapsed && (
             addingCard ? (
-              <input
+              <textarea
                 ref={newCardInputRef}
                 autoFocus
                 value={newCardTitle}
                 onChange={(e) => setNewCardTitle(e.target.value)}
                 onBlur={submitNewCard}
                 onKeyDown={(e) => {
-                  if (e.key === 'Enter') submitNewCard();
+                  if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    submitNewCard();
+                  }
                   if (e.key === 'Escape') { setNewCardTitle(''); setAddingCard(false); }
                 }}
-                placeholder="Título do card..."
-                style={{ width: '100%', fontSize: 12, padding: 6, marginTop: 4, boxSizing: 'border-box' }}
+                placeholder="Título do card... (Shift+Enter = várias linhas viram vários cards)"
+                rows={2}
+                style={{ width: '100%', fontSize: 12, padding: 6, marginTop: 4, boxSizing: 'border-box', resize: 'vertical', fontFamily: 'inherit' }}
               />
             ) : (
               <button
