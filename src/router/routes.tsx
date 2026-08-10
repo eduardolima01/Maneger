@@ -10,6 +10,7 @@ import KanbanOverviewPage from '@/Kanban/KanbanOverviewPage'
 import ChatPage from '@/Chat/ChatPage'
 import KanbanBoardPage from '@/Kanban/KanbanBoardPage'
 import { TabRootLayout } from '@/components/layout/tabs/TabRootLayout'
+import CanvasPage from '@/Canvas/CanvasPage'
 
 // fábrica: mesmas rotas-filha, reaproveitada tanto pro router principal quanto por cada aba
 function buildRouteTree(rootRoute: AnyRootRoute) {
@@ -22,10 +23,11 @@ function buildRouteTree(rootRoute: AnyRootRoute) {
   const agendaRoute = createRoute({ getParentRoute: () => rootRoute, path: '/agenda', component: Agenda })
   const logsRoute = createRoute({ getParentRoute: () => rootRoute, path: '/logs', component: LogsPage })
   const chatRoute = createRoute({ getParentRoute: () => rootRoute, path: '/chat', component: ChatPage })
+  const canvasRoute = createRoute({ getParentRoute: () => rootRoute, path: '/canvas', component: CanvasPage })
 
   return rootRoute.addChildren([
     dashboardRoute, projectsRoute, projectRoute, kanbanRoute, kanbanBoardRoute,
-    settingsRoute, agendaRoute, logsRoute, chatRoute,
+    settingsRoute, agendaRoute, logsRoute, chatRoute, canvasRoute
   ])
 }
 

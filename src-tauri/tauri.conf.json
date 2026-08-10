@@ -23,7 +23,8 @@
         "enable": true,
         "scope": [
           "$RESOURCE/../covers/*",
-          "**/covers/*"
+          "**/covers/*",
+          "**/canvas-assets/*"
         ]
       }
     }

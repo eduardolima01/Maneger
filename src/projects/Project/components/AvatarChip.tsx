@@ -15,7 +15,7 @@ export default function AvatarChip({ name, color, coverPath, onClick }: AvatarCh
       onClick={(e) => { e.stopPropagation(); onClick(); }}
       title={name}
       style={{
-        width: 20, height: 20, borderRadius: '50%', border: '1px solid #fff',
+        width: 40, height: 40, borderRadius: '50%', border: '1px solid #fff',
         display: 'flex', alignItems: 'center', justifyContent: 'center',
         backgroundColor: color ?? '#999', color: '#fff', fontSize: 10, fontWeight: 700,
         cursor: 'pointer', overflow: 'hidden', flexShrink: 0, padding: 0, marginLeft: -6,

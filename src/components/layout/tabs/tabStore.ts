@@ -39,12 +39,14 @@ const ROUTE_LABELS: Record<string, string> = {
   '/': 'Dashboard', '/projects': 'Projetos', '/projects/$projectId': 'Projeto',
   '/kanban': 'Kanban', '/kanban/$kanbanId': 'Kanban', '/agenda': 'Agenda',
   '/logs': 'Logs', '/chat': 'Chat', '/settings': 'Configurações',
+  '/canvas': 'Canvas',
 };
 
 const ROUTE_ICONS: Record<string, string> = {
   '/': '🏠', '/projects': '📁', '/projects/$projectId': '📁',
   '/kanban': '📋', '/kanban/$kanbanId': '📋', '/agenda': '📅',
   '/logs': '📊', '/chat': '💬', '/settings': '⚙️',
+  '/canvas': '🎨',
 };
 
 function deepestRouteId(router: AppRouter): string | undefined {

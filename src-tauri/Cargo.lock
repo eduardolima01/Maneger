@@ -2225,6 +2225,7 @@ dependencies = [
  "tauri-plugin-dialog",
  "tauri-plugin-opener",
  "tauri-plugin-sql",
+ "uuid",
 ]
 
 [[package]]

@@ -9,6 +9,7 @@ import {
   MdChevronRight,
   MdViewKanban,
   MdChat,
+  MdGesture,
 } from 'react-icons/md'
 import { ThemeToggle } from '@/components/layout/ThemeToggle'
 import { LuLogs } from 'react-icons/lu'
@@ -22,6 +23,7 @@ const menuItems = [
   { label: 'Agenda', icon: MdCalendarMonth, to: '/agenda' },
   { label: 'Projetos', icon: MdFolder, to: '/projects' },
   { label: 'Kanban', icon: MdViewKanban, to: '/kanban' },
+  { label: 'Canvas', icon: MdGesture, to: '/canvas' }, // novo
   { label: 'Chat', icon: MdChat, to: '/chat' },
   { label: 'Tarefas', icon: MdTask, to: '/tasks' },
   { label: 'Notas', icon: MdNotes, to: '/notes' },
