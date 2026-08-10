@@ -19,6 +19,7 @@ import { useSubprojects } from '@/lib/hooks/useSubprojects';
 import * as modsApi from './modifications/api/modifications';
 import type { ModificationManifest } from "./modifications/types/modification.types"
 import AvatarChip from './components/AvatarChip'
+import { recordProjectOpened } from '@/Dashboard/recentActivity'
 
 interface ProjectFullViewProps {
   projectId: string;
@@ -78,6 +79,7 @@ export function ProjectFullView({ projectId, reportTabMeta = true, onInternalNav
     getProjectById(projectId).then((p) => {
       setProject(p)
       setLoadingProject(false)
+      if (p) recordProjectOpened({ id: p.id, name: p.name })
     })
   useEffect(() => {
     getProject()
@@ -236,4 +238,3 @@ export function ProjectFullView({ projectId, reportTabMeta = true, onInternalNav
     </div>
   )
 }
-
