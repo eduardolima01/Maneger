@@ -1,6 +1,6 @@
 export type SearchCategory =
   | 'navigation' | 'projects' | 'subprojects' | 'kanbans'
-  | 'tasks' | 'notes' | 'logs' | 'settings' | 'actions';
+  | 'tasks' | 'notes' | 'logs' | 'settings' | 'actions' | 'feed';
 
 export interface SearchResultItem {
   id: string;

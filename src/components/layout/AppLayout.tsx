@@ -9,6 +9,7 @@ import TabRouterHost from './tabs/TabRouterHost';
 import { useTabs, initTabsFromDisk } from './tabs/tabStore';
 import TabBreadcrumbBar from './tabs/TabBreadcrumbBar';
 import GlobalPomodoroWidget from '@/Projects/Project/modules/pomodoro/components/GlobalPomodoroWidget';
+import GlobalMomentComposerHost from '@/Feed/components/GlobalMomentComposerHost';
 
 export function AppLayout() {
   const { activeTabId } = useTabs();
@@ -34,6 +35,7 @@ export function AppLayout() {
       <GlobalSearchWidget />
       <GlobalKanbanModalHost />
       <GlobalPomodoroWidget />
+      <GlobalMomentComposerHost />
     </div>
   )
 }

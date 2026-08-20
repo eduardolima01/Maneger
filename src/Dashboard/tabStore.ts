@@ -3,7 +3,7 @@ import { createRouter, createMemoryHistory } from '@tanstack/react-router';
 import type { AppRouter } from '@/router';
 import { loadTabsState, saveTabsState } from '@/lib/api/tabs/tabsState';
 import { buildTabRouteTree } from '@/router/routes';
-import { recordKanbanOpened } from '@/lib/state/recentActivity';
+import { recordKanbanOpened } from './recentActivity';
 
 export interface TabMeta {
   title: string;
@@ -40,12 +40,16 @@ const ROUTE_LABELS: Record<string, string> = {
   '/': 'Dashboard', '/projects': 'Projetos', '/projects/$projectId': 'Projeto',
   '/kanban': 'Kanban', '/kanban/$kanbanId': 'Kanban', '/agenda': 'Agenda',
   '/logs': 'Logs', '/chat': 'Chat', '/settings': 'Configurações',
+  '/canvas': 'Canvas',
+  '/feed': 'Feed',
 };
 
 const ROUTE_ICONS: Record<string, string> = {
   '/': '🏠', '/projects': '📁', '/projects/$projectId': '📁',
   '/kanban': '📋', '/kanban/$kanbanId': '📋', '/agenda': '📅',
   '/logs': '📊', '/chat': '💬', '/settings': '⚙️',
+  '/canvas': '🎨',
+  '/feed': '🕓',
 };
 
 function deepestRouteId(router: AppRouter): string | undefined {

@@ -15,6 +15,7 @@ import { getKanbanById } from '@/lib/api/kanban/kanbans';
 import { openGlobalKanbanModal } from '@/Kanban/globalKanbanModal';
 import type { RecentEntry } from '../types/search.types';
 import { activateNextTab, activatePrevTab, closeActiveTab, reopenLastClosedTab } from '@/components/layout/tabs/tabStore';
+import { createFeedProvider } from '@/Feed/search/feed.provider';
 
 let providersRegistered = false;
 
@@ -36,6 +37,7 @@ export default function GlobalSearchWidget() {
     searchRegistry.register(createNotesProvider(nav));
     searchRegistry.register(createLogsProvider(nav));
     searchRegistry.register(createSettingsProvider(nav));
+    searchRegistry.register(createFeedProvider(nav));
   }, []);
 
   useEffect(() => {
@@ -78,12 +80,13 @@ export default function GlobalSearchWidget() {
       case 'navigation': return () => navigateFn.current(NAV_PATH_BY_ID[entry.id] ?? '/');
       case 'projects':
       case 'subprojects': return () => navigateFn.current(`/projects/${entry.id}`);
-      case 'kanbans': return () => { getKanbanById(entry.id).then(openGlobalKanbanModal); };
+      case 'kanbans': return () => { getKanbanById(entry.id).then(e => { if (e) openGlobalKanbanModal(e) }); };
       case 'tasks':
       case 'notes':
       case 'logs': return null; // precisariam do projectId salvo junto — não persistido no RecentEntry atual, ver nota abaixo
       case 'settings': return () => navigateFn.current('/settings');
       case 'actions': return () => navigateFn.current(ACTION_PATH_BY_ID[entry.id] ?? '/');
+      case 'feed': return () => navigateFn.current(`/feed?momentId=${entry.id}`);
       default: return null;
     }
   }

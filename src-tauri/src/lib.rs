@@ -1,7 +1,9 @@
 mod canvas_commands;
+mod feed_commands;
 mod schema;
 
 use canvas_commands::*;
+use feed_commands::*;
 use std::fs;
 use std::path::PathBuf;
 use tauri_plugin_sql::{Migration, MigrationKind};
@@ -301,11 +303,17 @@ pub fn run() {
             delete_modification,
             load_project_section_config,
             save_project_section_config,
+            //
             load_canvas_data,
             save_canvas_data,
             save_canvas_asset_bytes,
             import_canvas_asset_from_path,
             delete_canvas_asset,
+            //
+            load_feed_data,
+            save_feed_data,
+            save_moment_asset_bytes,
+            delete_moment_asset,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

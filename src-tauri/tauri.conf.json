@@ -24,7 +24,8 @@
         "scope": [
           "$RESOURCE/../covers/*",
           "**/covers/*",
-          "**/canvas-assets/*"
+          "**/canvas-assets/*",
+          "**/feed-assets/*"
         ]
       }
     }
