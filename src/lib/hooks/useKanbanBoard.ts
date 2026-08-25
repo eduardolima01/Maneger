@@ -1,5 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
-import * as columnsApi from '@/lib/api/kanban/kanbanColumns';
+import { useState, useEffect, useCallback, useMemo } from 'react'; import * as columnsApi from '@/lib/api/kanban/kanbanColumns';
 import * as cardsApi from '@/lib/api/kanban/kanbanCards';
 import * as kanbansApi from '@/lib/api/kanban/kanbans';
 import type { KanbanColumn, KanbanFilters, KanbanCard, KanbanCardGroup, Kanban, KanbanViewPrefs, ChecklistProgress } from '@/types/kanban.types';
@@ -7,7 +6,9 @@ import { emptyFilters, hasActiveFilters } from '@/types/kanban.types';
 
 import * as groupsApi from '@/lib/api/kanban/kanbanCardGroups';
 import { getProgressByCardIds } from '../api/kanban/kanbanChecklist';
+import * as checklistApi from '../api/kanban/kanbanChecklist';
 import { parseLabel, serializeLabel } from '@/Kanban/utils/kanbanLabels';
+import { generateDailyDates, generateNumberedTitles } from '@/Kanban/utils/kanbanGenerators';
 
 export function useKanbanBoard(kanban: Kanban) {
   const kanbanId = kanban.id;
@@ -149,9 +150,87 @@ export function useKanbanBoard(kanban: Kanban) {
   }, [reload]);
 
   const duplicateCard = useCallback(async (id: string) => {
-    await cardsApi.duplicateCard(id);
+    const newId = await cardsApi.duplicateCard(id);
+    await checklistApi.duplicateChecklist(id, newId);
+    await reload();
+    return newId;
+  }, [reload]);
+
+
+  const duplicateCardMultiple = useCallback(async (
+    id: string,
+    mode: { kind: 'numbered'; count: number; startAt: number } | { kind: 'dates'; startDate: string; endDate: string }
+  ) => {
+    const original = cards.find((c) => c.id === id);
+    if (!original) return;
+
+    const dates = mode.kind === 'dates' ? generateDailyDates(mode.startDate, mode.endDate) : null;
+    const count = mode.kind === 'numbered' ? mode.count : (dates?.length ?? 0);
+    const titles = mode.kind === 'numbered' ? generateNumberedTitles(original.title, mode.count, mode.startAt) : null;
+    if (count === 0) return; // intervalo inválido (data final antes da inicial)
+
+
+    for (let i = 0; i < count; i++) {
+      // reaproveita a mesma cópia de configuração (cor, prioridade, etiquetas, cardGroupId) e de tasks já usada na duplicação simples
+      const newId = await cardsApi.duplicateCard(id);
+      await checklistApi.duplicateChecklist(id, newId);
+      if (titles) await cardsApi.updateCard(newId, { title: titles[i] });
+      if (dates) await cardsApi.updateCard(newId, { dueDate: dates[i] });
+    }
+    await reload();
+  }, [cards, reload]);
+
+  const createCardsBatch = useCallback(async (columnId: string, titles: string[], dueDates?: (string | null)[]) => {
+    for (let i = 0; i < titles.length; i++) {
+      await cardsApi.createCard({ kanbanId, columnId, title: titles[i], dueDate: dueDates?.[i] ?? null });
+    }
+    await reload();
+  }, [kanbanId, reload]); // sem mudança aqui — já era genérica o bastante, recebe titles/dueDates prontos
+
+  const bulkMoveCards = useCallback(async (
+    cardIds: string[],
+    target: { kind: 'column'; columnId: string } | { kind: 'group'; groupId: string },
+    orderedIds: string[]
+  ) => {
+    for (const id of cardIds) {
+      if (target.kind === 'group') {
+        await cardsApi.moveCardIntoGroup(id, target.groupId, orderedIds);
+      } else {
+        const card = cards.find((c) => c.id === id);
+        if (card?.cardGroupId) {
+          await cardsApi.moveCardOutOfGroup(id, kanbanId, target.columnId, orderedIds);
+        } else {
+          await cardsApi.moveCard(id, target.columnId, orderedIds);
+        }
+      }
+    }
+    await reload();
+  }, [cards, kanbanId, reload]);
+
+  const bulkDeleteCards = useCallback(async (cardIds: string[]) => {
+    await Promise.all(cardIds.map((id) => cardsApi.deleteCard(id)));
     await reload();
   }, [reload]);
+
+  const bulkSetColor = useCallback(async (cardIds: string[], color: string | null) => {
+    await Promise.all(cardIds.map((id) => cardsApi.updateCard(id, { color })));
+    await reload();
+  }, [reload]);
+
+  const bulkToggleLabel = useCallback(async (cardIds: string[], name: string, color: string, isGroup: boolean) => {
+    // se ALGUM dos selecionados já tem a etiqueta, o clique remove de todos; senão, adiciona em todos
+    // (mesmo critério de checkbox "indeterminado" usado em UIs de seleção múltipla)
+    const targets = cardIds.map((id) => cards.find((c) => c.id === id)).filter((c): c is KanbanCard => !!c);
+    const someHaveIt = targets.some((c) => c.labels.some((l) => parseLabel(l).name === name));
+    await Promise.all(targets.map((c) => {
+      const hasIt = c.labels.some((l) => parseLabel(l).name === name);
+      const nextLabels = someHaveIt
+        ? c.labels.filter((l) => parseLabel(l).name !== name)
+        : hasIt ? c.labels : [...c.labels, serializeLabel(name, color, isGroup)];
+      return cardsApi.updateCard(c.id, { labels: nextLabels });
+    }));
+    await reload();
+  }, [cards, reload]);
 
   const archiveCard = useCallback(async (id: string, archived: boolean) => {
     await cardsApi.archiveCard(id, archived);
@@ -271,6 +350,8 @@ export function useKanbanBoard(kanban: Kanban) {
     fixInconsistentGroupLabels,
     createGroup, renameGroup, deleteGroup, moveCardIntoGroup, moveCardOutOfGroup, moveGroupToColumn,
     createColumn, updateColumn, removeColumn, duplicateColumn, reorderColumns,
+    bulkMoveCards, bulkDeleteCards, bulkSetColor, bulkToggleLabel,
+    duplicateCardMultiple, createCardsBatch,
     viewPrefs, saveViewPrefs,
   };
 }

@@ -3,6 +3,7 @@ import type { KanbanCard as CardType, ChecklistProgress, KanbanDensity } from '@
 import { ParsedLabel } from './kanbanLabels';
 import KanbanCard from '@/Projects/Project/modules/kanban/KanbanCard';
 import { useDroppable } from '@dnd-kit/core';
+import { DuplicateMultipleMode } from '../components/DuplicateMenu';
 
 interface LabelGroupBlockProps {
   name: string;
@@ -18,12 +19,26 @@ interface LabelGroupBlockProps {
   onCardDuplicate: (cardId: string) => void;
   onCardRequestDelete: (cardId: string, title: string) => void;
   onUpdateCardLabels: (cardId: string, labels: string[]) => void;
+  onUpdateCardDueDate: (cardId: string, dueDate: string | null) => void;
+  onUpdateCardTitle: (cardId: string, title: string) => void;
+  onUpdateCardColor: (cardId: string, color: string | null) => void;
+  onDuplicateMultiple: (cardId: string, mode: DuplicateMultipleMode) => void;
+  onUpdateCoverPath: (cardId: string, path: string) => void
+
+  selectedCardIds: Set<string>;
+  onCardSelectToggle: (cardId: string) => void;
+  onBulkDelete: (cardIds: string[]) => void;
+  onBulkSetColor: (cardIds: string[], color: string | null) => void;
+  onBulkToggleLabel: (cardIds: string[], name: string, color: string, isGroup: boolean) => void;
 }
 
 export default function LabelGroupBlock({
   name, color, cards, density, cardsWithSubKanban, checklistProgress, allLabels,
   scopeType, scopeId,
   onCardClick, onCardDuplicate, onCardRequestDelete, onUpdateCardLabels,
+  onUpdateCardDueDate, onUpdateCardTitle, onUpdateCardColor,
+  selectedCardIds, onCardSelectToggle, onBulkDelete, onBulkSetColor, onBulkToggleLabel,
+  onDuplicateMultiple, onUpdateCoverPath
 }: LabelGroupBlockProps) {
   const [collapsed, setCollapsed] = useState(false);
   const droppableId = `labelgroup:${scopeType}:${scopeId}:${name}`;
@@ -49,7 +64,7 @@ export default function LabelGroupBlock({
         </div>
 
         {!collapsed && (
-          <div style={{ minHeight: 30 }}>
+          <div style={{ minHeight: 30, maxHeight: 320, overflowY: 'auto' }}>
             {cards.map((c) => (
               <KanbanCard
                 key={c.id}
@@ -62,6 +77,16 @@ export default function LabelGroupBlock({
                 onDuplicate={() => onCardDuplicate(c.id)}
                 onRequestDelete={() => onCardRequestDelete(c.id, c.title)}
                 onUpdateLabels={onUpdateCardLabels}
+                onUpdateCardDueDate={onUpdateCardDueDate}
+                onUpdateTitle={onUpdateCardTitle}
+                onUpdateColor={onUpdateCardColor}
+                onDuplicateMultiple={onDuplicateMultiple}
+                onUpdateCoverPath={onUpdateCoverPath}
+                selectedCardIds={selectedCardIds}
+                onCardSelectToggle={onCardSelectToggle}
+                onBulkDelete={onBulkDelete}
+                onBulkSetColor={onBulkSetColor}
+                onBulkToggleLabel={onBulkToggleLabel}
               />
             ))}
           </div>

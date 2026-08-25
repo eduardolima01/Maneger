@@ -9,9 +9,11 @@ interface CardLabelMenuProps {
   onToggle: (name: string, color: string, isGroup: boolean) => void;
   onCreate: (name: string, color: string, isGroup: boolean) => void;
   onClose: () => void;
+  onMouseEnter?: () => void;
+  onMouseLeave?: () => void;
 }
 
-export default function CardLabelMenu({ x, y, cardLabels, allLabels, onToggle, onCreate, onClose }: CardLabelMenuProps) {
+export default function CardLabelMenu({ x, y, cardLabels, allLabels, onToggle, onCreate, onClose, onMouseEnter, onMouseLeave }: CardLabelMenuProps) {
   const ref = useRef<HTMLDivElement>(null);
   const [creating, setCreating] = useState(false);
   const [newName, setNewName] = useState('');
@@ -47,6 +49,8 @@ export default function CardLabelMenu({ x, y, cardLabels, allLabels, onToggle, o
   return (
     <div
       ref={ref}
+      onMouseEnter={onMouseEnter}
+      onMouseLeave={onMouseLeave}
       style={{
         position: 'fixed', top: y, left: x, backgroundColor: '#fff', border: '1px solid #ddd',
         borderRadius: 6, boxShadow: '0 2px 12px rgba(0,0,0,0.15)', zIndex: 1000, minWidth: 200, padding: 6,

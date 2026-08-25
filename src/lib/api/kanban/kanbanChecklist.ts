@@ -90,3 +90,27 @@ export async function getProgressByCardIds(cardIds: string[]): Promise<Record<st
   for (const r of rows) result[r.card_id] = { done: r.done, total: r.total };
   return result;
 }
+
+export async function duplicateChecklist(sourceCardId: string, targetCardId: string): Promise<void> {
+  const items = await getItemsByCard(sourceCardId);
+
+  const roots = items.filter((i) => !i.parentItemId).sort((a, b) => a.position - b.position);
+  const childrenByParent = new Map<string, KanbanChecklistItem[]>();
+  for (const item of items) {
+    if (!item.parentItemId) continue;
+    const list = childrenByParent.get(item.parentItemId) ?? [];
+    list.push(item);
+    childrenByParent.set(item.parentItemId, list);
+  }
+  for (const list of childrenByParent.values()) list.sort((a, b) => a.position - b.position);
+
+  for (const root of roots) {
+    const newRootId = await createItem(targetCardId, root.title);
+    if (root.checked) await updateItem(newRootId, { checked: true });
+
+    for (const child of childrenByParent.get(root.id) ?? []) {
+      const newChildId = await createSubItem(targetCardId, newRootId, child.title);
+      if (child.checked) await updateItem(newChildId, { checked: true });
+    }
+  }
+}

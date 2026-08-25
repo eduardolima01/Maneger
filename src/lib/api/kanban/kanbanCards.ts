@@ -126,7 +126,7 @@ export async function duplicateCard(id: string): Promise<string> {
   return createCard({
     kanbanId: original.kanbanId,
     columnId: original.columnId,
-    cardGroupId: original.cardGroupId || "",
+    cardGroupId: original.cardGroupId ?? undefined,
     title: original.title,
     description: original.description,
     color: original.color,

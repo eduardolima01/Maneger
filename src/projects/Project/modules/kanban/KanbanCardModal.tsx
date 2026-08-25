@@ -84,6 +84,7 @@ export default function KanbanCardModal({ isOpen, onClose, card, onUpdate, onDup
 
   async function handleCreateSubKanban() {
     if (!card) return;
+    if (!card.kanbanId) return; // card sem kanban direto (ex: dentro de um grupo) não tem "kanban pai" nesse sentido
     const parentKanban = await getKanbanById(card.kanbanId);
 
     if (!parentKanban) return;
@@ -156,6 +157,28 @@ export default function KanbanCardModal({ isOpen, onClose, card, onUpdate, onDup
                 <label style={{ fontSize: 12, fontWeight: 600, color: '#666', display: 'block', marginBottom: 6 }}>Lista de tarefas</label>
                 <ChecklistSection cardId={card.id} />
               </div>
+
+              <div style={{ display: 'flex', gap: 12 }}>
+                <div style={{ flex: 1 }}>
+                  <label style={{ fontSize: 12, fontWeight: 600, color: '#666', display: 'block', marginBottom: 4 }}>Data inicial</label>
+                  <input
+                    type="date"
+                    value={card.startDate ?? ''}
+                    onChange={(e) => onUpdate(card.id, { startDate: e.target.value || null })}
+                    style={{ width: '100%', padding: 6, fontSize: 13 }}
+                  />
+                </div>
+                <div style={{ flex: 1 }}>
+                  <label style={{ fontSize: 12, fontWeight: 600, color: '#666', display: 'block', marginBottom: 4 }}>Definir data do card</label>
+                  <input
+                    type="date"
+                    value={card.dueDate ?? ''}
+                    onChange={(e) => onUpdate(card.id, { dueDate: e.target.value || null })}
+                    style={{ width: '100%', padding: 6, fontSize: 13 }}
+                  />
+                </div>
+              </div>
+
             </>
           ) : (
             <>
@@ -188,27 +211,6 @@ export default function KanbanCardModal({ isOpen, onClose, card, onUpdate, onDup
                     value={card.color ?? '#cccccc'}
                     onChange={(e) => onUpdate(card.id, { color: e.target.value })}
                     style={{ width: '100%', height: 30, padding: 0, border: '1px solid #ccc', borderRadius: 4, cursor: 'pointer' }}
-                  />
-                </div>
-              </div>
-
-              <div style={{ display: 'flex', gap: 12 }}>
-                <div style={{ flex: 1 }}>
-                  <label style={{ fontSize: 12, fontWeight: 600, color: '#666', display: 'block', marginBottom: 4 }}>Data inicial</label>
-                  <input
-                    type="date"
-                    value={card.startDate ?? ''}
-                    onChange={(e) => onUpdate(card.id, { startDate: e.target.value || null })}
-                    style={{ width: '100%', padding: 6, fontSize: 13 }}
-                  />
-                </div>
-                <div style={{ flex: 1 }}>
-                  <label style={{ fontSize: 12, fontWeight: 600, color: '#666', display: 'block', marginBottom: 4 }}>Prazo</label>
-                  <input
-                    type="date"
-                    value={card.dueDate ?? ''}
-                    onChange={(e) => onUpdate(card.id, { dueDate: e.target.value || null })}
-                    style={{ width: '100%', padding: 6, fontSize: 13 }}
                   />
                 </div>
               </div>

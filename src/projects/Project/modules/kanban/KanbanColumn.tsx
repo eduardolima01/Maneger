@@ -15,6 +15,7 @@ import type {
 import GroupBlock from './GroupBlock';
 import { clusterCardsByGroupLabel, ParsedLabel } from '@/Kanban/utils/kanbanLabels';
 import LabelGroupBlock from '@/Kanban/utils/LabelGroupBlock';
+import { DuplicateMultipleMode } from '@/Kanban/components/DuplicateMenu';
 
 interface KanbanColumnProps {
   column: ColumnType;
@@ -39,6 +40,17 @@ interface KanbanColumnProps {
   checklistProgress: Record<string, ChecklistProgress>;
   allLabels: ParsedLabel[];
   onUpdateCardLabels: (cardId: string, labels: string[]) => void;
+  onUpdateCardDueDate: (cardId: string, dueDate: string | null) => void;
+  onUpdateCardTitle: (cardId: string, title: string) => void;
+  onUpdateCardColor: (cardId: string, color: string | null) => void;
+  onDuplicateMultiple: (cardId: string, mode: DuplicateMultipleMode) => void;
+  onUpdateCoverPath: (cardId: string, path: string) => void
+
+  selectedCardIds: Set<string>;
+  onCardSelectToggle: (cardId: string) => void;
+  onBulkDelete: (cardIds: string[]) => void;
+  onBulkSetColor: (cardIds: string[], color: string | null) => void;
+  onBulkToggleLabel: (cardIds: string[], name: string, color: string, isGroup: boolean) => void;
 }
 
 export default function KanbanColumn({
@@ -59,6 +71,17 @@ export default function KanbanColumn({
   onToggleCollapsed,
   cardsWithSubKanban, onRenameGroup, onRequestDeleteGroup, onAddCardToGroup, checklistProgress,
   allLabels, onUpdateCardLabels,
+  onUpdateCardDueDate,
+  onUpdateCardTitle,
+  onUpdateCardColor,
+  selectedCardIds,
+  onCardSelectToggle,
+  onBulkDelete,
+  onBulkSetColor,
+  onBulkToggleLabel,
+  onDuplicateMultiple,
+  onUpdateCoverPath
+
 }: KanbanColumnProps) {
   const { attributes, listeners, setNodeRef: setSortableRef, transform, transition, isDragging } = useSortable({
     id: column.id,
@@ -128,12 +151,21 @@ export default function KanbanColumn({
                   onCardClick={onCardClick}
                   onCardDuplicate={onCardDuplicate}
                   onCardRequestDelete={onCardRequestDelete}
+                  selectedCardIds={selectedCardIds}
+                  onCardSelectToggle={onCardSelectToggle}
+                  onBulkDelete={onBulkDelete}
+                  onBulkSetColor={onBulkSetColor}
+                  onBulkToggleLabel={onBulkToggleLabel}
                   onRename={(name) => onRenameGroup(g.id, name)}
                   onRequestDelete={() => onRequestDeleteGroup(g.id)}
                   onAddCard={(title) => onAddCardToGroup(g.id, title)}
                   allLabels={allLabels}
                   onUpdateCardLabels={onUpdateCardLabels}
                   checklistProgress={checklistProgress}
+                  onUpdateCardDueDate={onUpdateCardDueDate}
+                  onUpdateCardTitle={onUpdateCardTitle}
+                  onUpdateCardColor={onUpdateCardColor}
+                  onDuplicateMultiple={onDuplicateMultiple}
                 />
               ))}
 
@@ -152,7 +184,16 @@ export default function KanbanColumn({
                   onCardClick={onCardClick}
                   onCardDuplicate={onCardDuplicate}
                   onCardRequestDelete={onCardRequestDelete}
+                  selectedCardIds={selectedCardIds}
+                  onCardSelectToggle={onCardSelectToggle}
+                  onBulkDelete={onBulkDelete}
+                  onBulkSetColor={onBulkSetColor}
+                  onBulkToggleLabel={onBulkToggleLabel}
                   onUpdateCardLabels={onUpdateCardLabels}
+                  onUpdateCardDueDate={onUpdateCardDueDate}
+                  onUpdateCardTitle={onUpdateCardTitle}
+                  onUpdateCardColor={onUpdateCardColor}
+                  onDuplicateMultiple={onDuplicateMultiple}
                 />
               ))}
 
@@ -166,8 +207,18 @@ export default function KanbanColumn({
                   onClick={() => onCardClick(c.id)}
                   onDuplicate={() => onCardDuplicate(c.id)}
                   onRequestDelete={() => onCardRequestDelete(c.id, c.title)}
+                  selectedCardIds={selectedCardIds}
+                  onCardSelectToggle={onCardSelectToggle}
+                  onBulkDelete={onBulkDelete}
+                  onBulkSetColor={onBulkSetColor}
+                  onBulkToggleLabel={onBulkToggleLabel}
                   allLabels={allLabels}
                   onUpdateLabels={onUpdateCardLabels}
+                  onUpdateCardDueDate={onUpdateCardDueDate}
+                  onUpdateTitle={onUpdateCardTitle}
+                  onUpdateColor={onUpdateCardColor}
+                  onDuplicateMultiple={onDuplicateMultiple}
+                  onUpdateCoverPath={onUpdateCoverPath}
                 />
               ))}
             </SortableContext>

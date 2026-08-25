@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from 'react';
+import { useMemo, useRef, useState, useEffect, useCallback } from 'react';
 import {
   DndContext, PointerSensor, useSensor, useSensors, closestCorners,
   type DragEndEvent,
@@ -13,6 +13,8 @@ import { useKanbanBoard } from '@/lib/hooks/useKanbanBoard';
 import type { Kanban } from '@/types/kanban.types';
 import { clearGroupLabels, ParsedLabel, parseLabel, setSingleGroupLabel } from '@/Kanban/utils/kanbanLabels';
 import LabelManagerModal from './LabelManagerModal';
+import Button from '@/components/layout/Button';
+import KanbanGenerateCardsModal from '@/Kanban/components/KanbanGenerateCardsModal';
 
 interface KanbanBoardProps {
   kanban: Kanban;
@@ -24,6 +26,7 @@ const EMPTY_COLUMN_WIDTH = 160;
 export default function KanbanBoard({ kanban }: KanbanBoardProps) {
 
   const [columnSettingsOpen, setColumnSettingsOpen] = useState(false);
+  const [generateModalOpen, setGenerateModalOpen] = useState(false);
   const [labelManagerOpen, setLabelManagerOpen] = useState(false);
   const [selectedCardId, setSelectedCardId] = useState<string | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<{ id: string; title: string } | null>(null);
@@ -35,6 +38,12 @@ export default function KanbanBoard({ kanban }: KanbanBoardProps) {
   const newGroupInputRef = useRef<HTMLInputElement>(null);
   const newCardInputRef = useRef<HTMLTextAreaElement>(null);
   const board = useKanbanBoard(kanban);
+  const [selectedCardIds, setSelectedCardIds] = useState<Set<string>>(new Set());
+  const [selectionBox, setSelectionBox] = useState<{ x: number; y: number; width: number; height: number } | null>(null);
+  const boardContainerRef = useRef<HTMLDivElement>(null);
+  const selectionStartRef = useRef<{ x: number; y: number } | null>(null);
+  const selectionBoxRef = useRef<{ x: number; y: number; width: number; height: number } | null>(null);
+  const [bulkDeleteConfirm, setBulkDeleteConfirm] = useState(false);
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 8 } }));
 
@@ -69,6 +78,81 @@ export default function KanbanBoard({ kanban }: KanbanBoardProps) {
   const collapsedGroupIds = new Set(board.viewPrefs.collapsedGroupIds);
   const selectedCard = selectedCardId ? board.cards.find((c) => c.id === selectedCardId) ?? null : null;
 
+  function toggleCardSelection(cardId: string) {
+    setSelectedCardIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(cardId)) next.delete(cardId); else next.add(cardId);
+      return next;
+    });
+  }
+
+  const handleSelectionMouseMove = useCallback((e: MouseEvent) => {
+    const start = selectionStartRef.current;
+    if (!start) return;
+    const box = {
+      x: Math.min(start.x, e.clientX),
+      y: Math.min(start.y, e.clientY),
+      width: Math.abs(e.clientX - start.x),
+      height: Math.abs(e.clientY - start.y),
+    };
+    selectionBoxRef.current = box;
+    setSelectionBox(box);
+  }, []);
+
+  const handleSelectionMouseUp = useCallback(() => {
+    window.removeEventListener('mousemove', handleSelectionMouseMove);
+    window.removeEventListener('mouseup', handleSelectionMouseUp);
+    const box = selectionBoxRef.current;
+    selectionStartRef.current = null;
+    selectionBoxRef.current = null;
+    setSelectionBox(null);
+    if (!box || (box.width < 4 && box.height < 4)) return; // arrasto mínimo — evita disparo em Ctrl+clique sem arrastar
+
+    const cardEls = boardContainerRef.current?.querySelectorAll<HTMLElement>('[data-kanban-card]');
+    if (!cardEls) return;
+    const boxRight = box.x + box.width;
+    const boxBottom = box.y + box.height;
+    const hitIds: string[] = [];
+    cardEls.forEach((el) => {
+      const r = el.getBoundingClientRect();
+      if (r.left < boxRight && r.right > box.x && r.top < boxBottom && r.bottom > box.y) {
+        const id = el.getAttribute('data-kanban-card');
+        if (id) hitIds.push(id);
+      }
+    });
+    if (hitIds.length === 0) return;
+    setSelectedCardIds((prev) => {
+      const next = new Set(prev);
+      for (const id of hitIds) {
+        if (next.has(id)) next.delete(id); else next.add(id);
+      }
+      return next;
+    });
+  }, [handleSelectionMouseMove]);
+
+  const handleContainerMouseDown = useCallback((e: React.MouseEvent) => {
+    if (!(e.ctrlKey || e.metaKey) || e.button !== 0) return;
+    const target = e.target as HTMLElement;
+    if (target.closest('[data-kanban-card], button, input, textarea, select')) return; // clique em card/controle já tem seu próprio handler
+    e.preventDefault();
+    selectionStartRef.current = { x: e.clientX, y: e.clientY };
+    setSelectionBox({ x: e.clientX, y: e.clientY, width: 0, height: 0 });
+    window.addEventListener('mousemove', handleSelectionMouseMove);
+    window.addEventListener('mouseup', handleSelectionMouseUp);
+  }, [handleSelectionMouseMove, handleSelectionMouseUp]);
+
+  useEffect(() => {
+    return () => {
+      window.removeEventListener('mousemove', handleSelectionMouseMove);
+      window.removeEventListener('mouseup', handleSelectionMouseUp);
+    };
+  }, [handleSelectionMouseMove, handleSelectionMouseUp]);
+  function handleCardClick(cardId: string) {
+    setSelectedCardIds(new Set()); // clique normal sai do modo seleção múltipla
+    setSelectedCardId(cardId);
+  }
+
+
   async function handleCreateGroup() {
     if (!newGroupColumnId || !newGroupName.trim()) return;
     await board.createGroup(newGroupColumnId, newGroupName.trim());
@@ -91,7 +175,7 @@ export default function KanbanBoard({ kanban }: KanbanBoardProps) {
     board.saveViewPrefs({ collapsedGroupIds: next });
   }
 
-  function handleDragEnd(event: DragEndEvent) {
+  async function handleDragEnd(event: DragEndEvent) {
     const { active, over } = event;
     if (!over) return;
 
@@ -128,7 +212,6 @@ export default function KanbanBoard({ kanban }: KanbanBoardProps) {
 
     if (activeType === 'card') {
       const cardId = activeId.replace('card:', '');
-
       const activeCard = board.cards.find((c) => c.id === cardId);
 
       // resolve pra onde estruturalmente o card vai (grupo manual ou coluna solta) e, se for o caso,
@@ -156,7 +239,6 @@ export default function KanbanBoard({ kanban }: KanbanBoardProps) {
             targetKind = 'column';
             targetScopeId = overCard.columnId;
           }
-          // se o card sobre o qual soltou já pertence a um subgrupo por etiqueta, entrar ali também herda a etiqueta
           const overGroupLabel = overCard.labels
             .map(parseLabel)
             .filter((l) => l.isGroup)
@@ -172,20 +254,61 @@ export default function KanbanBoard({ kanban }: KanbanBoardProps) {
 
       if (!targetKind || !targetScopeId) return;
 
-      if (targetKind === 'group') {
-        const cardsInGroup = (board.cardsByGroup.get(targetScopeId) ?? []).map((c) => c.id).filter((id) => id !== cardId);
-        const overIndex = overId.startsWith('card:') ? cardsInGroup.indexOf(overId.replace('card:', '')) : -1;
-        if (overIndex !== -1) cardsInGroup.splice(overIndex, 0, cardId); else cardsInGroup.push(cardId);
-        board.moveCardIntoGroup(cardId, targetScopeId, cardsInGroup);
-      } else {
-        const cardsInTarget = (board.ungroupedCardsByColumn.get(targetScopeId) ?? []).map((c) => c.id).filter((id) => id !== cardId);
-        const overIndex = overId.startsWith('card:') ? cardsInTarget.indexOf(overId.replace('card:', '')) : -1;
-        if (overIndex !== -1) cardsInTarget.splice(overIndex, 0, cardId); else cardsInTarget.push(cardId);
+      const isMultiMove = selectedCardIds.has(cardId) && selectedCardIds.size > 1;
+      if (isMultiMove) {
+        const movingIds = board.cards
+          .filter((c) => selectedCardIds.has(c.id))
+          .sort((a, b) => a.position - b.position)
+          .map((c) => c.id);
 
-        if (activeCard?.cardGroupId) {
+        const existingScopeCards = targetKind === 'group'
+          ? (board.cardsByGroup.get(targetScopeId) ?? [])
+          : (board.ungroupedCardsByColumn.get(targetScopeId) ?? []);
+        const existingIds = existingScopeCards.map((c) => c.id).filter((id) => !selectedCardIds.has(id));
+        const overIndex = overId.startsWith('card:') ? existingIds.indexOf(overId.replace('card:', '')) : -1;
+        const finalOrder = overIndex !== -1
+          ? [...existingIds.slice(0, overIndex), ...movingIds, ...existingIds.slice(overIndex)]
+          : [...existingIds, ...movingIds];
+
+        await board.bulkMoveCards(
+          movingIds,
+          targetKind === 'group' ? { kind: 'group', groupId: targetScopeId } : { kind: 'column', columnId: targetScopeId },
+          finalOrder
+        );
+
+        await Promise.all(movingIds.map((id) => {
+          const c = board.cards.find((cc) => cc.id === id);
+          if (!c) return Promise.resolve();
+          const nextLabels = targetLabel ? setSingleGroupLabel(c.labels, targetLabel.name, targetLabel.color) : clearGroupLabels(c.labels);
+          if (nextLabels.length === c.labels.length && nextLabels.every((l, i) => l === c.labels[i])) return Promise.resolve();
+          return board.updateCard(id, { labels: nextLabels });
+        }));
+        return;
+      }
+
+      // Alt segurado = duplicar em vez de mover. O card original nunca é tocado;
+      // criamos o duplicado e aplicamos nele toda a lógica de posicionamento abaixo.
+      const isDuplicating = altPressedRef.current;
+      const effectiveCardId = isDuplicating ? await board.duplicateCard(cardId) : cardId;
+
+      if (targetKind === 'group') {
+        const cardsInGroup = (board.cardsByGroup.get(targetScopeId) ?? [])
+          .map((c) => c.id)
+          .filter((id) => id !== effectiveCardId);
+        const overIndex = overId.startsWith('card:') ? cardsInGroup.indexOf(overId.replace('card:', '')) : -1;
+        if (overIndex !== -1) cardsInGroup.splice(overIndex, 0, effectiveCardId); else cardsInGroup.push(effectiveCardId);
+        board.moveCardIntoGroup(effectiveCardId, targetScopeId, cardsInGroup);
+      } else {
+        const cardsInTarget = (board.ungroupedCardsByColumn.get(targetScopeId) ?? [])
+          .map((c) => c.id)
+          .filter((id) => id !== effectiveCardId);
+        const overIndex = overId.startsWith('card:') ? cardsInTarget.indexOf(overId.replace('card:', '')) : -1;
+        if (overIndex !== -1) cardsInTarget.splice(overIndex, 0, effectiveCardId); else cardsInTarget.push(effectiveCardId);
+
+        if (!isDuplicating && activeCard?.cardGroupId) {
           board.moveCardOutOfGroup(cardId, targetScopeId, cardsInTarget);
         } else {
-          board.moveCard(cardId, targetScopeId, cardsInTarget);
+          board.moveCard(effectiveCardId, targetScopeId, cardsInTarget);
         }
       }
 
@@ -195,7 +318,7 @@ export default function KanbanBoard({ kanban }: KanbanBoardProps) {
           ? setSingleGroupLabel(activeCard.labels, targetLabel.name, targetLabel.color)
           : clearGroupLabels(activeCard.labels);
         const changed = nextLabels.length !== activeCard.labels.length || nextLabels.some((l, i) => l !== activeCard.labels[i]);
-        if (changed) board.updateCard(cardId, { labels: nextLabels });
+        if (changed) board.updateCard(effectiveCardId, { labels: nextLabels });
       }
     }
   }
@@ -233,25 +356,53 @@ export default function KanbanBoard({ kanban }: KanbanBoardProps) {
     setNewCardTitle('');
     newCardInputRef.current?.focus();
   }
+  const altPressedRef = useRef(false);
+
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => { if (e.key === 'Alt') altPressedRef.current = true; };
+    const onKeyUp = (e: KeyboardEvent) => { if (e.key === 'Alt') altPressedRef.current = false; };
+    window.addEventListener('keydown', onKeyDown);
+    window.addEventListener('keyup', onKeyUp);
+    return () => {
+      window.removeEventListener('keydown', onKeyDown);
+      window.removeEventListener('keyup', onKeyUp);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (selectedCardIds.size === 0) return;
+    function onEscape(e: KeyboardEvent) { if (e.key === 'Escape') setSelectedCardIds(new Set()); }
+    window.addEventListener('keydown', onEscape);
+    return () => window.removeEventListener('keydown', onEscape);
+  }, [selectedCardIds.size]);
 
   return (
     <div>
-      <KanbanToolbar
-        search={board.search}
-        onSearchChange={board.setSearch}
-        filters={board.filters}
-        onFiltersChange={board.setFilters}
-        filtersActive={board.filtersActive}
-        availableLabels={allLabels}
-        density={board.viewPrefs.density}
-        onDensityChange={(density) => board.saveViewPrefs({ density })}
-        onOpenColumnSettings={() => setColumnSettingsOpen(true)}
-        onOpenLabelManager={() => setLabelManagerOpen(true)}
-      />
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+        <div style={{ flex: 1 }}>
+          <KanbanToolbar
+            search={board.search}
+            onSearchChange={board.setSearch}
+            filters={board.filters}
+            onFiltersChange={board.setFilters}
+            filtersActive={board.filtersActive}
+            availableLabels={allLabels}
+            density={board.viewPrefs.density}
+            onDensityChange={(density) => board.saveViewPrefs({ density })}
+            onOpenColumnSettings={() => setColumnSettingsOpen(true)}
+            onOpenLabelManager={() => setLabelManagerOpen(true)}
+          />
+        </div>
+        <Button variant="secondary" onClick={() => setGenerateModalOpen(true)}>+ Gerar cards</Button>
+      </div>
 
       <DndContext sensors={sensors} collisionDetection={closestCorners} onDragEnd={handleDragEnd}>
         <SortableContext items={visibleColumns.map((c) => c.id)} strategy={horizontalListSortingStrategy}>
-          <div style={{ display: 'flex', gap: 12, overflowX: 'auto', paddingBottom: 8, alignItems: 'stretch', minHeight: 400 }}>
+          <div
+            ref={boardContainerRef}
+            onMouseDown={handleContainerMouseDown}
+            style={{ display: 'flex', gap: 12, overflowX: 'auto', paddingBottom: 8, alignItems: 'stretch', minHeight: 400 }}
+          >
             {visibleColumns.map((col) => (
               <div key={col.id} style={{ display: 'flex', flexDirection: 'column' }}>
                 {(() => {
@@ -272,7 +423,6 @@ export default function KanbanBoard({ kanban }: KanbanBoardProps) {
                       width={resolvedWidth}
                       collapsed={collapsedIds.has(col.id)}
                       onToggleCollapsed={() => toggleColumnCollapsed(col.id)}
-                      onCardClick={(cardId) => setSelectedCardId(cardId)}
                       onRename={(name) => board.updateColumn(col.id, { name })}
                       onColumnMenu={() => setColumnSettingsOpen(true)}
                       cardsWithSubKanban={board.cardsWithSubKanban}
@@ -284,6 +434,18 @@ export default function KanbanBoard({ kanban }: KanbanBoardProps) {
                       onAddCardToGroup={board.createCardInGroup}
                       allLabels={allParsedLabels}
                       onUpdateCardLabels={(id, labels) => board.updateCard(id, { labels })}
+                      onUpdateCardDueDate={(id, dueDate) => board.updateCard(id, { dueDate })}
+                      onUpdateCardTitle={(id, title) => board.updateCard(id, { title })}
+                      onUpdateCardColor={(id, color) => board.updateCard(id, { color })}
+                      onDuplicateMultiple={board.duplicateCardMultiple}
+                      onUpdateCoverPath={(id, path) => board.updateCard(id, { coverPath: path })}
+
+                      onCardClick={handleCardClick}
+                      selectedCardIds={selectedCardIds}
+                      onCardSelectToggle={toggleCardSelection}
+                      onBulkDelete={() => setBulkDeleteConfirm(true)}
+                      onBulkSetColor={board.bulkSetColor}
+                      onBulkToggleLabel={board.bulkToggleLabel}
                     />
                   );
                 })()}
@@ -387,11 +549,29 @@ export default function KanbanBoard({ kanban }: KanbanBoardProps) {
         </SortableContext>
       </DndContext>
 
+      {selectionBox && (
+        <div
+          style={{
+            position: 'fixed', left: selectionBox.x, top: selectionBox.y,
+            width: selectionBox.width, height: selectionBox.height,
+            backgroundColor: 'rgba(26, 115, 232, 0.15)', border: '1px solid #1a73e8',
+            zIndex: 999, pointerEvents: 'none',
+          }}
+        />
+      )}
+
       {visibleColumns.length === 0 && !board.loading && (
         <p style={{ color: '#999', fontSize: 13, textAlign: 'center', padding: 24 }}>
           Nenhuma coluna visível. Abra "⚙ Colunas" pra criar ou mostrar alguma.
         </p>
       )}
+
+      <KanbanGenerateCardsModal
+        isOpen={generateModalOpen}
+        onClose={() => setGenerateModalOpen(false)}
+        columns={visibleColumns}
+        onGenerate={board.createCardsBatch}
+      />
 
       <KanbanColumnSettingsModal
         isOpen={columnSettingsOpen}
@@ -422,6 +602,18 @@ export default function KanbanBoard({ kanban }: KanbanBoardProps) {
         onDuplicate={board.duplicateCard}
         onArchive={board.archiveCard}
         onRequestDelete={(id, title) => setDeleteTarget({ id, title })}
+      />
+
+      <ConfirmDialog
+        isOpen={bulkDeleteConfirm}
+        title={`Excluir ${selectedCardIds.size} cards?`}
+        message="Esta ação não pode ser desfeita."
+        onConfirm={() => {
+          board.bulkDeleteCards(Array.from(selectedCardIds));
+          setSelectedCardIds(new Set());
+          setBulkDeleteConfirm(false);
+        }}
+        onCancel={() => setBulkDeleteConfirm(false)}
       />
 
       <ConfirmDialog

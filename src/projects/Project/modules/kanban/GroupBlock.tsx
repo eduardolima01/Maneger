@@ -7,6 +7,7 @@ import KanbanCard from './KanbanCard';
 import type { KanbanCardGroup, KanbanCard as CardType, KanbanDensity, ChecklistProgress } from '@/types/kanban.types';
 import { clusterCardsByGroupLabel, ParsedLabel } from '@/Kanban/utils/kanbanLabels';
 import LabelGroupBlock from '@/Kanban/utils/LabelGroupBlock';
+import { DuplicateMultipleMode } from '@/Kanban/components/DuplicateMenu';
 
 interface GroupBlockProps {
   group: KanbanCardGroup;
@@ -24,11 +25,30 @@ interface GroupBlockProps {
   onRequestDelete: () => void;
   onAddCard: (title: string) => void;
   onUpdateCardLabels: (cardId: string, labels: string[]) => void;
+  onUpdateCardDueDate: (cardId: string, dueDate: string | null) => void;
+  onUpdateCardTitle: (cardId: string, title: string) => void;
+  onUpdateCardColor: (cardId: string, color: string | null) => void;
+  onDuplicateMultiple: (cardId: string, mode: DuplicateMultipleMode) => void;
+
+  selectedCardIds: Set<string>;
+  onCardSelectToggle: (cardId: string) => void;
+  onBulkDelete: (cardIds: string[]) => void;
+  onBulkSetColor: (cardIds: string[], color: string | null) => void;
+  onBulkToggleLabel: (cardIds: string[], name: string, color: string, isGroup: boolean) => void;
+  onUpdateCoverPath: (cardId: string, path: string) => void
 }
 
 export default function GroupBlock({
   group, cards, density, cardsWithSubKanban, collapsed, onToggleCollapsed, onCardClick, onCardDuplicate, onCardRequestDelete, onRename, onRequestDelete,
   onAddCard, allLabels, onUpdateCardLabels, checklistProgress,
+  onUpdateCardDueDate, onUpdateCardTitle, onUpdateCardColor,
+  selectedCardIds,
+  onCardSelectToggle,
+  onBulkDelete,
+  onBulkSetColor,
+  onBulkToggleLabel,
+  onDuplicateMultiple,
+  onUpdateCoverPath
 }: GroupBlockProps) {
   const { attributes, listeners, setNodeRef: setSortableRef, transform, transition, isDragging } = useSortable({
     id: `group:${group.id}`,
@@ -82,7 +102,7 @@ export default function GroupBlock({
           <button onClick={onRequestDelete} title="Desagrupar" style={{ border: 'none', background: 'none', cursor: 'pointer', color: '#c62828', fontSize: 11 }}>✕</button>
         </div>
 
-        <div ref={setDroppableRef} style={{ minHeight: 30 }}>
+        <div ref={setDroppableRef} style={{ minHeight: 30, maxHeight: 320, overflowY: 'auto' }}>
 
           {!collapsed && (
             <SortableContext items={cards.map((c) => `card:${c.id}`)} strategy={verticalListSortingStrategy}>
@@ -101,7 +121,17 @@ export default function GroupBlock({
                   onCardClick={onCardClick}
                   onCardDuplicate={onCardDuplicate}
                   onCardRequestDelete={onCardRequestDelete}
+
+                  onDuplicateMultiple={onDuplicateMultiple}
+                  selectedCardIds={selectedCardIds}
+                  onCardSelectToggle={onCardSelectToggle}
+                  onBulkDelete={onBulkDelete}
                   onUpdateCardLabels={onUpdateCardLabels}
+                  onBulkSetColor={onBulkSetColor}
+                  onBulkToggleLabel={onBulkToggleLabel}
+                  onUpdateCardDueDate={onUpdateCardDueDate}
+                  onUpdateCardTitle={onUpdateCardTitle}
+                  onUpdateCardColor={onUpdateCardColor}
                 />
               ))}
 
@@ -117,6 +147,16 @@ export default function GroupBlock({
                   onRequestDelete={() => onCardRequestDelete(c.id, c.title)}
                   allLabels={allLabels}
                   onUpdateLabels={onUpdateCardLabels}
+                  onUpdateCardDueDate={onUpdateCardDueDate}
+                  onUpdateTitle={onUpdateCardTitle}
+                  onUpdateColor={onUpdateCardColor}
+                  selectedCardIds={selectedCardIds}
+                  onCardSelectToggle={onCardSelectToggle}
+                  onBulkDelete={onBulkDelete}
+                  onBulkSetColor={onBulkSetColor}
+                  onBulkToggleLabel={onBulkToggleLabel}
+                  onDuplicateMultiple={onDuplicateMultiple}
+                  onUpdateCoverPath={onUpdateCoverPath}
                 />
               ))}
             </SortableContext>

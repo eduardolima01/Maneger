@@ -5,9 +5,15 @@ import { PRIORITY_LABELS, PRIORITY_COLORS } from '@/types/kanban.types';
 import type { KanbanCard as CardType, ChecklistProgress, KanbanDensity } from '@/types/kanban.types';
 import ContextMenu from '@/components/ui/ContextMenu';
 import CardLabelMenu from './CardLabelMenu';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { ParsedLabel, parseLabel, serializeLabel } from '@/Kanban/utils/kanbanLabels';
-
+import DueDateMenu from '@/Kanban/components/DueDateMenu';
+import CardColorMenu from '@/Kanban/components/CardColorMenu';
+import DuplicateMenu, { DuplicateMultipleMode } from '@/Kanban/components/DuplicateMenu';
+import { extensionFromMime } from '@/Canvas/hooks/useCanvasClipboard';
+import ImagePasteConfirmModal from '@/components/ui/ImagePasteConfirmModal';
+import Toast from '@/components/ui/Toast';
+import { saveCardImageBytes } from '@/Kanban/api/kanbanCardAssets';
 
 interface KanbanCardProps {
   card: CardType;
@@ -19,12 +25,55 @@ interface KanbanCardProps {
   onDuplicate: () => void;
   onRequestDelete: () => void;
   onUpdateLabels: (cardId: string, labels: string[]) => void;
+  onUpdateCardDueDate: (cardId: string, title: string) => void;
+  onUpdateTitle: (cardId: string, title: string) => void;
+  onUpdateColor: (cardId: string, color: string | null) => void;
+  onDuplicateMultiple: (cardId: string, mode: DuplicateMultipleMode) => void;
+  onUpdateCoverPath: (cardId: string, path: string) => void;
+
+  selectedCardIds: Set<string>;
+  onCardSelectToggle: (cardId: string) => void;
+  onBulkDelete: (cardIds: string[]) => void;
+  onBulkSetColor: (cardIds: string[], color: string | null) => void;
+  onBulkToggleLabel: (cardIds: string[], name: string, color: string, isGroup: boolean) => void;
+}
+
+function getDueDateInfo(dueDate: string): { label: string; color: string } {
+  // dueDate vem de <input type="date"> como "YYYY-MM-DD". Parsear com T00:00:00
+  // força horário local — sem isso, new Date('2026-08-25') é interpretado como
+  // UTC meia-noite e pode virar o dia anterior/seguinte dependendo do fuso.
+  const due = new Date(`${dueDate}T00:00:00`);
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const diffDays = Math.round((due.getTime() - today.getTime()) / 86400000);
+
+  if (diffDays < 0) {
+    const days = Math.abs(diffDays);
+    return { label: `${days} dia${days !== 1 ? 's' : ''} atrás`, color: '#e65100' };
+  }
+  if (diffDays === 0) return { label: 'hoje', color: '#e65100' };
+  if (diffDays <= 3) return { label: `${diffDays} dia${diffDays !== 1 ? 's' : ''}`, color: '#e65100' };
+  return { label: `${diffDays} dias`, color: '#666' };
 }
 
 export default function KanbanCard({
   card, density, hasSubKanban, onClick, onDuplicate, onRequestDelete, checklistProgress,
-  allLabels, onUpdateLabels,
+  allLabels,
+  onUpdateLabels,
+  onUpdateTitle,
+  onUpdateColor,
+  selectedCardIds,
+  onCardSelectToggle,
+  onBulkDelete,
+  onBulkSetColor,
+  onBulkToggleLabel,
+  onDuplicateMultiple,
+  onUpdateCoverPath
 }: KanbanCardProps) {
+
+  const selected = selectedCardIds.has(card.id);
+  const isBulkTarget = selected && selectedCardIds.size > 1;
+
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: `card:${card.id}`,
     data: { type: 'card' },
@@ -35,6 +84,45 @@ export default function KanbanCard({
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null);
   const [labelMenu, setLabelMenu] = useState<{ x: number; y: number } | null>(null);
   const [hovering, setHovering] = useState(false);
+  const [dueDateMenu, setDueDateMenu] = useState<{ x: number; y: number } | null>(null);
+  const [colorMenu, setColorMenu] = useState<{ x: number; y: number } | null>(null);
+
+  const [duplicateMenu, setDuplicateMenu] = useState<{ x: number; y: number } | null>(null);
+  const [pasteConfirm, setPasteConfirm] = useState<{ blob: Blob; ext: string; previewUrl: string } | null>(null);
+  const [pasteError, setPasteError] = useState<string | null>(null);
+
+  const [editingTitle, setEditingTitle] = useState(false);
+  const [titleDraft, setTitleDraft] = useState(card.title);
+  const [titleHover, setTitleHover] = useState(false);
+
+  const cornerHoverTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const CORNER_HOVER_DELAY = 300; // levemente maior que o dos itens — é fácil passar o mouse ali sem querer
+
+  const closeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const CLOSE_DELAY = 500;
+
+  function saveTitle() {
+    setEditingTitle(false);
+    const trimmed = titleDraft.trim();
+    if (trimmed && trimmed !== card.title) onUpdateTitle(card.id, trimmed);
+    else setTitleDraft(card.title); // reverte se veio vazio ou sem mudança
+  }
+
+  function scheduleClose() {
+    if (closeTimerRef.current) clearTimeout(closeTimerRef.current);
+    closeTimerRef.current = setTimeout(() => {
+      setContextMenu(null);
+      setLabelMenu(null);
+      setDueDateMenu(null);
+      setDuplicateMenu(null);
+      setColorMenu(null);
+      setDuplicateMenu(null);
+    }, CLOSE_DELAY);
+  }
+
+  function cancelClose() {
+    if (closeTimerRef.current) clearTimeout(closeTimerRef.current);
+  }
 
   useEffect(() => {
     if (!hovering) return;
@@ -44,16 +132,80 @@ export default function KanbanCard({
         onRequestDelete();
       }
     }
+    function handlePaste(e: ClipboardEvent) {
+      if (contextMenu || labelMenu || dueDateMenu || colorMenu || duplicateMenu || pasteConfirm) return;
+      const items = e.clipboardData?.items;
+      if (!items) return;
+      const imageItem = Array.from(items).find((i) => i.type.startsWith('image/'));
+      if (imageItem) {
+        e.preventDefault();
+        const blob = imageItem.getAsFile();
+        if (!blob) return;
+        const previewUrl = URL.createObjectURL(blob);
+        setPasteConfirm({ blob, ext: extensionFromMime(imageItem.type), previewUrl });
+        return;
+      }
+      // colou algo, mas não é imagem (texto, arquivo não-imagem, etc.)
+      if (items.length > 0) {
+        e.preventDefault();
+        setPasteError('Isso não é uma imagem.');
+      }
+    }
     document.addEventListener('keydown', handleKeyDown);
-    return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [hovering, contextMenu, labelMenu, onRequestDelete]);
+    document.addEventListener('paste', handlePaste);
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown);
+      document.removeEventListener('paste', handlePaste);
+      if (cornerHoverTimer.current) clearTimeout(cornerHoverTimer.current);
+      if (closeTimerRef.current) clearTimeout(closeTimerRef.current);
+    };
+  }, [hovering, contextMenu, labelMenu, dueDateMenu, colorMenu, duplicateMenu, pasteConfirm, onRequestDelete]);
 
+  async function confirmPasteImage() {
+    if (!pasteConfirm) return;
+    const { blob, ext, previewUrl } = pasteConfirm;
+    setPasteConfirm(null);
+    URL.revokeObjectURL(previewUrl);
+    const buf = await blob.arrayBuffer();
+    const path = await saveCardImageBytes(new Uint8Array(buf), ext);
+    onUpdateCoverPath(card.id, path);
+  }
+
+  function cancelPasteImage() {
+    if (pasteConfirm) URL.revokeObjectURL(pasteConfirm.previewUrl);
+    setPasteConfirm(null);
+  }
+  function openLabelMenu(pos: { x: number; y: number }) {
+    setDueDateMenu(null);
+    setColorMenu(null);
+    setLabelMenu(pos);
+
+  }
+
+  function openDueDateMenu(pos: { x: number; y: number }) {
+    setLabelMenu(null);
+    setColorMenu(null);
+    setDueDateMenu(pos);
+  }
   function handleContextMenu(e: React.MouseEvent) {
     e.preventDefault();
     e.stopPropagation();
     setContextMenu({ x: e.clientX, y: e.clientY });
   }
 
+  function openColorMenu(pos: { x: number; y: number }) {
+    setLabelMenu(null);
+    setDueDateMenu(null);
+    setColorMenu(pos);
+  }
+
+
+  function openDuplicateMenu(pos: { x: number; y: number }) {
+    setLabelMenu(null);
+    setDueDateMenu(null);
+    setColorMenu(null);
+    setDuplicateMenu(pos);
+  }
   function handleToggleLabel(name: string, color: string, isGroup: boolean) {
     const hasIt = card.labels.some((l) => parseLabel(l).name === name);
     const nextLabels = hasIt
@@ -73,16 +225,23 @@ export default function KanbanCard({
         ref={setNodeRef}
         {...attributes}
         {...listeners}
-        onClick={onClick}
+        data-kanban-card={card.id}
+        onClick={(e) => {
+          if (e.ctrlKey || e.metaKey) { e.stopPropagation(); onCardSelectToggle(card.id); return; }
+          onClick();
+        }}
         onContextMenu={handleContextMenu}
-        onMouseEnter={() => setHovering(true)}
-        onMouseLeave={() => setHovering(false)}
+        onMouseEnter={() => { setHovering(true); cancelClose(); }}
+        onMouseLeave={() => { setHovering(false); scheduleClose(); }}
         style={{
+          position: 'relative',
           transform: CSS.Transform.toString(transform),
           transition,
           opacity: isDragging ? 0.4 : 1,
           border: card.color ? `1px solid ${card.color}` : '1px solid #e5e7eb',
           borderLeft: card.color ? `4px solid ${card.color}` : undefined,
+          outline: selected ? '2px solid #1a73e8' : 'none',
+          outlineOffset: selected ? -2 : 0,
           borderRadius: 6,
           padding: compact ? 6 : 10,
           marginBottom: 8,
@@ -90,12 +249,69 @@ export default function KanbanCard({
           cursor: 'grab',
         }}
       >
+        <div
+          onMouseEnter={(e) => {
+            cancelClose();
+            const rect = e.currentTarget.getBoundingClientRect();
+            cornerHoverTimer.current = setTimeout(() => {
+              setContextMenu({ x: rect.right, y: rect.top });
+            }, CORNER_HOVER_DELAY);
+          }}
+          onMouseLeave={() => {
+            if (cornerHoverTimer.current) clearTimeout(cornerHoverTimer.current);
+          }}
+          onPointerDown={(e) => e.stopPropagation()}
+          onClick={(e) => e.stopPropagation()}
+          style={{
+            position: 'absolute', top: 0, right: 0, width: 20, height: 20,
+            cursor: 'pointer', zIndex: 1,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+          }}
+        >
+          {hovering && <span style={{ fontSize: 11, color: '#bbb' }}>⋮</span>}
+        </div>
         {!compact && card.coverPath && (
           <img src={convertFileSrc(card.coverPath)} style={{ width: '100%', height: 80, objectFit: 'cover', borderRadius: 4, marginBottom: 6 }} />
         )}
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginBottom: compact ? 0 : 4 }}>
-          <span style={{ fontSize: compact ? 12 : 13, fontWeight: 500, flex: 1 }}>{card.title}</span>
+        <div
+          className="w-fit"
+          style={{ display: 'flex', alignItems: 'center', gap: 4, marginBottom: compact ? 0 : 4 }}
+        >
+          {editingTitle ? (
+            <input
+              autoFocus
+              value={titleDraft}
+              onChange={(e) => setTitleDraft(e.target.value)}
+              onBlur={saveTitle}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
+                if (e.key === 'Escape') { setTitleDraft(card.title); setEditingTitle(false); }
+              }}
+              onClick={(e) => e.stopPropagation()}
+              onPointerDown={(e) => e.stopPropagation()}
+              style={{
+                fontSize: compact ? 12 : 13, fontWeight: 500, flex: 1,
+                border: 'none', outline: '1px solid #1a73e8', borderRadius: 3, padding: '0 2px',
+                background: '#fff', fontFamily: 'inherit',
+              }}
+            />
+          ) : (
+            <span
+              onClick={(e) => { e.stopPropagation(); setTitleDraft(card.title); setEditingTitle(true); }}
+              onPointerDown={(e) => e.stopPropagation()}
+              onMouseEnter={() => setTitleHover(true)}
+              onMouseLeave={() => setTitleHover(false)}
+              className="w-fit"
+              style={{
+                fontSize: compact ? 12 : 13, fontWeight: 500, flex: 1,
+                textDecoration: titleHover ? 'underline' : 'none',
+                cursor: 'text',
+              }}
+            >
+              {card.title}
+            </span>
+          )}
           {hasSubKanban && (
             <span title="Tem sub-kanban" style={{ fontSize: 11 }}>📋</span>
           )}
@@ -130,7 +346,10 @@ export default function KanbanCard({
               </span>
             )}
 
-            {card.dueDate && <span style={{ color: '#666' }}>📅 {card.dueDate}</span>}
+            {card.dueDate && (() => {
+              const info = getDueDateInfo(card.dueDate);
+              return <span style={{ color: info.color, fontWeight: info.color === '#666' ? 400 : 600 }}>📅 {info.label}</span>;
+            })()}
           </div>
         )}
       </div>
@@ -140,11 +359,47 @@ export default function KanbanCard({
           x={contextMenu.x}
           y={contextMenu.y}
           onClose={() => setContextMenu(null)}
-          items={[
-            { label: '🏷 Etiquetas', onClick: () => setLabelMenu({ x: contextMenu.x, y: contextMenu.y }) },
-            { label: '⧉ Duplicar', onClick: onDuplicate },
-            { label: '🗑 Excluir', onClick: onRequestDelete, danger: true },
-          ]}
+          onMouseEnter={cancelClose} onMouseLeave={scheduleClose}
+          items={
+            isBulkTarget
+              ? [
+                { label: `${selectedCardIds.size} cards selecionados`, onClick: () => { }, disabled: true },
+                {
+                  label: '🎨 Cor (todos)',
+                  onClick: () => openColorMenu({ x: contextMenu.x, y: contextMenu.y }),
+                  onHoverStart: (rect) => openColorMenu({ x: rect.right + 4, y: rect.top }),
+                },
+                {
+                  label: '🏷 Etiquetas (todos)',
+                  onClick: () => openLabelMenu({ x: contextMenu.x, y: contextMenu.y }),
+                  onHoverStart: (rect) => openLabelMenu({ x: rect.right + 4, y: rect.top }),
+                },
+                { label: '🗑 Excluir todos', onClick: () => onBulkDelete(Array.from(selectedCardIds)), danger: true },
+              ]
+              : [
+                {
+                  label: card.dueDate ? `📅 ${getDueDateInfo(card.dueDate).label}` : '📅 Definir data do card',
+                  onClick: () => openDueDateMenu({ x: contextMenu.x, y: contextMenu.y }),
+                  onHoverStart: (rect) => openDueDateMenu({ x: rect.right + 4, y: rect.top }),
+                },
+                {
+                  label: '🏷 Etiquetas',
+                  onClick: () => openLabelMenu({ x: contextMenu.x, y: contextMenu.y }),
+                  onHoverStart: (rect) => openLabelMenu({ x: rect.right + 4, y: rect.top }),
+                },
+                {
+                  label: '🎨 Cor',
+                  onClick: () => openColorMenu({ x: contextMenu.x, y: contextMenu.y }),
+                  onHoverStart: (rect) => openColorMenu({ x: rect.right + 4, y: rect.top }),
+                },
+                {
+                  label: '⧉ Duplicar',
+                  onClick: onDuplicate,
+                  onHoverStart: (rect) => openDuplicateMenu({ x: rect.right + 4, y: rect.top }),
+                },
+                { label: '🗑 Excluir', onClick: onRequestDelete, danger: true },
+              ]
+          }
         />
       )}
 
@@ -154,10 +409,60 @@ export default function KanbanCard({
           y={labelMenu.y}
           cardLabels={card.labels}
           allLabels={allLabels}
-          onToggle={handleToggleLabel}
-          onCreate={handleCreateLabel}
+          onToggle={(name, color, isGroup) => isBulkTarget ? onBulkToggleLabel(Array.from(selectedCardIds), name, color, isGroup) : handleToggleLabel(name, color, isGroup)}
+          onCreate={(name, color, isGroup) => isBulkTarget ? onBulkToggleLabel(Array.from(selectedCardIds), name, color, isGroup) : handleCreateLabel(name, color, isGroup)}
           onClose={() => setLabelMenu(null)}
+          onMouseEnter={cancelClose} onMouseLeave={scheduleClose}
         />
+      )}
+
+      {dueDateMenu && (
+        <DueDateMenu
+          x={dueDateMenu.x}
+          y={dueDateMenu.y}
+          value={card.dueDate}
+          onSave={(value) => isBulkTarget
+            ? onBulkSetColor(Array.from(selectedCardIds), value)
+            : onUpdateColor(card.id, value)}
+          onClose={() => setDueDateMenu(null)}
+          onMouseEnter={cancelClose} onMouseLeave={scheduleClose}
+        />
+      )}
+
+      {colorMenu && (
+        <CardColorMenu
+          x={colorMenu.x}
+          y={colorMenu.y}
+          value={card.color}
+          onSave={(value) => onUpdateColor(card.id, value)}
+          onClose={() => setColorMenu(null)}
+          onMouseEnter={cancelClose}
+          onMouseLeave={scheduleClose}
+        />
+      )}
+
+      {duplicateMenu && (
+        <DuplicateMenu
+          x={duplicateMenu.x}
+          y={duplicateMenu.y}
+          onDuplicateOnce={onDuplicate}
+          onDuplicateMultiple={(mode) => onDuplicateMultiple(card.id, mode)}
+          onClose={() => setDuplicateMenu(null)}
+          onMouseEnter={cancelClose}
+          onMouseLeave={scheduleClose}
+        />
+      )}
+
+      {pasteConfirm && (
+        <ImagePasteConfirmModal
+          previewUrl={pasteConfirm.previewUrl}
+          onConfirm={confirmPasteImage}
+          onCancel={cancelPasteImage}
+        />
+      )}
+
+      {pasteError && (
+        <Toast message={pasteError} variant="error" onDismiss={() => setPasteError(null)} />
       )}
     </>
   );

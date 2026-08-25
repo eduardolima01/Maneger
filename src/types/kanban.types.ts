@@ -94,8 +94,7 @@ export interface KanbanColumn {
 
 export interface CreateKanbanInput {
   projectId: string;
-  kanbanId: string;
-  columnId: string;
+  parentCardId?: string | null;
   name: string;
   description?: string | null;
   color?: string | null;

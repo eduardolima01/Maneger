@@ -9,7 +9,7 @@ interface UseCanvasClipboardParams {
   onAddImage: (x: number, y: number, src: string) => void;
 }
 
-function extensionFromMime(mime: string): string {
+export function extensionFromMime(mime: string): string {
   const map: Record<string, string> = {
     'image/png': 'png', 'image/jpeg': 'jpg', 'image/jpg': 'jpg',
     'image/webp': 'webp', 'image/gif': 'gif',

@@ -4,6 +4,8 @@ export interface ContextMenuItem {
   label: string;
   onClick: () => void;
   danger?: boolean;
+  disabled?: boolean;
+  onHoverStart?: (rect: DOMRect) => void;
 }
 
 interface ContextMenuProps {
@@ -11,10 +13,16 @@ interface ContextMenuProps {
   y: number;
   items: ContextMenuItem[];
   onClose: () => void;
+  onMouseEnter?: () => void;
+  onMouseLeave?: () => void;
 }
 
-export default function ContextMenu({ x, y, items, onClose }: ContextMenuProps) {
+const HOVER_DELAY = 250;
+
+export default function ContextMenu({ x, y, items, onClose, onMouseEnter, onMouseLeave }: ContextMenuProps) {
+
   const ref = useRef<HTMLDivElement>(null);
+  const hoverTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     function handleClickOutside(e: MouseEvent) {
@@ -28,12 +36,15 @@ export default function ContextMenu({ x, y, items, onClose }: ContextMenuProps) 
     return () => {
       document.removeEventListener('mousedown', handleClickOutside);
       document.removeEventListener('keydown', handleEscape);
+      if (hoverTimerRef.current) clearTimeout(hoverTimerRef.current);
     };
   }, [onClose]);
 
   return (
     <div
       ref={ref}
+      onMouseEnter={onMouseEnter}
+      onMouseLeave={onMouseLeave}
       style={{
         position: 'fixed',
         top: y,
@@ -50,14 +61,23 @@ export default function ContextMenu({ x, y, items, onClose }: ContextMenuProps) 
       {items.map((item) => (
         <button
           key={item.label}
-          onClick={() => { item.onClick(); onClose(); }}
+          onClick={() => { if (item.disabled) return; item.onClick(); onClose(); }}
           style={{
             display: 'block', width: '100%', textAlign: 'left', padding: '8px 12px', fontSize: 13,
-            border: 'none', background: 'none', cursor: 'pointer', borderRadius: 4,
-            color: item.danger ? '#c62828' : '#000',
+            border: 'none', background: 'none', cursor: item.disabled ? 'default' : 'pointer', borderRadius: 4,
+            color: item.disabled ? '#999' : item.danger ? '#c62828' : '#000',
           }}
-          onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = '#f5f5f5')}
-          onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.backgroundColor = '#f5f5f5';
+            if (!item.onHoverStart) return;
+            const rect = e.currentTarget.getBoundingClientRect();
+            if (hoverTimerRef.current) clearTimeout(hoverTimerRef.current);
+            hoverTimerRef.current = setTimeout(() => item.onHoverStart!(rect), HOVER_DELAY);
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.backgroundColor = 'transparent';
+            if (hoverTimerRef.current) clearTimeout(hoverTimerRef.current);
+          }}
         >
           {item.label}
         </button>
