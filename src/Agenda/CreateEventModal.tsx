@@ -5,8 +5,8 @@ import type { ProjectType } from '../types/project.types';
 import { addDays, startOfDay, toLocalISO, formatDuration } from '../lib/utils/date';
 import { Event } from '@/types/event.types';
 import { ProjectFullView } from '@/Projects/Project/ProjectFullView';
-import ProjectSearchSelect from '@/Projects/components/ProjectSearchSelect';
 import TimePicker from '@/components/ui/TimePicker';
+import AgendaProjectSelect from './components/AgendaProjectSelect';
 
 type EditorTab = 'event' | 'project';
 
@@ -203,7 +203,7 @@ export default function CreateEventModal({
             </div>
 
             <div style={{ marginBottom: 16 }}>
-              <ProjectSearchSelect
+              <AgendaProjectSelect
                 value={projectId}
                 onChange={(id, project) => { setProjectId(id); setSelectedProject(project); }}
               />

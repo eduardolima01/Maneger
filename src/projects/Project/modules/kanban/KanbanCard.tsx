@@ -14,6 +14,10 @@ import { extensionFromMime } from '@/Canvas/hooks/useCanvasClipboard';
 import ImagePasteConfirmModal from '@/components/ui/ImagePasteConfirmModal';
 import Toast from '@/components/ui/Toast';
 import { saveCardImageBytes } from '@/Kanban/api/kanbanCardAssets';
+import CoverZoomModal from '@/components/layout/CoverZoomModal';
+import CardTimerPopup from '@/Kanban/Timer/CardTimerPopup';
+import { useGlobalCardTimer } from '@/Kanban/Timer/store/cardTimerStore';
+import { getCardTimerSessions } from '@/Kanban/Timer/cardTimer';
 
 interface KanbanCardProps {
   card: CardType;
@@ -30,6 +34,7 @@ interface KanbanCardProps {
   onUpdateColor: (cardId: string, color: string | null) => void;
   onDuplicateMultiple: (cardId: string, mode: DuplicateMultipleMode) => void;
   onUpdateCoverPath: (cardId: string, path: string) => void;
+  projectId: string;
 
   selectedCardIds: Set<string>;
   onCardSelectToggle: (cardId: string) => void;
@@ -68,8 +73,27 @@ export default function KanbanCard({
   onBulkSetColor,
   onBulkToggleLabel,
   onDuplicateMultiple,
-  onUpdateCoverPath
+  onUpdateCoverPath,
+  projectId
 }: KanbanCardProps) {
+
+  const globalTimer = useGlobalCardTimer();
+  const hasOpenTimer = globalTimer.activeCardId === card.id;
+  const [savedTimerSeconds, setSavedTimerSeconds] = useState(0);
+
+  useEffect(() => {
+    getCardTimerSessions(projectId, card.id).then((sessions) => {
+      setSavedTimerSeconds(sessions.reduce((sum, s) => sum + s.durationSeconds, 0));
+    });
+  }, [projectId, card.id, globalTimer.running]); // recarrega quando este (ou qualquer) timer pausa/finaliza — sessão nova pode ter sido salva
+
+  const displayedTimerSeconds = savedTimerSeconds + (hasOpenTimer ? globalTimer.elapsedSeconds : 0);
+
+  function formatCardTimerTotal(totalSeconds: number): string {
+    const h = Math.floor(totalSeconds / 3600);
+    const m = Math.floor((totalSeconds % 3600) / 60);
+    return h > 0 ? `${h}h${String(m).padStart(2, '0')}` : `${m}min`;
+  }
 
   const selected = selectedCardIds.has(card.id);
   const isBulkTarget = selected && selectedCardIds.size > 1;
@@ -90,6 +114,8 @@ export default function KanbanCard({
   const [duplicateMenu, setDuplicateMenu] = useState<{ x: number; y: number } | null>(null);
   const [pasteConfirm, setPasteConfirm] = useState<{ blob: Blob; ext: string; previewUrl: string } | null>(null);
   const [pasteError, setPasteError] = useState<string | null>(null);
+  const [coverZoomOpen, setCoverZoomOpen] = useState(false);
+  const [timerMenu, setTimerMenu] = useState<{ x: number; y: number } | null>(null);
 
   const [editingTitle, setEditingTitle] = useState(false);
   const [titleDraft, setTitleDraft] = useState(card.title);
@@ -114,14 +140,33 @@ export default function KanbanCard({
       setContextMenu(null);
       setLabelMenu(null);
       setDueDateMenu(null);
-      setDuplicateMenu(null);
       setColorMenu(null);
+      setTimerMenu(null);
       setDuplicateMenu(null);
     }, CLOSE_DELAY);
   }
 
+  function openTimerMenu(pos: { x: number; y: number }) {
+    setLabelMenu(null);
+    setDueDateMenu(null);
+    setColorMenu(null);
+    setDuplicateMenu(null);
+    setTimerMenu(null);
+    setTimerMenu(pos);
+  }
   function cancelClose() {
     if (closeTimerRef.current) clearTimeout(closeTimerRef.current);
+  }
+
+  function daysAgoLabel(dateStr: string): string {
+    const date = new Date(dateStr);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const dateOnly = new Date(date);
+    dateOnly.setHours(0, 0, 0, 0);
+    const diffDays = Math.round((today.getTime() - dateOnly.getTime()) / 86400000);
+    if (diffDays <= 0) return 'hoje';
+    return `${diffDays} dia${diffDays !== 1 ? 's' : ''}`;
   }
 
   useEffect(() => {
@@ -211,12 +256,28 @@ export default function KanbanCard({
     const nextLabels = hasIt
       ? card.labels.filter((l) => parseLabel(l).name !== name)
       : [...card.labels, serializeLabel(name, color, isGroup)];
-    onUpdateLabels(card.id, nextLabels);
+    applyLabelsChange(nextLabels);
   }
 
   function handleCreateLabel(name: string, color: string, isGroup: boolean) {
     if (card.labels.some((l) => parseLabel(l).name === name)) return;
-    onUpdateLabels(card.id, [...card.labels, serializeLabel(name, color, isGroup)]);
+    applyLabelsChange([...card.labels, serializeLabel(name, color, isGroup)]);
+  }
+
+  function applyLabelsChange(nextLabels: string[]) {
+    onUpdateLabels(card.id, nextLabels);
+    // cor automática só preenche se o card ainda não tem cor manual escolhida — nunca substitui uma já definida
+    if (!card.color && nextLabels.length > 0) {
+      onUpdateColor(card.id, parseLabel(nextLabels[0]).color);
+    }
+  }
+
+  function handleReorderLabels(nextLabels: string[]) {
+    onUpdateLabels(card.id, nextLabels);
+    // reordenar é ação explícita de "essa etiqueta vai pra frente" — sempre atualiza a cor, mesmo que já houvesse uma definida
+    if (nextLabels.length > 0) {
+      onUpdateColor(card.id, parseLabel(nextLabels[0]).color);
+    }
   }
 
   return (
@@ -239,7 +300,7 @@ export default function KanbanCard({
           transition,
           opacity: isDragging ? 0.4 : 1,
           border: card.color ? `1px solid ${card.color}` : '1px solid #e5e7eb',
-          borderLeft: card.color ? `4px solid ${card.color}` : undefined,
+          borderLeft: card.labels.length > 0 ? `4px solid ${parseLabel(card.labels[0]).color}` : (card.color ? `4px solid ${card.color}` : undefined),
           outline: selected ? '2px solid #1a73e8' : 'none',
           outlineOffset: selected ? -2 : 0,
           borderRadius: 6,
@@ -270,8 +331,22 @@ export default function KanbanCard({
         >
           {hovering && <span style={{ fontSize: 11, color: '#bbb' }}>⋮</span>}
         </div>
-        {!compact && card.coverPath && (
-          <img src={convertFileSrc(card.coverPath)} style={{ width: '100%', height: 80, objectFit: 'cover', borderRadius: 4, marginBottom: 6 }} />
+
+        {!compact && (card.labels.length > 0 || card.dueDate || displayedTimerSeconds > 0) && card.coverPath && (
+          <div
+            onClick={(e) => { e.stopPropagation(); setCoverZoomOpen(true); }}
+            onPointerDown={(e) => e.stopPropagation()}
+            style={{
+              width: '100%', height: 80, borderRadius: 4, marginBottom: 6,
+              backgroundColor: '#f0f0f0', display: 'flex', alignItems: 'center', justifyContent: 'center',
+              overflow: 'hidden', cursor: 'zoom-in',
+            }}
+          >
+            <img
+              src={convertFileSrc(card.coverPath)}
+              style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }}
+            />
+          </div>
         )}
 
         <div
@@ -315,6 +390,14 @@ export default function KanbanCard({
           {hasSubKanban && (
             <span title="Tem sub-kanban" style={{ fontSize: 11 }}>📋</span>
           )}
+          {hasOpenTimer && (
+            <span
+              title={globalTimer.running ? 'Cronômetro rodando' : 'Cronômetro pausado, sessão em aberto'}
+              style={{ fontSize: 11, color: globalTimer.running ? '#2e7d32' : '#e65100' }}
+            >
+              {globalTimer.running ? '⏱' : '⏸'}
+            </span>
+          )}
           {card.priority && (
             <span
               title={PRIORITY_LABELS[card.priority]}
@@ -350,7 +433,26 @@ export default function KanbanCard({
               const info = getDueDateInfo(card.dueDate);
               return <span style={{ color: info.color, fontWeight: info.color === '#666' ? 400 : 600 }}>📅 {info.label}</span>;
             })()}
+
+            {displayedTimerSeconds > 0 && (
+              <span style={{ color: hasOpenTimer && globalTimer.running ? '#2e7d32' : '#666' }}>
+                ⏱ {formatCardTimerTotal(displayedTimerSeconds)}
+              </span>
+            )}
           </div>
+        )}
+
+        {displayedTimerSeconds > 0 && (
+          <span
+            title={hasOpenTimer && globalTimer.running ? 'Cronômetro rodando' : 'Tempo total registrado'}
+            style={{
+              position: 'absolute', bottom: 4, right: 4, fontSize: 10,
+              color: hasOpenTimer && globalTimer.running ? '#2e7d32' : '#999',
+              backgroundColor: 'rgba(255,255,255,0.85)', padding: '1px 4px', borderRadius: 3,
+            }}
+          >
+            ⏱ {formatCardTimerTotal(displayedTimerSeconds)}
+          </span>
         )}
       </div>
 
@@ -377,6 +479,8 @@ export default function KanbanCard({
                 { label: '🗑 Excluir todos', onClick: () => onBulkDelete(Array.from(selectedCardIds)), danger: true },
               ]
               : [
+                { label: `🕒 Criado há ${daysAgoLabel(card.createdAt)}`, onClick: () => { }, disabled: true },
+                { label: `✏️ Atualizado há ${daysAgoLabel(card.updatedAt)}`, onClick: () => { }, disabled: true },
                 {
                   label: card.dueDate ? `📅 ${getDueDateInfo(card.dueDate).label}` : '📅 Definir data do card',
                   onClick: () => openDueDateMenu({ x: contextMenu.x, y: contextMenu.y }),
@@ -397,6 +501,7 @@ export default function KanbanCard({
                   onClick: onDuplicate,
                   onHoverStart: (rect) => openDuplicateMenu({ x: rect.right + 4, y: rect.top }),
                 },
+                { label: '⏱ Cronômetro', onClick: () => openTimerMenu({ x: contextMenu.x, y: contextMenu.y }) },
                 { label: '🗑 Excluir', onClick: onRequestDelete, danger: true },
               ]
           }
@@ -413,6 +518,7 @@ export default function KanbanCard({
           onCreate={(name, color, isGroup) => isBulkTarget ? onBulkToggleLabel(Array.from(selectedCardIds), name, color, isGroup) : handleCreateLabel(name, color, isGroup)}
           onClose={() => setLabelMenu(null)}
           onMouseEnter={cancelClose} onMouseLeave={scheduleClose}
+          onReorder={isBulkTarget ? undefined : handleReorderLabels}
         />
       )}
 
@@ -453,6 +559,19 @@ export default function KanbanCard({
         />
       )}
 
+      {timerMenu && (
+        <CardTimerPopup
+          x={timerMenu.x}
+          y={timerMenu.y}
+          projectId={projectId}
+          cardId={card.id}
+          cardTitle={card.title}
+          onClose={() => setTimerMenu(null)}
+          onMouseEnter={cancelClose}
+          onMouseLeave={scheduleClose}
+        />
+      )}
+
       {pasteConfirm && (
         <ImagePasteConfirmModal
           previewUrl={pasteConfirm.previewUrl}
@@ -463,6 +582,10 @@ export default function KanbanCard({
 
       {pasteError && (
         <Toast message={pasteError} variant="error" onDismiss={() => setPasteError(null)} />
+      )}
+
+      {coverZoomOpen && card.coverPath && (
+        <CoverZoomModal src={convertFileSrc(card.coverPath)} onClose={() => setCoverZoomOpen(false)} />
       )}
     </>
   );

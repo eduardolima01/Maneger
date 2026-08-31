@@ -37,6 +37,7 @@ interface KanbanColumnProps {
   onRenameGroup: (groupId: string, name: string) => void;
   onRequestDeleteGroup: (groupId: string) => void;
   onAddCardToGroup: (groupId: string, title: string) => void;
+  onReorderGroupCards: (orderedIds: string[]) => void;
   checklistProgress: Record<string, ChecklistProgress>;
   allLabels: ParsedLabel[];
   onUpdateCardLabels: (cardId: string, labels: string[]) => void;
@@ -51,6 +52,7 @@ interface KanbanColumnProps {
   onBulkDelete: (cardIds: string[]) => void;
   onBulkSetColor: (cardIds: string[], color: string | null) => void;
   onBulkToggleLabel: (cardIds: string[], name: string, color: string, isGroup: boolean) => void;
+  projectId: string;
 }
 
 export default function KanbanColumn({
@@ -80,8 +82,9 @@ export default function KanbanColumn({
   onBulkSetColor,
   onBulkToggleLabel,
   onDuplicateMultiple,
-  onUpdateCoverPath
-
+  onUpdateCoverPath,
+  onReorderGroupCards,
+  projectId
 }: KanbanColumnProps) {
   const { attributes, listeners, setNodeRef: setSortableRef, transform, transition, isDragging } = useSortable({
     id: column.id,
@@ -159,6 +162,7 @@ export default function KanbanColumn({
                   onRename={(name) => onRenameGroup(g.id, name)}
                   onRequestDelete={() => onRequestDeleteGroup(g.id)}
                   onAddCard={(title) => onAddCardToGroup(g.id, title)}
+                  onReorderGroupCards={onReorderGroupCards}
                   allLabels={allLabels}
                   onUpdateCardLabels={onUpdateCardLabels}
                   checklistProgress={checklistProgress}
@@ -166,6 +170,8 @@ export default function KanbanColumn({
                   onUpdateCardTitle={onUpdateCardTitle}
                   onUpdateCardColor={onUpdateCardColor}
                   onDuplicateMultiple={onDuplicateMultiple}
+                  onUpdateCoverPath={onUpdateCoverPath}
+                  projectId={projectId}
                 />
               ))}
 
@@ -194,6 +200,8 @@ export default function KanbanColumn({
                   onUpdateCardTitle={onUpdateCardTitle}
                   onUpdateCardColor={onUpdateCardColor}
                   onDuplicateMultiple={onDuplicateMultiple}
+                  onUpdateCoverPath={onUpdateCoverPath}
+                  projectId={projectId}
                 />
               ))}
 
@@ -219,6 +227,7 @@ export default function KanbanColumn({
                   onUpdateColor={onUpdateCardColor}
                   onDuplicateMultiple={onDuplicateMultiple}
                   onUpdateCoverPath={onUpdateCoverPath}
+                  projectId={projectId}
                 />
               ))}
             </SortableContext>

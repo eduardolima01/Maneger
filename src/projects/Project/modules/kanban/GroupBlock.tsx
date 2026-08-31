@@ -4,10 +4,11 @@ import { useDroppable } from '@dnd-kit/core';
 import { CSS } from '@dnd-kit/utilities';
 import { SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import KanbanCard from './KanbanCard';
-import type { KanbanCardGroup, KanbanCard as CardType, KanbanDensity, ChecklistProgress } from '@/types/kanban.types';
+import type { KanbanCardGroup, KanbanCard as CardType, KanbanDensity, ChecklistProgress, TaskPriority } from '@/types/kanban.types';
 import { clusterCardsByGroupLabel, ParsedLabel } from '@/Kanban/utils/kanbanLabels';
 import LabelGroupBlock from '@/Kanban/utils/LabelGroupBlock';
 import { DuplicateMultipleMode } from '@/Kanban/components/DuplicateMenu';
+import ContextMenu from '@/components/ui/ContextMenu';
 
 interface GroupBlockProps {
   group: KanbanCardGroup;
@@ -25,6 +26,7 @@ interface GroupBlockProps {
   onRequestDelete: () => void;
   onAddCard: (title: string) => void;
   onUpdateCardLabels: (cardId: string, labels: string[]) => void;
+  onReorderGroupCards: (orderedIds: string[]) => void;
   onUpdateCardDueDate: (cardId: string, dueDate: string | null) => void;
   onUpdateCardTitle: (cardId: string, title: string) => void;
   onUpdateCardColor: (cardId: string, color: string | null) => void;
@@ -36,11 +38,13 @@ interface GroupBlockProps {
   onBulkSetColor: (cardIds: string[], color: string | null) => void;
   onBulkToggleLabel: (cardIds: string[], name: string, color: string, isGroup: boolean) => void;
   onUpdateCoverPath: (cardId: string, path: string) => void
+  projectId: string;
 }
 
 export default function GroupBlock({
   group, cards, density, cardsWithSubKanban, collapsed, onToggleCollapsed, onCardClick, onCardDuplicate, onCardRequestDelete, onRename, onRequestDelete,
   onAddCard, allLabels, onUpdateCardLabels, checklistProgress,
+  onReorderGroupCards,
   onUpdateCardDueDate, onUpdateCardTitle, onUpdateCardColor,
   selectedCardIds,
   onCardSelectToggle,
@@ -48,7 +52,8 @@ export default function GroupBlock({
   onBulkSetColor,
   onBulkToggleLabel,
   onDuplicateMultiple,
-  onUpdateCoverPath
+  onUpdateCoverPath,
+  projectId
 }: GroupBlockProps) {
   const { attributes, listeners, setNodeRef: setSortableRef, transform, transition, isDragging } = useSortable({
     id: `group:${group.id}`,
@@ -64,6 +69,7 @@ export default function GroupBlock({
   const [addingCard, setAddingCard] = useState(false);
   const [newCardTitle, setNewCardTitle] = useState('');
   const newCardInputRef = useRef<HTMLTextAreaElement>(null);
+  const [sortMenu, setSortMenu] = useState<{ x: number; y: number } | null>(null);
 
   const style: React.CSSProperties = {
     transform: CSS.Transform.toString(transform),
@@ -81,9 +87,33 @@ export default function GroupBlock({
     newCardInputRef.current?.focus(); // mantém o input focado — permite criar vários em sequência
   }
 
+  const PRIORITY_ORDER: Record<TaskPriority, number> = { urgent: 0, high: 1, medium: 2, low: 3 };
+
+  function sortBy(criterion: 'title' | 'startDate' | 'dueDate' | 'priority' | 'createdAt') {
+    const sorted = [...cards].sort((a, b) => {
+      if (criterion === 'startDate') {
+        if (!a.startDate && !b.startDate) return 0;
+        if (!a.startDate) return 1;
+        if (!b.startDate) return -1;
+        return a.startDate.localeCompare(b.startDate);
+      } if (criterion === 'title') return a.title.localeCompare(b.title);
+      if (criterion === 'dueDate') {
+        if (!a.dueDate && !b.dueDate) return 0;
+        if (!a.dueDate) return 1;
+        if (!b.dueDate) return -1;
+        return a.dueDate.localeCompare(b.dueDate);
+      }
+      if (criterion === 'createdAt') return a.createdAt.localeCompare(b.createdAt);
+      const pa = a.priority ? PRIORITY_ORDER[a.priority] : 4;
+      const pb = b.priority ? PRIORITY_ORDER[b.priority] : 4;
+      return pa - pb;
+    });
+    onReorderGroupCards(sorted.map((c) => c.id));
+    setSortMenu(null);
+  }
   return (
     <div ref={setSortableRef} style={{ ...style, marginBottom: 8 }}>
-      <div style={{ border: '2px dashed #c7c7c7', borderRadius: 6, padding: 6, backgroundColor: isOver ? '#e8f0fe' : '#f5f5f5' }}>
+      <div ref={setDroppableRef} style={{ border: '2px dashed #c7c7c7', borderRadius: 6, padding: 6, backgroundColor: isOver ? '#e8f0fe' : '#f5f5f5' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginBottom: 6 }}>
           <span {...attributes} {...listeners} style={{ color: '#999', fontSize: 11, cursor: 'grab', touchAction: 'none' }} title="Arrastar grupo">⠿</span>
           <button
@@ -99,10 +129,17 @@ export default function GroupBlock({
             style={{ flex: 1, fontSize: 12, fontWeight: 600, border: 'none', background: 'none', outline: 'none' }}
           />
           <span style={{ fontSize: 10, color: '#999' }}>({cards.length})</span>
+          <button
+            onClick={(e) => { e.stopPropagation(); setSortMenu({ x: e.clientX, y: e.clientY }); }}
+            title="Ordenar cards do grupo"
+            style={{ border: 'none', background: 'none', cursor: 'pointer', color: '#666', fontSize: 12 }}
+          >
+            ↕
+          </button>
           <button onClick={onRequestDelete} title="Desagrupar" style={{ border: 'none', background: 'none', cursor: 'pointer', color: '#c62828', fontSize: 11 }}>✕</button>
         </div>
 
-        <div ref={setDroppableRef} style={{ minHeight: 30, maxHeight: 320, overflowY: 'auto' }}>
+        <div style={{ minHeight: 30, maxHeight: 320, overflowY: 'auto' }}>
 
           {!collapsed && (
             <SortableContext items={cards.map((c) => `card:${c.id}`)} strategy={verticalListSortingStrategy}>
@@ -121,6 +158,7 @@ export default function GroupBlock({
                   onCardClick={onCardClick}
                   onCardDuplicate={onCardDuplicate}
                   onCardRequestDelete={onCardRequestDelete}
+                  onUpdateCoverPath={onUpdateCoverPath}
 
                   onDuplicateMultiple={onDuplicateMultiple}
                   selectedCardIds={selectedCardIds}
@@ -132,6 +170,7 @@ export default function GroupBlock({
                   onUpdateCardDueDate={onUpdateCardDueDate}
                   onUpdateCardTitle={onUpdateCardTitle}
                   onUpdateCardColor={onUpdateCardColor}
+                  projectId={projectId}
                 />
               ))}
 
@@ -157,6 +196,7 @@ export default function GroupBlock({
                   onBulkToggleLabel={onBulkToggleLabel}
                   onDuplicateMultiple={onDuplicateMultiple}
                   onUpdateCoverPath={onUpdateCoverPath}
+                  projectId={projectId}
                 />
               ))}
             </SortableContext>
@@ -196,6 +236,21 @@ export default function GroupBlock({
           )}
         </div>
       </div>
+
+      {sortMenu && (
+        <ContextMenu
+          x={sortMenu.x}
+          y={sortMenu.y}
+          onClose={() => setSortMenu(null)}
+          items={[
+            { label: 'Ordenar por Título (A-Z)', onClick: () => sortBy('title') },
+            { label: 'Ordenar por Data de início', onClick: () => sortBy('startDate') },
+            { label: 'Ordenar por Prazo', onClick: () => sortBy('dueDate') },
+            { label: 'Ordenar por Prioridade', onClick: () => sortBy('priority') },
+            { label: 'Ordenar por Data de criação', onClick: () => sortBy('createdAt') },
+          ]}
+        />
+      )}
     </div>
   );
 }

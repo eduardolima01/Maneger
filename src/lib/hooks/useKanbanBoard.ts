@@ -111,6 +111,11 @@ export function useKanbanBoard(kanban: Kanban) {
     await reload();
   }, [reload]);
 
+  const reorderCardsInGroup = useCallback(async (orderedIds: string[]) => {
+    await cardsApi.reorderCardsInGroup(orderedIds);
+    await reload();
+  }, [reload]);
+
   const moveCardOutOfGroup = useCallback(async (cardId: string, columnId: string, orderedIds: string[]) => {
     await cardsApi.moveCardOutOfGroup(cardId, kanbanId, columnId, orderedIds);
     await reload();
@@ -353,6 +358,7 @@ export function useKanbanBoard(kanban: Kanban) {
     bulkMoveCards, bulkDeleteCards, bulkSetColor, bulkToggleLabel,
     duplicateCardMultiple, createCardsBatch,
     viewPrefs, saveViewPrefs,
+    reorderCardsInGroup,
   };
 }
 

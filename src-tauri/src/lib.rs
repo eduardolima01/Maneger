@@ -1,12 +1,14 @@
 mod canvas_commands;
 mod feed_commands;
 mod schema;
+mod timer_commands;
 
 use canvas_commands::*;
 use feed_commands::*;
 use std::fs;
 use std::path::PathBuf;
 use tauri_plugin_sql::{Migration, MigrationKind};
+use timer_commands::*;
 
 #[tauri::command]
 fn greet(name: &str) -> String {
@@ -294,6 +296,13 @@ pub fn run() {
             save_tabs_state,
             load_pomodoro_data,
             save_pomodoro_data,
+            //
+            load_card_timer_data,
+            save_card_timer_data,
+            load_active_card_timer,
+            save_active_card_timer,
+            clear_active_card_timer,
+            //
             load_agenda_data,
             save_agenda_data,
             save_cover_from_bytes,

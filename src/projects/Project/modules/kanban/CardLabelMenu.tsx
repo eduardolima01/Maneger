@@ -11,14 +11,20 @@ interface CardLabelMenuProps {
   onClose: () => void;
   onMouseEnter?: () => void;
   onMouseLeave?: () => void;
+  onReorder?: (nextLabels: string[]) => void;
 }
 
-export default function CardLabelMenu({ x, y, cardLabels, allLabels, onToggle, onCreate, onClose, onMouseEnter, onMouseLeave }: CardLabelMenuProps) {
+export default function CardLabelMenu({ x, y, cardLabels, allLabels, onToggle, onCreate, onClose, onMouseEnter, onMouseLeave, onReorder }: CardLabelMenuProps) {
   const ref = useRef<HTMLDivElement>(null);
   const [creating, setCreating] = useState(false);
   const [newName, setNewName] = useState('');
   const [newColor, setNewColor] = useState(LABEL_COLOR_PALETTE[0]);
   const [newIsGroup, setNewIsGroup] = useState(false);
+  const [dragIndex, setDragIndex] = useState<number | null>(null);
+
+  const [hoverIndex, setHoverIndex] = useState<number | null>(null);
+  const draggingRef = useRef<number | null>(null);
+  const hoverIndexRef = useRef<number | null>(null);
 
   useEffect(() => {
     function handleClickOutside(e: MouseEvent) {
@@ -37,6 +43,41 @@ export default function CardLabelMenu({ x, y, cardLabels, allLabels, onToggle, o
 
   const cardLabelNames = new Set(cardLabels.map((raw) => parseLabel(raw).name));
 
+  function commitReorder(fromIndex: number, toIndex: number) {
+    if (fromIndex === toIndex || !onReorder) return;
+    const next = [...cardLabels];
+    const [moved] = next.splice(fromIndex, 1);
+    next.splice(toIndex, 0, moved);
+    onReorder(next);
+  }
+
+  function handleDragHandleMouseDown(index: number) {
+    draggingRef.current = index;
+    setDragIndex(index);
+
+    function onMouseMove(e: MouseEvent) {
+      const el = document.elementFromPoint(e.clientX, e.clientY);
+      const row = el?.closest<HTMLElement>('[data-label-row-index]');
+      if (!row) return;
+      const idx = Number(row.dataset.labelRowIndex);
+      hoverIndexRef.current = idx;
+      setHoverIndex(idx);
+    }
+
+    function onMouseUp() {
+      window.removeEventListener('mousemove', onMouseMove);
+      window.removeEventListener('mouseup', onMouseUp);
+      const from = draggingRef.current;
+      const to = hoverIndexRef.current;
+      draggingRef.current = null;
+      setDragIndex(null);
+      setHoverIndex(null);
+      if (from !== null && to !== null) commitReorder(from, to);
+    }
+
+    window.addEventListener('mousemove', onMouseMove);
+    window.addEventListener('mouseup', onMouseUp);
+  }
   function submitCreate() {
     const trimmed = newName.trim();
     if (!trimmed) return;
@@ -56,6 +97,39 @@ export default function CardLabelMenu({ x, y, cardLabels, allLabels, onToggle, o
         borderRadius: 6, boxShadow: '0 2px 12px rgba(0,0,0,0.15)', zIndex: 1000, minWidth: 200, padding: 6,
       }}
     >
+      {onReorder && cardLabels.length > 0 && (
+        <>
+          <div style={{ fontSize: 11, fontWeight: 600, color: '#999', padding: '4px 6px' }}>
+            SUAS ETIQUETAS (arraste para reordenar — a 1ª define a cor do card)
+          </div>
+          {cardLabels.map((raw, i) => {
+            const { name, color } = parseLabel(raw);
+            return (
+              <div
+                key={raw}
+                data-label-row-index={i}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: 6, padding: '6px 6px', fontSize: 13,
+                  borderRadius: 4, opacity: dragIndex === i ? 0.4 : 1,
+                  backgroundColor: hoverIndex === i && dragIndex !== null && dragIndex !== i ? '#eef2ff' : 'transparent',
+                }}
+              >
+                <span
+                  onMouseDown={(e) => { e.preventDefault(); handleDragHandleMouseDown(i); }}
+                  style={{ color: '#bbb', fontSize: 11, cursor: 'grab' }}
+                >
+                  ⠿
+                </span>
+                <span style={{ width: 10, height: 10, borderRadius: 3, backgroundColor: color, flexShrink: 0 }} />
+                <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{name}</span>
+                {i === 0 && <span title="Define a cor do card" style={{ fontSize: 11 }}>🎨</span>}
+              </div>
+            );
+          })}
+          <div style={{ borderTop: '1px solid #eee', margin: '4px 0' }} />
+        </>
+      )}
+
       <div style={{ fontSize: 11, fontWeight: 600, color: '#999', padding: '4px 6px' }}>ETIQUETAS</div>
 
       {allLabels.length === 0 && !creating && (

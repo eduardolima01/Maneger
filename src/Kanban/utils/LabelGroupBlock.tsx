@@ -24,6 +24,7 @@ interface LabelGroupBlockProps {
   onUpdateCardColor: (cardId: string, color: string | null) => void;
   onDuplicateMultiple: (cardId: string, mode: DuplicateMultipleMode) => void;
   onUpdateCoverPath: (cardId: string, path: string) => void
+  projectId: string;
 
   selectedCardIds: Set<string>;
   onCardSelectToggle: (cardId: string) => void;
@@ -38,7 +39,8 @@ export default function LabelGroupBlock({
   onCardClick, onCardDuplicate, onCardRequestDelete, onUpdateCardLabels,
   onUpdateCardDueDate, onUpdateCardTitle, onUpdateCardColor,
   selectedCardIds, onCardSelectToggle, onBulkDelete, onBulkSetColor, onBulkToggleLabel,
-  onDuplicateMultiple, onUpdateCoverPath
+  onDuplicateMultiple, onUpdateCoverPath,
+  projectId
 }: LabelGroupBlockProps) {
   const [collapsed, setCollapsed] = useState(false);
   const droppableId = `labelgroup:${scopeType}:${scopeId}:${name}`;
@@ -87,6 +89,7 @@ export default function LabelGroupBlock({
                 onBulkDelete={onBulkDelete}
                 onBulkSetColor={onBulkSetColor}
                 onBulkToggleLabel={onBulkToggleLabel}
+                projectId={projectId}
               />
             ))}
           </div>

@@ -68,6 +68,7 @@ export default function ContextMenu({ x, y, items, onClose, onMouseEnter, onMous
             color: item.disabled ? '#999' : item.danger ? '#c62828' : '#000',
           }}
           onMouseEnter={(e) => {
+            if (item.disabled) return;
             e.currentTarget.style.backgroundColor = '#f5f5f5';
             if (!item.onHoverStart) return;
             const rect = e.currentTarget.getBoundingClientRect();
@@ -75,6 +76,7 @@ export default function ContextMenu({ x, y, items, onClose, onMouseEnter, onMous
             hoverTimerRef.current = setTimeout(() => item.onHoverStart!(rect), HOVER_DELAY);
           }}
           onMouseLeave={(e) => {
+            if (item.disabled) return;
             e.currentTarget.style.backgroundColor = 'transparent';
             if (hoverTimerRef.current) clearTimeout(hoverTimerRef.current);
           }}

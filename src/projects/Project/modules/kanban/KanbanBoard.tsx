@@ -351,7 +351,7 @@ export default function KanbanBoard({ kanban }: KanbanBoardProps) {
     const lines = newCardTitle.split('\n').map((l) => l.trim()).filter(Boolean);
     if (lines.length === 0) return;
     for (const line of lines) {
-      await board.createCard(newCardColumnId, line); // sequencial: evita colisão de posição entre criações simultâneas
+      await board.createCard(newCardColumnId, line);
     }
     setNewCardTitle('');
     newCardInputRef.current?.focus();
@@ -361,11 +361,14 @@ export default function KanbanBoard({ kanban }: KanbanBoardProps) {
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => { if (e.key === 'Alt') altPressedRef.current = true; };
     const onKeyUp = (e: KeyboardEvent) => { if (e.key === 'Alt') altPressedRef.current = false; };
+    const onBlur = () => { altPressedRef.current = false; };
     window.addEventListener('keydown', onKeyDown);
     window.addEventListener('keyup', onKeyUp);
+    window.addEventListener('blur', onBlur);
     return () => {
       window.removeEventListener('keydown', onKeyDown);
       window.removeEventListener('keyup', onKeyUp);
+      window.removeEventListener('blur', onBlur);
     };
   }, []);
 
@@ -432,6 +435,7 @@ export default function KanbanBoard({ kanban }: KanbanBoardProps) {
                       onRenameGroup={board.renameGroup}
                       onRequestDeleteGroup={(groupId) => setDeleteGroupTarget(groupId)}
                       onAddCardToGroup={board.createCardInGroup}
+                      onReorderGroupCards={board.reorderCardsInGroup}
                       allLabels={allParsedLabels}
                       onUpdateCardLabels={(id, labels) => board.updateCard(id, { labels })}
                       onUpdateCardDueDate={(id, dueDate) => board.updateCard(id, { dueDate })}
@@ -446,6 +450,7 @@ export default function KanbanBoard({ kanban }: KanbanBoardProps) {
                       onBulkDelete={() => setBulkDeleteConfirm(true)}
                       onBulkSetColor={board.bulkSetColor}
                       onBulkToggleLabel={board.bulkToggleLabel}
+                      projectId={kanban.projectId}
                     />
                   );
                 })()}

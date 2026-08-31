@@ -44,3 +44,13 @@ export async function deleteEvent(id: string): Promise<void> {
   const db = await getDb();
   await db.execute('DELETE FROM events WHERE id = $1', [id]);
 }
+
+export async function getEventCountsByProject(): Promise<Record<string, number>> {
+  const db = await getDb();
+  const rows = await db.select<{ project_id: string; count: number }[]>(
+    'SELECT project_id, COUNT(*) as count FROM events WHERE project_id IS NOT NULL GROUP BY project_id'
+  );
+  const result: Record<string, number> = {};
+  for (const r of rows) result[r.project_id] = r.count;
+  return result;
+}

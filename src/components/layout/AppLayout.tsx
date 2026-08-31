@@ -10,6 +10,7 @@ import { useTabs, initTabsFromDisk } from './tabs/tabStore';
 import TabBreadcrumbBar from './tabs/TabBreadcrumbBar';
 import GlobalPomodoroWidget from '@/Projects/Project/modules/pomodoro/components/GlobalPomodoroWidget';
 import GlobalMomentComposerHost from '@/Feed/components/GlobalMomentComposerHost';
+import GlobalCardTimerWidget from '@/Kanban/Timer/components/GlobalCardTimerWidget';
 
 export function AppLayout() {
   const { activeTabId } = useTabs();
@@ -36,6 +37,7 @@ export function AppLayout() {
       <GlobalKanbanModalHost />
       <GlobalPomodoroWidget />
       <GlobalMomentComposerHost />
+      <GlobalCardTimerWidget />
     </div>
   )
 }
