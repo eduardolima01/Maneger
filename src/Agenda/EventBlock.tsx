@@ -2,12 +2,15 @@ import { useEffect, useRef, useState } from 'react';
 import { convertFileSrc } from '@tauri-apps/api/core';
 import type { Event } from '@/types/event.types';
 import { fromLocalISO, toLocalISO, minutesSinceMidnight, snapMinutes, formatMinutesLabel, formatDuration, isSameDay } from '../lib/utils/date';
+import EventImageGalleryModal from './components/EventImageGalleryModal';
 
 interface EventBlockProps {
   event: Event;
+  onRequestDelete: (Event: Event) => void;
   hourHeight: number;
   color: string;
-  coverPath: string | null;
+  images: string[];
+  fallbackCover: string | null;
   breadcrumb: { name: string }[];
   days: Date[];
   dayIndex: number;
@@ -23,11 +26,14 @@ interface EventBlockProps {
 }
 
 export default function EventBlock({
-  event, hourHeight, color, coverPath, breadcrumb, days, dayIndex, getColumnWidth,
+  event, hourHeight, color, images, fallbackCover, breadcrumb, days, dayIndex, getColumnWidth,
   overlapLevel = 0,
   segmentKind = 'start',
   onEditClick, onProjectClick, onDoubleClick, onChange, onDuplicate, onRequestDelete,
 }: EventBlockProps) {
+  const [galleryOpen, setGalleryOpen] = useState(false);
+  const displayImage = images[0] ?? fallbackCover;
+
   const start = fromLocalISO(event.start_at);
   const end = fromLocalISO(event.end_at);
   const startMin = minutesSinceMidnight(start);
@@ -58,17 +64,32 @@ export default function EventBlock({
 
   const isDraggingActive = dragOffsetMin !== 0 || dragOffsetX !== 0 || resizeExtraMin !== 0;
 
+  const ctrlOnlyRef = useRef(true); // reseta a cada novo "hold" de Control, igual ao toggle do MarkdownField
+
   useEffect(() => {
     if (!isHovering || isDraggingActive) return;
     function handleKeyDown(e: KeyboardEvent) {
       if (e.key === 'q' || e.key === 'Q') {
         e.preventDefault();
         onRequestDelete(event);
+        return;
+      }
+
+      if (e.key === 'Control') { ctrlOnlyRef.current = true; return; }
+      if (e.ctrlKey) ctrlOnlyRef.current = false; // combo (Ctrl+C, Ctrl+V...) cancela o toque puro
+    }
+    function handleKeyUp(e: KeyboardEvent) {
+      if (e.key === 'Control' && ctrlOnlyRef.current) {
+        onEditClick(event);
       }
     }
     document.addEventListener('keydown', handleKeyDown);
-    return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [isHovering, isDraggingActive, event, onRequestDelete]);
+    document.addEventListener('keyup', handleKeyUp);
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown);
+      document.removeEventListener('keyup', handleKeyUp);
+    };
+  }, [isHovering, isDraggingActive, event, onRequestDelete, onEditClick]);
 
   const pxPerMin = hourHeight / 60;
 
@@ -135,6 +156,7 @@ export default function EventBlock({
 
   const top = (visualStartMin + dragOffsetMin) * pxPerMin;
   const height = Math.max(16, (visualDurationMin + resizeExtraMin) * pxPerMin);
+  const thumbSize = Math.max(14, Math.min(height - 8, 40)); // cresce com a altura do evento; fica pequeno (ícone) em eventos curtos
 
   const isDraggingMove = dragOffsetMin !== 0 || dragOffsetX !== 0;
   const isResizing = resizeExtraMin !== 0;
@@ -201,13 +223,25 @@ export default function EventBlock({
       )}
 
       <span className="truncate flex items-center gap-1 pr-10">
-        {coverPath && <img src={convertFileSrc(coverPath)} className="w-3.5 h-3.5 rounded-full object-cover shrink-0" />}
+        {displayImage && (
+          <span
+            onClick={(e) => { e.stopPropagation(); if (images.length > 0) setGalleryOpen(true); }}
+            onPointerDown={(e) => e.stopPropagation()}
+            style={{ position: 'relative', display: 'inline-flex', flexShrink: 0, cursor: images.length > 0 ? 'zoom-in' : 'default' }}
+          >
+            <img src={convertFileSrc(displayImage)} style={{ width: thumbSize, height: thumbSize, borderRadius: 4, objectFit: 'cover' }} />
+            {images.length > 1 && (
+              <span style={{ position: 'absolute', bottom: -3, right: -3, fontSize: 9, lineHeight: '12px', padding: '0 3px', backgroundColor: '#1a73e8', color: '#fff', borderRadius: 7, fontWeight: 700 }}>
+                +{images.length - 1}
+              </span>
+            )}
+          </span>
+        )}
         <span className="truncate">{event.title}</span>
       </span>
 
       {assignedName && (
         <span className="flex items-center gap-1 text-[10px] opacity-90 truncate">
-          {coverPath && <img src={convertFileSrc(coverPath)} className="w-3 h-3 rounded-full object-cover shrink-0" />}
           <span className="truncate">{assignedName}</span>
         </span>
       )}
@@ -256,6 +290,9 @@ export default function EventBlock({
           style={{ position: 'absolute', left: 0, right: 0, bottom: 0, height: 6, cursor: 'ns-resize' }}
         />
       )}
+
+
+      <EventImageGalleryModal isOpen={galleryOpen} onClose={() => setGalleryOpen(false)} images={images} title={event.title} />
     </div>
   );
 }

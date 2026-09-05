@@ -18,6 +18,7 @@ import Tooltip from '@/components/ui/Tooltip'
 import AsideNavItem from './AsideNavItem'
 import { useAsideCollapsed } from './useAsideCollapsed'
 import { useActivePathname, useActiveRouter } from './useActiveRouter'
+import { usePageVisibility } from './pageVisibilityStore'
 
 const menuItems = [
   { label: 'Dashboard', icon: MdDashboard, to: '/' },
@@ -36,6 +37,9 @@ export function Aside() {
   const { collapsed, toggle } = useAsideCollapsed()
   const activeRouter = useActiveRouter()
   const activePathname = useActivePathname(activeRouter)
+
+  const { disabledRoutes } = usePageVisibility()
+  const visibleMenuItems = menuItems.filter((item) => !disabledRoutes.has(item.to))
 
   return (
     <aside
@@ -63,7 +67,7 @@ export function Aside() {
 
       <nav className="flex-1 p-4">
         <ul className="space-y-2">
-          {menuItems.map((item) => (
+          {visibleMenuItems.map((item) => (
             <li key={item.to}>
               <AsideNavItem to={item.to} label={item.label} icon={item.icon} collapsed={collapsed} router={activeRouter} activePathname={activePathname} />
             </li>

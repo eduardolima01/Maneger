@@ -45,6 +45,8 @@ export default function KanbanBoard({ kanban }: KanbanBoardProps) {
   const selectionBoxRef = useRef<{ x: number; y: number; width: number; height: number } | null>(null);
   const [bulkDeleteConfirm, setBulkDeleteConfirm] = useState(false);
 
+  const [focusDescriptionToken, setFocusDescriptionToken] = useState<number | undefined>(undefined);
+
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 8 } }));
 
   const visibleColumns = board.columns.filter((c) => c.visible);
@@ -147,11 +149,12 @@ export default function KanbanBoard({ kanban }: KanbanBoardProps) {
       window.removeEventListener('mouseup', handleSelectionMouseUp);
     };
   }, [handleSelectionMouseMove, handleSelectionMouseUp]);
-  function handleCardClick(cardId: string) {
+
+  function handleCardClick(cardId: string, focusDescription?: boolean) {
     setSelectedCardIds(new Set()); // clique normal sai do modo seleção múltipla
     setSelectedCardId(cardId);
+    if (focusDescription) setFocusDescriptionToken((t) => (t ?? 0) + 1);
   }
-
 
   async function handleCreateGroup() {
     if (!newGroupColumnId || !newGroupName.trim()) return;

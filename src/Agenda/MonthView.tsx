@@ -16,6 +16,7 @@ interface MonthViewProps {
   events: Event[];
   resolveColor: (projectId: string | null) => string;
   resolveCover: (projectId: string | null) => string | null;
+  resolveEventImages: (event: Event) => string[];
   resolveBreadcrumb: (projectId: string | null) => ProjectType[];
   onEventDoubleClick: (event: Event) => void;
   onDayClick: (day: Date) => void;
@@ -44,6 +45,7 @@ export default function MonthView({
   anchor,
   events,
   resolveColor,
+  resolveEventImages,
   resolveCover,
   resolveBreadcrumb,
   onEventDoubleClick,
@@ -134,7 +136,8 @@ export default function MonthView({
                     key={ev.id}
                     event={ev}
                     color={resolveColor(ev.project_id)}
-                    coverPath={resolveCover(ev.project_id)}
+                    images={resolveEventImages(ev)}
+                    fallbackCover={resolveCover(ev.project_id)}
                     breadcrumb={resolveBreadcrumb(ev.project_id)}
                     onEdit={onEventEdit}
                     onProjectClick={onEventProjectClick}

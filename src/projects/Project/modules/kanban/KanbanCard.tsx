@@ -126,6 +126,8 @@ export default function KanbanCard({
 
   const closeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const CLOSE_DELAY = 500;
+  const ctrlOnlyRef = useRef(true); // reseta a cada novo "hold" de Control
+  const ctrlUsedForClickRef = useRef(false); // marca se o Ctrl já foi "gasto" num clique (seleção múltipla ou descrição) antes de soltar
 
   function saveTitle() {
     setEditingTitle(false);
@@ -175,7 +177,17 @@ export default function KanbanCard({
       if ((e.key === 'q' || e.key === 'Q') && !contextMenu && !labelMenu) {
         e.preventDefault();
         onRequestDelete();
+        return;
       }
+
+      if (e.key === 'Control') { ctrlOnlyRef.current = true; ctrlUsedForClickRef.current = false; return; }
+      if (e.ctrlKey) ctrlOnlyRef.current = false; // combo (Ctrl+C, Ctrl+V...) cancela o toque puro
+    }
+    function handleKeyUp(e: KeyboardEvent) {
+      if (e.key !== 'Control' || !ctrlOnlyRef.current || ctrlUsedForClickRef.current) return;
+      // não abre por cima de nenhum popup já aberto, nem enquanto o título está sendo editado
+      if (contextMenu || labelMenu || dueDateMenu || colorMenu || duplicateMenu || timerMenu || pasteConfirm || editingTitle) return;
+      onClick();
     }
     function handlePaste(e: ClipboardEvent) {
       if (contextMenu || labelMenu || dueDateMenu || colorMenu || duplicateMenu || pasteConfirm) return;
@@ -197,14 +209,16 @@ export default function KanbanCard({
       }
     }
     document.addEventListener('keydown', handleKeyDown);
+    document.addEventListener('keyup', handleKeyUp);
     document.addEventListener('paste', handlePaste);
     return () => {
       document.removeEventListener('keydown', handleKeyDown);
+      document.removeEventListener('keyup', handleKeyUp);
       document.removeEventListener('paste', handlePaste);
       if (cornerHoverTimer.current) clearTimeout(cornerHoverTimer.current);
       if (closeTimerRef.current) clearTimeout(closeTimerRef.current);
     };
-  }, [hovering, contextMenu, labelMenu, dueDateMenu, colorMenu, duplicateMenu, pasteConfirm, onRequestDelete]);
+  }, [hovering, contextMenu, labelMenu, dueDateMenu, colorMenu, duplicateMenu, timerMenu, pasteConfirm, editingTitle, onRequestDelete, onClick]);
 
   async function confirmPasteImage() {
     if (!pasteConfirm) return;
@@ -287,6 +301,7 @@ export default function KanbanCard({
         {...attributes}
         {...listeners}
         data-kanban-card={card.id}
+        onClickCapture={(e) => { if (e.ctrlKey || e.metaKey) ctrlUsedForClickRef.current = true; }}
         onClick={(e) => {
           if (e.ctrlKey || e.metaKey) { e.stopPropagation(); onCardSelectToggle(card.id); return; }
           onClick();
@@ -332,29 +347,31 @@ export default function KanbanCard({
           {hovering && <span style={{ fontSize: 11, color: '#bbb' }}>⋮</span>}
         </div>
 
-        {!compact && (card.labels.length > 0 || card.dueDate || displayedTimerSeconds > 0) && card.coverPath && (
-          <div
-            onClick={(e) => { e.stopPropagation(); setCoverZoomOpen(true); }}
-            onPointerDown={(e) => e.stopPropagation()}
-            style={{
-              width: '100%', height: 80, borderRadius: 4, marginBottom: 6,
-              backgroundColor: '#f0f0f0', display: 'flex', alignItems: 'center', justifyContent: 'center',
-              overflow: 'hidden', cursor: 'zoom-in',
-            }}
-          >
-            <img
-              src={convertFileSrc(card.coverPath)}
-              style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }}
-            />
-          </div>
-        )}
+        {!compact && card.coverPath
+          // && (card.labels.length > 0 || card.dueDate || displayedTimerSeconds > 0) 
+          && (
+            <div
+              onClick={(e) => { e.stopPropagation(); setCoverZoomOpen(true); }}
+              onPointerDown={(e) => e.stopPropagation()}
+              style={{
+                width: '100%', height: 80, borderRadius: 4, marginBottom: 6,
+                backgroundColor: '#f0f0f0', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                overflow: 'hidden', cursor: 'zoom-in',
+              }}
+            >
+              <img
+                src={convertFileSrc(card.coverPath)}
+                style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }}
+              />
+            </div>
+          )}
 
         <div
           className="w-fit"
           style={{ display: 'flex', alignItems: 'center', gap: 4, marginBottom: compact ? 0 : 4 }}
         >
           {editingTitle ? (
-            <input
+            <textarea
               autoFocus
               value={titleDraft}
               onChange={(e) => setTitleDraft(e.target.value)}

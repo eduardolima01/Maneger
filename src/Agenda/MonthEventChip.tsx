@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { convertFileSrc } from '@tauri-apps/api/core';
 import {
   fromLocalISO,
@@ -9,11 +9,13 @@ import {
 import type { Event } from '@/types/event.types';
 import { ProjectType } from '@/types/project.types';
 import ProjectSearchSelect from '@/Projects/components/ProjectSearchSelect';
+import EventImageGalleryModal from './components/EventImageGalleryModal';
 
 interface MonthEventChipProps {
   event: Event;
   color: string;
-  coverPath: string | null;
+  images: string[];
+  fallbackCover: string | null;
   breadcrumb: ProjectType[];
   onEdit: (event: Event) => void;
   onProjectClick: (event: Event) => void;
@@ -25,7 +27,8 @@ interface MonthEventChipProps {
 export function MonthEventChip({
   event,
   color,
-  coverPath,
+  images,
+  fallbackCover,
   breadcrumb,
   onEdit,
   onProjectClick,
@@ -34,12 +37,15 @@ export function MonthEventChip({
   onRequestDelete,
 }: MonthEventChipProps) {
   const [isHovering, setIsHovering] = useState(false);
+  const ctrlOnlyRef = useRef(true);
+  const [galleryOpen, setGalleryOpen] = useState(false);
+  const displayImage = images[0] ?? fallbackCover;
+
   const start = fromLocalISO(event.start_at);
   const end = fromLocalISO(event.end_at);
   const startMin = minutesSinceMidnight(start);
   const endMin = minutesSinceMidnight(end);
   const durationMin = endMin >= startMin ? endMin - startMin : (1440 - startMin) + endMin;
-  const assignedName = breadcrumb.length > 0 ? breadcrumb[breadcrumb.length - 1].name : null;
   const fullPath = breadcrumb.map((p) => p.name).join(' / ');
   const [assignOpen, setAssignOpen] = useState(false);
 
@@ -49,11 +55,24 @@ export function MonthEventChip({
       if (e.key === 'q' || e.key === 'Q') {
         e.preventDefault();
         onRequestDelete(event);
+        return;
+      }
+
+      if (e.key === 'Control') { ctrlOnlyRef.current = true; return; }
+      if (e.ctrlKey) ctrlOnlyRef.current = false;
+    }
+    function handleKeyUp(e: KeyboardEvent) {
+      if (e.key === 'Control' && ctrlOnlyRef.current) {
+        onEdit(event);
       }
     }
     document.addEventListener('keydown', handleKeyDown);
-    return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [isHovering, event, onRequestDelete]);
+    document.addEventListener('keyup', handleKeyUp);
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown);
+      document.removeEventListener('keyup', handleKeyUp);
+    };
+  }, [isHovering, event, onRequestDelete, onEdit]);
 
   return (
     <div
@@ -94,8 +113,18 @@ export function MonthEventChip({
         </div>
       )}
 
-      {coverPath && (
-        <img src={convertFileSrc(coverPath)} className="w-2.5 h-2.5 rounded-full object-cover shrink-0 mr-1" />
+      {displayImage && (
+        <span
+          onClick={(e) => { e.stopPropagation(); if (images.length > 0) setGalleryOpen(true); }}
+          style={{ position: 'relative', display: 'inline-flex', flexShrink: 0, marginRight: 4, cursor: images.length > 0 ? 'zoom-in' : 'default' }}
+        >
+          <img src={convertFileSrc(displayImage)} className="w-4 h-4 rounded object-cover shrink-0" />
+          {images.length > 1 && (
+            <span style={{ position: 'absolute', bottom: -3, right: -3, fontSize: 8, lineHeight: '10px', padding: '0 3px', backgroundColor: '#1a73e8', color: '#fff', borderRadius: 6, fontWeight: 700 }}>
+              +{images.length - 1}
+            </span>
+          )}
+        </span>
       )}
       <span className="truncate">{event.title}</span>
 
@@ -152,6 +181,7 @@ export function MonthEventChip({
           </button>
         )}
       </div>
+      <EventImageGalleryModal isOpen={galleryOpen} onClose={() => setGalleryOpen(false)} images={images} title={event.title} />
     </div>
   );
 }

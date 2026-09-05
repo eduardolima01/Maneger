@@ -7,6 +7,7 @@ import { Event } from '@/types/event.types';
 import { ProjectFullView } from '@/Projects/Project/ProjectFullView';
 import TimePicker from '@/components/ui/TimePicker';
 import AgendaProjectSelect from './components/AgendaProjectSelect';
+import EventCoverPicker from './components/EventCoverPicker';
 
 type EditorTab = 'event' | 'project';
 
@@ -20,6 +21,8 @@ interface CreateEventModalProps {
   onSave: (data: { title: string; project_id: string | null; start_at: string; end_at: string }) => void;
   onDelete?: () => void;
   onGoToProject: (projectId: string) => void;
+  onGalleryChanged?: (projectId: string) => void;
+  checkAmbiguousAutoCover?: (projectId: string | null, dateISO: string) => boolean;
 }
 
 const DAY_OFFSET_OPTIONS = [
@@ -65,7 +68,8 @@ export default function CreateEventModal({
   initialTab = 'event',
   onSave,
   onDelete,
-  onGoToProject,
+  onGalleryChanged,
+  checkAmbiguousAutoCover
 }: CreateEventModalProps) {
   const [title, setTitle] = useState('');
   const [projectId, setProjectId] = useState<string | null>(null);
@@ -101,6 +105,19 @@ export default function CreateEventModal({
   const isValidRange = end.getTime() > start.getTime();
   const hasProjectTab = !!editingEvent?.project_id;
 
+  useEffect(() => {
+    if (!isOpen || !hasProjectTab) return;
+
+    function onKeyDown(e: KeyboardEvent) {
+      if (!e.altKey) return;
+      if (e.key === '1') { e.preventDefault(); setActiveTab('event'); }
+      if (e.key === '2') { e.preventDefault(); setActiveTab('project'); }
+    }
+
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [isOpen, hasProjectTab]);
+
   function applyDurationPreset(minutes: number) {
     const newEnd = new Date(start.getTime() + minutes * 60000);
     setEndDayOffset(dayOffsetBetween(anchorDate, newEnd));
@@ -112,10 +129,11 @@ export default function CreateEventModal({
       <div style={{ padding: 16, paddingBottom: 200, maxWidth: '92vw', maxHeight: '85vh', overflowY: 'auto' }}>
         {hasProjectTab && (
           <div style={{ display: 'flex', gap: 4, borderBottom: '1px solid #e0e0e0', marginBottom: 12 }}>
-            {(['event', 'project'] as EditorTab[]).map((tab) => (
+            {(['event', 'project'] as EditorTab[]).map((tab, i) => (
               <button
                 key={tab}
                 onClick={() => setActiveTab(tab)}
+                title={`Alt+${i + 1}`}
                 style={{
                   padding: '8px 14px', fontSize: 13, fontWeight: 600, background: 'none', border: 'none',
                   borderBottom: activeTab === tab ? '2px solid #1a73e8' : '2px solid transparent',
@@ -123,6 +141,7 @@ export default function CreateEventModal({
                 }}
               >
                 {tab === 'event' ? 'Evento' : 'Projeto'}
+                <span style={{ fontSize: 9, color: '#aaa', marginLeft: 4, fontWeight: 400 }}>Alt+{i + 1}</span>
               </button>
             ))}
           </div>
@@ -208,6 +227,17 @@ export default function CreateEventModal({
                 onChange={(id, project) => { setProjectId(id); setSelectedProject(project); }}
               />
             </div>
+
+            <div style={{ marginBottom: 16 }}>
+              <EventCoverPicker
+                projectId={projectId}
+                eventId={editingEvent?.id ?? null}
+                eventDate={toLocalISO(start).slice(0, 10)}
+                isAmbiguous={checkAmbiguousAutoCover?.(projectId, toLocalISO(start)) ?? false}
+                onChanged={() => projectId && onGalleryChanged?.(projectId)}
+              />
+            </div>
+
 
             <div style={{ display: 'flex', justifyContent: 'space-between' }}>
               <div>

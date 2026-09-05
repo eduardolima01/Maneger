@@ -19,7 +19,7 @@ interface GroupBlockProps {
   checklistProgress: Record<string, ChecklistProgress>;
   allLabels: ParsedLabel[];
   onToggleCollapsed: () => void;
-  onCardClick: (cardId: string) => void;
+  onCardClick: (cardId: string, focusDescription?: boolean) => void;
   onCardDuplicate: (cardId: string) => void;
   onCardRequestDelete: (cardId: string, title: string) => void;
   onRename: (name: string) => void;

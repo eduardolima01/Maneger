@@ -1,27 +1,34 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useCallback, useEffect, useState } from 'react';
+import { loadAsideCollapsed, saveAsideCollapsed } from './asideCollapsed';
 
-const STORAGE_KEY = 'maneger:asideCollapsed';
+type Listener = (value: boolean) => void;
 
-function readInitial(): boolean {
-  try {
-    return sessionStorage.getItem(STORAGE_KEY) === '1';
-  } catch {
-    return false;
+let currentValue = true; // recolhido por padrão — vale até o JSON carregar (ou se nunca foi salvo)
+let initStarted = false;
+const listeners = new Set<Listener>();
+
+function emit() {
+  listeners.forEach((l) => l(currentValue));
+}
+
+function persist() {
+  saveAsideCollapsed({ collapsed: currentValue }).catch(() => { });
+}
+
+export async function initAsideCollapsedFromDisk() {
+  if (initStarted) return;
+  initStarted = true;
+  const state = await loadAsideCollapsed();
+  if (state) {
+    currentValue = state.collapsed;
+    emit();
   }
 }
 
-type Listener = (value: boolean) => void;
-let currentValue = readInitial();
-const listeners = new Set<Listener>();
-
 function setGlobalValue(value: boolean) {
   currentValue = value;
-  try {
-    sessionStorage.setItem(STORAGE_KEY, value ? '1' : '0');
-  } catch {
-    // sessionStorage indisponível — estado ainda funciona em memória nesta sessão de execução
-  }
-  listeners.forEach((l) => l(value));
+  persist();
+  emit();
 }
 
 export function useAsideCollapsed() {

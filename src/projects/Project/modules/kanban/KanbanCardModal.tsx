@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { open } from '@tauri-apps/plugin-dialog';
 import Modal from '@/components/ui/Modal';
@@ -23,7 +23,7 @@ interface KanbanCardModalProps {
   onRequestDelete: (id: string, title: string) => void;
 }
 
-export default function KanbanCardModal({ isOpen, onClose, card, onUpdate, onDuplicate, onArchive, onRequestDelete }: KanbanCardModalProps) {
+export default function KanbanCardModal({ isOpen, onClose, card, onUpdate, onDuplicate, onArchive, onRequestDelete, }: KanbanCardModalProps) {
   const [activeTab, setActiveTab] = useState<Tab>('details');
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
@@ -51,6 +51,31 @@ export default function KanbanCardModal({ isOpen, onClose, card, onUpdate, onDup
       setSubKanban(null);
     }
   }, [isOpen, card?.id]);
+
+  const [toggleEditSignal, setToggleEditSignal] = useState(0);
+  const ctrlOnlyRef = useRef(true); // reseta a cada novo "hold" de Control
+
+  useEffect(() => {
+    if (!isOpen) return;
+
+    function onKeyDown(e: KeyboardEvent) {
+      if (e.key === 'Control') { ctrlOnlyRef.current = true; return; }
+      if (e.ctrlKey) ctrlOnlyRef.current = false;
+    }
+
+    function onKeyUp(e: KeyboardEvent) {
+      if (e.key === 'Control' && ctrlOnlyRef.current) {
+        setToggleEditSignal((t) => t + 1);
+      }
+    }
+
+    window.addEventListener('keydown', onKeyDown);
+    window.addEventListener('keyup', onKeyUp);
+    return () => {
+      window.removeEventListener('keydown', onKeyDown);
+      window.removeEventListener('keyup', onKeyUp);
+    };
+  }, [isOpen]);
 
   if (!card) return null;
 
@@ -133,6 +158,7 @@ export default function KanbanCardModal({ isOpen, onClose, card, onUpdate, onDup
                   onChange={setDescription}
                   onBlur={saveDescription}
                   rows={6}
+                  toggleEditSignal={toggleEditSignal}
                 />
               </div>
 

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { marked } from 'marked';
 
 interface MarkdownFieldProps {
@@ -7,10 +7,24 @@ interface MarkdownFieldProps {
   onBlur?: () => void;
   placeholder?: string;
   rows?: number;
+  toggleEditSignal?: number;
 }
 
-export default function MarkdownField({ value, onChange, onBlur, placeholder, rows = 6 }: MarkdownFieldProps) {
+export default function MarkdownField({ value, onChange, onBlur, placeholder, rows = 6, toggleEditSignal }: MarkdownFieldProps) {
   const [mode, setMode] = useState<'edit' | 'preview'>('preview');
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const appliedToggleRef = useRef<number | undefined>(undefined);
+
+  useEffect(() => {
+    if (toggleEditSignal !== undefined && toggleEditSignal !== appliedToggleRef.current) {
+      appliedToggleRef.current = toggleEditSignal;
+      setMode((m) => (m === 'edit' ? 'preview' : 'edit'));
+    }
+  }, [toggleEditSignal]);
+
+  useEffect(() => {
+    if (mode === 'edit') textareaRef.current?.focus();
+  }, [mode]);
 
   const html = marked.parse(value || '', { breaks: true, gfm: true }) as string;
 

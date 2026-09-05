@@ -11,12 +11,17 @@ import TabBreadcrumbBar from './tabs/TabBreadcrumbBar';
 import GlobalPomodoroWidget from '@/Projects/Project/modules/pomodoro/components/GlobalPomodoroWidget';
 import GlobalMomentComposerHost from '@/Feed/components/GlobalMomentComposerHost';
 import GlobalCardTimerWidget from '@/Kanban/Timer/components/GlobalCardTimerWidget';
+import { initPageVisibilityFromDisk, usePageVisibility } from './Aside/pageVisibilityStore';
+import { initAsideCollapsedFromDisk } from './Aside/useAsideCollapsed';
 
 export function AppLayout() {
   const { activeTabId } = useTabs();
+  const { disabledRoutes } = usePageVisibility();
 
   useEffect(() => {
     initTabsFromDisk();
+    initPageVisibilityFromDisk();
+    initAsideCollapsedFromDisk();
   }, []);
 
   return (
@@ -32,7 +37,7 @@ export function AppLayout() {
           <TabRouterHost />
         </div>
       </main>
-      <GlobalChatWidget />
+      {!disabledRoutes.has('/chat') && <GlobalChatWidget />}
       <GlobalSearchWidget />
       <GlobalKanbanModalHost />
       <GlobalPomodoroWidget />

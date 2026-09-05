@@ -17,6 +17,7 @@ import ProjectQuickModal from '@/Projects/Project/ProjectQuickModal';
 import { getProjectById } from '@/lib/api/projects';
 import { ProjectType } from '@/types/project.types';
 import ConfirmDialog from '@/components/ui/ConfirmDialog';
+import { useEventGalleryCovers } from './hooks/useEventGalleryCovers';
 
 export default function Agenda() {
   const navigate = useNavigate();
@@ -51,6 +52,7 @@ export default function Agenda() {
   }, [view, anchor]);
 
   const { events, create, update, remove } = useEvents(toLocalISO(rangeStart), toLocalISO(rangeEnd));
+  const { resolveEventImages, invalidateProject, hasAmbiguousAutoCover } = useEventGalleryCovers(events);
 
   function goPrev() {
     if (view === 'day') setAnchor((d) => addDays(d, -1));
@@ -171,6 +173,7 @@ export default function Agenda() {
             onEventDuplicate={handleDuplicateEvent}
             onProjectAssign={handleQuickAssignProject}
             onEventRequestDelete={requestDeleteEvent}
+            resolveEventImages={resolveEventImages}
           />
         ) : (
           <TimeGridView
@@ -188,6 +191,7 @@ export default function Agenda() {
             onProjectAssign={handleQuickAssignProject}
             onProjectSummaryClick={openProjectSummary}
             onEventRequestDelete={requestDeleteEvent}
+            resolveEventImages={resolveEventImages}
           />
         )}
       </div>
@@ -205,6 +209,8 @@ export default function Agenda() {
           to: '/projects/$projectId',
           params: { projectId }
         })}
+        onGalleryChanged={invalidateProject}
+        checkAmbiguousAutoCover={hasAmbiguousAutoCover}
       />
 
       <ProjectQuickModal

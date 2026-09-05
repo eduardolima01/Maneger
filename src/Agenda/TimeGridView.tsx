@@ -16,6 +16,7 @@ interface TimeGridViewProps {
   events: Event[];
   resolveColor: (projectId: string | null) => string;
   resolveCover: (projectId: string | null) => string | null;
+  resolveEventImages: (event: Event) => string[];
   resolveBreadcrumb: (projectId: string | null) => ProjectType[];
   onCreateEvent: (start: Date, end: Date) => void;
   onEventEdit: (event: Event) => void;
@@ -30,6 +31,7 @@ interface TimeGridViewProps {
 
 export default function TimeGridView({
   days, events, resolveColor, resolveCover, onCreateEvent, resolveBreadcrumb,
+  resolveEventImages,
   onEventEdit, onEventProjectClick, onEventDoubleClick, onEventChange, onEventDuplicate,
   onProjectAssign, onProjectSummaryClick, onEventRequestDelete,
 }: TimeGridViewProps) {
@@ -278,7 +280,8 @@ export default function TimeGridView({
                   event={ev}
                   hourHeight={HOUR_HEIGHT}
                   color={resolveColor(ev.project_id)}
-                  coverPath={resolveCover(ev.project_id)}
+                  images={resolveEventImages(ev)}
+                  fallbackCover={resolveCover(ev.project_id)}
                   breadcrumb={resolveBreadcrumb(ev.project_id)}
                   days={days}
                   dayIndex={dayIndex}

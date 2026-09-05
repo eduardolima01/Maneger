@@ -159,6 +159,28 @@ fn save_agenda_data(project_id: String, data: String) -> Result<(), String> {
 }
 
 #[tauri::command]
+fn load_event_gallery_data(project_id: String) -> Result<String, String> {
+    let dir = std::env::current_dir().map_err(|e| e.to_string())?;
+    let path = dir
+        .join("projects")
+        .join(&project_id)
+        .join("event-gallery.json");
+    if !path.exists() {
+        return Ok("{}".to_string());
+    }
+    fs::read_to_string(&path).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn save_event_gallery_data(project_id: String, data: String) -> Result<(), String> {
+    let dir = std::env::current_dir().map_err(|e| e.to_string())?;
+    let project_dir = dir.join("projects").join(&project_id);
+    fs::create_dir_all(&project_dir).map_err(|e| e.to_string())?;
+    let path = project_dir.join("event-gallery.json");
+    fs::write(&path, data).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
 fn list_modifications(project_id: String) -> Result<Vec<String>, String> {
     let dir = std::env::current_dir().map_err(|e| e.to_string())?;
     let mods_dir = dir.join("projects").join(&project_id).join("modifications");
@@ -276,6 +298,40 @@ pub fn run() {
         let path = project_dir.join("project-config.json");
         fs::write(&path, data).map_err(|e| e.to_string())
     }
+
+    #[tauri::command]
+    fn load_page_visibility_prefs() -> Result<String, String> {
+        let dir = std::env::current_dir().map_err(|e| e.to_string())?;
+        let path = dir.join("page-visibility.json");
+        if !path.exists() {
+            return Ok("{}".to_string());
+        }
+        fs::read_to_string(&path).map_err(|e| e.to_string())
+    }
+
+    #[tauri::command]
+    fn save_page_visibility_prefs(data: String) -> Result<(), String> {
+        let dir = std::env::current_dir().map_err(|e| e.to_string())?;
+        let path = dir.join("page-visibility.json");
+        fs::write(&path, data).map_err(|e| e.to_string())
+    }
+    #[tauri::command]
+    fn load_aside_collapsed_prefs() -> Result<String, String> {
+        let dir = std::env::current_dir().map_err(|e| e.to_string())?;
+        let path = dir.join("aside-collapsed.json");
+        if !path.exists() {
+            return Ok("{}".to_string());
+        }
+        fs::read_to_string(&path).map_err(|e| e.to_string())
+    }
+
+    #[tauri::command]
+    fn save_aside_collapsed_prefs(data: String) -> Result<(), String> {
+        let dir = std::env::current_dir().map_err(|e| e.to_string())?;
+        let path = dir.join("aside-collapsed.json");
+        fs::write(&path, data).map_err(|e| e.to_string())
+    }
+
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
@@ -296,6 +352,8 @@ pub fn run() {
             save_tabs_state,
             load_pomodoro_data,
             save_pomodoro_data,
+            load_aside_collapsed_prefs,
+            save_aside_collapsed_prefs,
             //
             load_card_timer_data,
             save_card_timer_data,
@@ -305,6 +363,10 @@ pub fn run() {
             //
             load_agenda_data,
             save_agenda_data,
+            load_page_visibility_prefs,
+            save_page_visibility_prefs,
+            load_event_gallery_data,
+            save_event_gallery_data,
             save_cover_from_bytes,
             list_modifications,
             load_modification_file,
