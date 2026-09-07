@@ -13,17 +13,14 @@ import GlobalMomentComposerHost from '@/Feed/components/GlobalMomentComposerHost
 import GlobalCardTimerWidget from '@/Kanban/Timer/components/GlobalCardTimerWidget';
 import { initPageVisibilityFromDisk, usePageVisibility } from './Aside/pageVisibilityStore';
 import { initAsideCollapsedFromDisk } from './Aside/useAsideCollapsed';
-
 export function AppLayout() {
   const { activeTabId } = useTabs();
   const { disabledRoutes } = usePageVisibility();
-
   useEffect(() => {
     initTabsFromDisk();
     initPageVisibilityFromDisk();
     initAsideCollapsedFromDisk();
   }, []);
-
   return (
     <div className="flex h-screen overflow-hidden">
       <Aside />
@@ -31,7 +28,7 @@ export function AppLayout() {
         <TabBar />
         <TabBreadcrumbBar />
         <div className="flex-1 overflow-y-auto" style={{ position: 'relative' }}>
-          <div className="h-full p-6" style={{ display: activeTabId === null ? 'block' : 'none' }}>
+          <div className="p-6" style={{ display: activeTabId === null ? 'block' : 'none' }}>
             <Outlet />
           </div>
           <TabRouterHost />

@@ -7,6 +7,7 @@ import { ProjectType } from '@/types/project.types';
 import { convertFileSrc } from '@tauri-apps/api/core';
 import WeekSummaryModal from './WeekSummaryModal';
 import { computeOverlapLevels, getVisualRange } from './utils/eventLayout';
+import WeekComparisonModal from './components/WeekComparisonModal';
 
 const HOUR_HEIGHT = 48;
 const HOURS = Array.from({ length: 24 }, (_, i) => i);
@@ -124,14 +125,12 @@ export default function TimeGridView({
     return { totalMinutes, count: dayEvents.length, byProject };
   }
 
-
   const daySummaries = days.map((day) => getDaySummary(day));
   const weekTotalMinutes = daySummaries.reduce((sum, s) => sum + (s?.totalMinutes ?? 0), 0);
   const weekEventCount = daySummaries.reduce((sum, s) => sum + (s?.count ?? 0), 0);
 
   const weekByProject: Record<string, { projectId: string | null; label: string; minutes: number }> = {};
   for (const summary of daySummaries) {
-
     if (!summary) continue;
     for (const [key, entry] of Object.entries(summary.byProject)) {
       if (!weekByProject[key]) weekByProject[key] = { projectId: entry.projectId, label: entry.label, minutes: 0 };
@@ -142,6 +141,7 @@ export default function TimeGridView({
   const weekByProjectSorted = Object.values(weekByProject).sort((a, b) => b.minutes - a.minutes);
 
   const [weekSummaryOpen, setWeekSummaryOpen] = useState(false);
+  const [comparisonOpen, setComparisonOpen] = useState(false);
 
   useEffect(() => {
     const el = gridRef.current;
@@ -154,24 +154,34 @@ export default function TimeGridView({
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
       {days.length > 1 && (
-        <button
-          onClick={() => setWeekSummaryOpen(true)}
-          style={{
-            width: '100%', display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-            padding: '8px 12px', border: 'none', borderBottom: '1px solid #e0e0e0', background: '#eef2f7', cursor: 'pointer',
-          }}
-        >
-          <span style={{ fontSize: 12, color: '#666' }}>
-            📊 {weekEventCount} evento{weekEventCount !== 1 ? 's' : ''} nesta semana
-          </span>
-          <span title="semana contem 168 horas" style={{ fontSize: 14, fontWeight: 700, color: '#1a73e8' }}>
-            Total: {weekTotalMinutes > 0 ? formatDuration(weekTotalMinutes) : '—'}
-          </span>
-        </button>
+        <div style={{ display: 'flex', flexShrink: 0, borderBottom: '1px solid #e0e0e0' }}>
+          <button
+            onClick={() => setWeekSummaryOpen(true)}
+            style={{
+              flex: 1, display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+              padding: '8px 12px', border: 'none', background: '#eef2f7', cursor: 'pointer',
+            }}
+          >
+            <span style={{ fontSize: 12, color: '#666' }}>
+              📊 {weekEventCount} evento{weekEventCount !== 1 ? 's' : ''} nesta semana
+            </span>
+            <span title="semana contem 168 horas" style={{ fontSize: 14, fontWeight: 700, color: '#1a73e8' }}>
+              Total: {weekTotalMinutes > 0 ? formatDuration(weekTotalMinutes) : '—'}
+            </span>
+          </button>
+          <button
+            onClick={() => setComparisonOpen(true)}
+            style={{
+              flexShrink: 0, padding: '8px 12px', border: 'none', borderLeft: '1px solid #e0e0e0',
+              background: '#eef2f7', cursor: 'pointer', fontSize: 12, color: '#666',
+            }}
+          >
+            📈 Comparar semanas
+          </button>
+        </div>
       )}
 
-
-      <div style={{ display: 'flex', borderBottom: '1px solid #e0e0e0' }}>
+      <div style={{ display: 'flex', borderBottom: '1px solid #e0e0e0', flexShrink: 0 }}>
         <div style={{ width: 56 }} />
         {days.map((day, i) => (
           <div
@@ -245,8 +255,6 @@ export default function TimeGridView({
                 width: CREATE_ZONE_WIDTH,
                 cursor: 'crosshair',
                 zIndex: 50,
-                // backgroundColor: 'rgba(26,115,232,0.06)',
-                // backgroundColor: "#fff",
                 borderLeft: '1px dashed rgba(26,115,232,0.3)',
               }}
             />
@@ -343,7 +351,7 @@ export default function TimeGridView({
         ))}
       </div>
 
-      <div style={{ display: 'flex', borderTop: '1px solid #e0e0e0', backgroundColor: '#fafafa' }}>
+      <div style={{ display: 'flex', borderTop: '1px solid #e0e0e0', backgroundColor: '#fafafa', flexShrink: 0 }}>
         <div style={{ width: 56 }} />
         {days.map((_, i) => {
           const summary = daySummaries[i];
@@ -403,6 +411,17 @@ export default function TimeGridView({
           resolveColor={resolveColor}
         />
       </div>
+      {days.length > 1 && (
+        <WeekComparisonModal
+          isOpen={comparisonOpen}
+          onClose={() => setComparisonOpen(false)}
+          weekStart={days[0]}
+          days={days}
+          currentWeekEvents={events}
+          resolveColor={resolveColor}
+          resolveBreadcrumb={resolveBreadcrumb}
+        />
+      )}
     </div>
   );
 }
