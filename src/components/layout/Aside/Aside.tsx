@@ -11,6 +11,7 @@ import {
   MdChat,
   MdGesture,
   MdHistoryEdu,
+  MdSchool,
 } from 'react-icons/md'
 import { ThemeToggle } from '@/components/layout/ThemeToggle'
 import { LuLogs } from 'react-icons/lu'
@@ -25,6 +26,7 @@ const menuItems = [
   { label: 'Agenda', icon: MdCalendarMonth, to: '/agenda' },
   { label: 'Projetos', icon: MdFolder, to: '/projects' },
   { label: 'Feed', icon: MdHistoryEdu, to: '/feed' },
+  { label: 'Estudos', icon: MdSchool, to: '/study' }, // novo
   { label: 'Kanban', icon: MdViewKanban, to: '/kanban' },
   { label: 'Canvas', icon: MdGesture, to: '/canvas' }, // novo
   { label: 'Chat', icon: MdChat, to: '/chat' },

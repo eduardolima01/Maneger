@@ -332,6 +332,23 @@ pub fn run() {
         fs::write(&path, data).map_err(|e| e.to_string())
     }
 
+    #[tauri::command]
+    fn load_study_data() -> Result<String, String> {
+        let dir = std::env::current_dir().map_err(|e| e.to_string())?;
+        let path = dir.join("study-data.json");
+        if !path.exists() {
+            return Ok("{}".to_string());
+        }
+        fs::read_to_string(&path).map_err(|e| e.to_string())
+    }
+
+    #[tauri::command]
+    fn save_study_data(data: String) -> Result<(), String> {
+        let dir = std::env::current_dir().map_err(|e| e.to_string())?;
+        let path = dir.join("study-data.json");
+        fs::write(&path, data).map_err(|e| e.to_string())
+    }
+
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
@@ -354,6 +371,8 @@ pub fn run() {
             save_pomodoro_data,
             load_aside_collapsed_prefs,
             save_aside_collapsed_prefs,
+            load_study_data,
+            save_study_data,
             //
             load_card_timer_data,
             save_card_timer_data,
