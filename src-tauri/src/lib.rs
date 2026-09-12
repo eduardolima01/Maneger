@@ -1,10 +1,12 @@
 mod canvas_commands;
 mod feed_commands;
+mod file_explorer_commands;
 mod schema;
 mod timer_commands;
 
 use canvas_commands::*;
 use feed_commands::*;
+use file_explorer_commands::*;
 use std::fs;
 use std::path::PathBuf;
 use tauri_plugin_sql::{Migration, MigrationKind};
@@ -349,6 +351,23 @@ pub fn run() {
         fs::write(&path, data).map_err(|e| e.to_string())
     }
 
+    #[tauri::command]
+    fn load_explorer_prefs() -> Result<String, String> {
+        let dir = std::env::current_dir().map_err(|e| e.to_string())?;
+        let path = dir.join("explorer-prefs.json");
+        if !path.exists() {
+            return Ok("{}".to_string());
+        }
+        fs::read_to_string(&path).map_err(|e| e.to_string())
+    }
+
+    #[tauri::command]
+    fn save_explorer_prefs(data: String) -> Result<(), String> {
+        let dir = std::env::current_dir().map_err(|e| e.to_string())?;
+        let path = dir.join("explorer-prefs.json");
+        fs::write(&path, data).map_err(|e| e.to_string())
+    }
+
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
@@ -371,6 +390,22 @@ pub fn run() {
             save_pomodoro_data,
             load_aside_collapsed_prefs,
             save_aside_collapsed_prefs,
+            //
+            load_explorer_prefs,
+            save_explorer_prefs,
+            list_directory,
+            get_home_path,
+            get_quick_access_locations,
+            create_folder,
+            rename_path,
+            delete_to_trash,
+            copy_path,
+            move_path,
+            list_trash,
+            restore_trash_item,
+            read_text_file,
+            write_text_file,
+            //
             load_study_data,
             save_study_data,
             //

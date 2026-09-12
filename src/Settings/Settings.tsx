@@ -4,6 +4,7 @@ import {
 } from 'react-icons/md';
 import { LuLogs } from 'react-icons/lu';
 import { usePageVisibility, setPageDisabled } from '@/components/layout/Aside/pageVisibilityStore';
+import { SettingsExplorerSection } from './SettingsExplorerSection';
 
 // espelha o menuItems real do Aside.tsx — Dashboard ('/') fica de fora de propósito
 // (rota raiz, não pode ser desabilitada; ver pageVisibilityStore.ts)
@@ -50,6 +51,7 @@ export const Settings = () => {
             </label>
           );
         })}
+        <SettingsExplorerSection />
       </div>
     </div>
   );

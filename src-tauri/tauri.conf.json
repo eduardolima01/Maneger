@@ -25,7 +25,8 @@
           "$RESOURCE/../covers/*",
           "**/covers/*",
           "**/canvas-assets/*",
-          "**/feed-assets/*"
+          "**/feed-assets/*",
+          "$HOME/**"
         ]
       }
     }
