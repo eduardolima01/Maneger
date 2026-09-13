@@ -2,131 +2,135 @@ import { getDb } from '@/lib/db/client';
 import { generateId } from '@/lib/utils/uuid';
 import { toLocalISO } from '@/lib/utils/date';
 import { defaultViewPrefs } from '@/types/kanban.types';
-import type { Kanban, CreateKanbanInput, UpdateKanbanInput, KanbanViewPrefs } from '@/types/kanban.types';
-
-export interface KanbanRow {
-  id: string;
-  project_id: string;
-  parent_card_id: string | null;
-  name: string;
-  description: string | null;
-  color: string | null;
-  is_default: number;
-  archived: number;
-  position: number;
-  view_prefs: string;
-  created_at: string;
-  updated_at: string;
-}
-
-function rowToKanban(row: KanbanRow): Kanban {
-  let viewPrefs: KanbanViewPrefs;
-  try {
-    viewPrefs = { ...defaultViewPrefs(), ...JSON.parse(row.view_prefs) };
-  } catch {
-    viewPrefs = defaultViewPrefs();
-  }
-  return {
-    id: row.id,
-    projectId: row.project_id,
-    parentCardId: row.parent_card_id,
-    name: row.name,
-    description: row.description,
-    color: row.color,
-    isDefault: !!row.is_default,
-    archived: !!row.archived,
-    position: row.position,
-    viewPrefs,
-    createdAt: row.created_at,
-    updatedAt: row.updated_at,
-  };
-}
+import type { Kanban, CreateKanbanInput, UpdateKanbanInput, KanbanWithProject } from '@/types/kanban.types';
+import { loadKanbanData, saveKanbanData } from '@/Kanban/api/kanbanDataStore';
 
 export async function getKanbansByProject(projectId: string, includeArchived = false): Promise<Kanban[]> {
-  const db = await getDb();
-  const query = includeArchived
-    ? 'SELECT * FROM kanbans WHERE project_id = $1 ORDER BY position ASC'
-    : 'SELECT * FROM kanbans WHERE project_id = $1 AND archived = 0 ORDER BY position ASC';
-  const rows = await db.select<KanbanRow[]>(query, [projectId]);
-  return rows.map(rowToKanban);
+  const data = await loadKanbanData();
+  return data.kanbans
+    .filter((k) => k.projectId === projectId && (includeArchived || !k.archived))
+    .sort((a, b) => a.position - b.position);
 }
 
 export async function getKanbanById(id: string): Promise<Kanban | null> {
-  const db = await getDb();
-  const rows = await db.select<KanbanRow[]>('SELECT * FROM kanbans WHERE id = $1', [id]);
-  return rows[0] ? rowToKanban(rows[0]) : null;
+  const data = await loadKanbanData();
+  return data.kanbans.find((k) => k.id === id) ?? null;
 }
 
 const DEFAULT_COLUMN_NAMES = ['Pendências', 'Fazer', 'Fazendo', 'Feito'];
 
 export async function createKanban(input: CreateKanbanInput): Promise<string> {
-  const db = await getDb();
+  const data = await loadKanbanData();
   const id = generateId();
   const now = toLocalISO(new Date());
 
-  const existing = await db.select<{ maxPos: number | null; count: number }[]>(
-    'SELECT MAX(position) as maxPos, COUNT(*) as count FROM kanbans WHERE project_id = $1',
-    [input.projectId]
-  );
-  const nextPosition = (existing[0]?.maxPos ?? -1) + 1;
-  const isFirstKanban = !input.parentCardId && (existing[0]?.count ?? 0) === 0; // sub-kanban de card nunca vira "padrão do projeto"
+  const siblings = data.kanbans.filter((k) => k.projectId === input.projectId);
+  const nextPosition = siblings.length > 0 ? Math.max(...siblings.map((k) => k.position)) + 1 : 0;
+  const isFirstKanban = !input.parentCardId && siblings.length === 0; // sub-kanban de card nunca vira "padrão do projeto"
 
-  await db.execute(
-    `INSERT INTO kanbans (id, project_id, parent_card_id, name, description, color, is_default, position, view_prefs, created_at, updated_at)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $10)`,
-    [id, input.projectId, input.parentCardId ?? null, input.name, input.description ?? null, input.color ?? null, isFirstKanban ? 1 : 0, nextPosition, JSON.stringify(defaultViewPrefs()), now]
-  );
+  data.kanbans.push({
+    id,
+    projectId: input.projectId,
+    parentCardId: input.parentCardId ?? null,
+    name: input.name,
+    description: input.description ?? null,
+    color: input.color ?? null,
+    isDefault: isFirstKanban,
+    archived: false,
+    position: nextPosition,
+    viewPrefs: defaultViewPrefs(),
+    createdAt: now,
+    updatedAt: now,
+  });
 
   // colunas padrão, criadas automaticamente pra um Kanban novo não nascer vazio de estrutura
   for (let i = 0; i < DEFAULT_COLUMN_NAMES.length; i++) {
-    await db.execute(
-      'INSERT INTO kanban_columns (id, kanban_id, name, position) VALUES ($1, $2, $3, $4)',
-      [generateId(), id, DEFAULT_COLUMN_NAMES[i], i]
-    );
+    data.columns.push({
+      id: generateId(),
+      kanbanId: id,
+      name: DEFAULT_COLUMN_NAMES[i],
+      color: null,
+      icon: null,
+      wipLimit: null,
+      visible: true,
+      collapsed: false,
+      position: i,
+    });
   }
 
+  await saveKanbanData(data);
   return id;
 }
 
 export async function updateKanban(id: string, input: UpdateKanbanInput): Promise<void> {
-  const entries: [string, unknown][] = [];
-  if (input.name !== undefined) entries.push(['name', input.name]);
-  if (input.description !== undefined) entries.push(['description', input.description]);
-  if (input.color !== undefined) entries.push(['color', input.color]);
-  if (input.archived !== undefined) entries.push(['archived', input.archived ? 1 : 0]);
-  if (input.viewPrefs !== undefined) entries.push(['view_prefs', JSON.stringify(input.viewPrefs)]);
-  if (entries.length === 0) return;
-  entries.push(['updated_at', toLocalISO(new Date())]);
+  const data = await loadKanbanData();
+  const kanban = data.kanbans.find((k) => k.id === id);
+  if (!kanban) return;
 
-  const db = await getDb();
-  const setClause = entries.map(([key], i) => `${key} = $${i + 1}`).join(', ');
-  const values = entries.map(([, v]) => v);
-  values.push(id);
-  await db.execute(`UPDATE kanbans SET ${setClause} WHERE id = $${entries.length + 1}`, values);
+  let changed = false;
+  if (input.name !== undefined) { kanban.name = input.name; changed = true; }
+  if (input.description !== undefined) { kanban.description = input.description; changed = true; }
+  if (input.color !== undefined) { kanban.color = input.color; changed = true; }
+  if (input.archived !== undefined) { kanban.archived = input.archived; changed = true; }
+  if (input.viewPrefs !== undefined) { kanban.viewPrefs = input.viewPrefs; changed = true; }
+  if (!changed) return;
+
+  kanban.updatedAt = toLocalISO(new Date());
+  await saveKanbanData(data);
 }
 
 export async function setDefaultKanban(projectId: string, kanbanId: string): Promise<void> {
-  const db = await getDb();
-  await db.execute('UPDATE kanbans SET is_default = 0 WHERE project_id = $1', [projectId]);
-  await db.execute('UPDATE kanbans SET is_default = 1 WHERE id = $1', [kanbanId]);
+  const data = await loadKanbanData();
+  for (const k of data.kanbans) {
+    if (k.projectId === projectId) k.isDefault = k.id === kanbanId;
+  }
+  await saveKanbanData(data);
 }
 
 export async function reorderKanbans(projectId: string, orderedIds: string[]): Promise<void> {
-  const db = await getDb();
-  for (let index = 0; index < orderedIds.length; index++) {
-    await db.execute('UPDATE kanbans SET position = $1 WHERE id = $2 AND project_id = $3', [index, orderedIds[index], projectId]);
-  }
+  const data = await loadKanbanData();
+  orderedIds.forEach((id, index) => {
+    const kanban = data.kanbans.find((k) => k.id === id && k.projectId === projectId);
+    if (kanban) kanban.position = index;
+  });
+  await saveKanbanData(data);
 }
 
+/**
+ * Exclui o Kanban e faz o cascade manual que antes era responsabilidade do SQLite
+ * (ON DELETE CASCADE em kanban_columns/kanban_card_groups/kanban_cards/kanban_card_checklist_items).
+ */
 export async function deleteKanban(id: string): Promise<void> {
-  const db = await getDb();
-  await db.execute('DELETE FROM kanbans WHERE id = $1', [id]);
+  const data = await loadKanbanData();
+
+  const columnIds = new Set(data.columns.filter((c) => c.kanbanId === id).map((c) => c.id));
+  const groupIds = new Set(
+    data.cardGroups.filter((g) => g.kanbanId === id || columnIds.has(g.columnId)).map((g) => g.id)
+  );
+  const cardIds = new Set(
+    data.cards
+      .filter(
+        (c) =>
+          c.kanbanId === id ||
+          (c.columnId && columnIds.has(c.columnId)) ||
+          (c.cardGroupId && groupIds.has(c.cardGroupId))
+      )
+      .map((c) => c.id)
+  );
+
+  data.checklistItems = data.checklistItems.filter((item) => !cardIds.has(item.cardId));
+  data.cards = data.cards.filter((c) => !cardIds.has(c.id));
+  data.cardGroups = data.cardGroups.filter((g) => !groupIds.has(g.id));
+  data.columns = data.columns.filter((c) => !columnIds.has(c.id));
+  data.kanbans = data.kanbans.filter((k) => k.id !== id);
+
+  await saveKanbanData(data);
 }
 
-/** Cópia rasa da estrutura (Kanban + Colunas), SEM cards — cards ficam fora de propósito, já que o objetivo é um board vazio pronto pra popular. */
+/** Cópia rasa da estrutura (Kanban + Colunas), SEM cards. */
 export async function duplicateKanban(id: string): Promise<string> {
-  const db = await getDb();
-  const original = await getKanbanById(id);
+  const data = await loadKanbanData();
+  const original = data.kanbans.find((k) => k.id === id);
   if (!original) throw new Error('Kanban não encontrado para duplicar');
 
   const newId = await createKanban({
@@ -136,67 +140,81 @@ export async function duplicateKanban(id: string): Promise<string> {
     color: original.color,
   });
 
-  // remove as colunas-padrão criadas automaticamente e recria a partir das colunas reais do original
-  const originalColumns = await db.select<{ id: string; name: string; color: string | null; icon: string | null; wip_limit: number | null; visible: number; position: number }[]>(
-    'SELECT * FROM kanban_columns WHERE kanban_id = $1 ORDER BY position ASC',
-    [id]
-  );
-  await db.execute('DELETE FROM kanban_columns WHERE kanban_id = $1', [newId]);
+  const originalColumns = data.columns
+    .filter((c) => c.kanbanId === id)
+    .sort((a, b) => a.position - b.position);
+
+  // remove as colunas-padrão criadas automaticamente por createKanban e recria a partir das colunas reais do original
+  const freshData = await loadKanbanData();
+  freshData.columns = freshData.columns.filter((c) => c.kanbanId !== newId);
   for (const col of originalColumns) {
-    await db.execute(
-      'INSERT INTO kanban_columns (id, kanban_id, name, color, icon, wip_limit, visible, position) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)',
-      [generateId(), newId, col.name, col.color, col.icon, col.wip_limit, col.visible, col.position]
-    );
+    freshData.columns.push({
+      id: generateId(),
+      kanbanId: newId,
+      name: col.name,
+      color: col.color,
+      icon: col.icon,
+      wipLimit: col.wipLimit,
+      visible: col.visible,
+      collapsed: false,
+      position: col.position,
+    });
   }
+  await saveKanbanData(freshData);
 
   return newId;
 }
 
-interface KanbanWithProject extends Kanban {
-  projectName: string;
-  projectColor: string | null;
-  projectCoverPath: string | null;
-  projectArchived: boolean;
+interface ProjectSummaryRow {
+  id: string;
+  name: string;
+  color: string | null;
+  cover_path: string | null;
+  archived: number;
 }
 
-interface KanbanWithProjectRow extends KanbanRow {
-  project_name: string;
-  project_color: string | null;
-  project_cover_path: string | null;
-  project_archived: number;
-}
-
+/**
+ * `projects` continua no SQLite (fora do escopo desta migração), então esta função
+ * segue lendo de lá via `getDb()` — só o lado do Kanban virou JSON. Join feito em JS.
+ */
 export async function getAllKanbansWithProject(): Promise<KanbanWithProject[]> {
-  const db = await getDb();
-  const rows = await db.select<KanbanWithProjectRow[]>(
-    `SELECT k.*, p.name as project_name, p.color as project_color, p.cover_path as project_cover_path, p.archived as project_archived
-     FROM kanbans k
-     JOIN projects p ON p.id = k.project_id
-     WHERE k.parent_card_id IS NULL
-     ORDER BY p.name ASC, k.position ASC`
-  );
-  return rows.map((row) => ({
-    ...rowToKanban(row),
-    projectName: row.project_name,
-    projectColor: row.project_color,
-    projectCoverPath: row.project_cover_path,
-    projectArchived: !!row.project_archived,
-  }));
-}
+  const data = await loadKanbanData();
+  const topLevel = data.kanbans.filter((k) => !k.parentCardId);
+  if (topLevel.length === 0) return [];
 
-export async function getSubKanbanByCardId(cardId: string): Promise<Kanban | null> {
   const db = await getDb();
-  const rows = await db.select<KanbanRow[]>('SELECT * FROM kanbans WHERE parent_card_id = $1 LIMIT 1', [cardId]);
-  return rows[0] ? rowToKanban(rows[0]) : null;
+  const projectIds = [...new Set(topLevel.map((k) => k.projectId))];
+  const placeholders = projectIds.map((_, i) => `$${i + 1}`).join(', ');
+  const projectRows = await db.select<ProjectSummaryRow[]>(
+    `SELECT id, name, color, cover_path, archived FROM projects WHERE id IN (${placeholders})`,
+    projectIds
+  );
+  const projectsById = new Map(projectRows.map((p) => [p.id, p]));
+
+  const result: KanbanWithProject[] = [];
+  for (const k of topLevel) {
+    const project = projectsById.get(k.projectId);
+    if (!project) continue; // equivalente ao INNER JOIN original
+    result.push({
+      ...k,
+      projectName: project.name,
+      projectColor: project.color,
+      projectCoverPath: project.cover_path,
+      projectArchived: !!project.archived,
+    });
+  }
+
+  result.sort((a, b) => a.projectName.localeCompare(b.projectName) || a.position - b.position);
+  return result;
 }
 
 export async function getCardIdsWithSubKanban(cardIds: string[]): Promise<Set<string>> {
   if (cardIds.length === 0) return new Set();
-  const db = await getDb();
-  const placeholders = cardIds.map((_, i) => `$${i + 1}`).join(', ');
-  const rows = await db.select<{ parent_card_id: string }[]>(
-    `SELECT DISTINCT parent_card_id FROM kanbans WHERE parent_card_id IN (${placeholders})`,
-    cardIds
-  );
-  return new Set(rows.map((r) => r.parent_card_id));
+  const data = await loadKanbanData();
+  const cardIdSet = new Set(cardIds);
+  const result = new Set<string>();
+  for (const k of data.kanbans) {
+    if (k.parentCardId && cardIdSet.has(k.parentCardId)) result.add(k.parentCardId);
+  }
+  return result;
 }

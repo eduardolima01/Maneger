@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useMemo } from 'react'; import * as columnsApi from '@/lib/api/kanban/kanbanColumns';
 import * as cardsApi from '@/lib/api/kanban/kanbanCards';
-import * as kanbansApi from '@/lib/api/kanban/kanbans';
+import * as kanbansApi from '@/lib/api/kanban/kanbans.ts';
 import type { KanbanColumn, KanbanFilters, KanbanCard, KanbanCardGroup, Kanban, KanbanViewPrefs, ChecklistProgress } from '@/types/kanban.types';
 import { emptyFilters, hasActiveFilters } from '@/types/kanban.types';
 

@@ -1,94 +1,92 @@
-import { getDb } from '@/lib/db/client';
+import { loadKanbanData, saveKanbanData } from '@/Kanban/api/kanbanDataStore';
 import { generateId } from '@/lib/utils/uuid';
 import type { KanbanColumn, CreateKanbanColumnInput, UpdateKanbanColumnInput } from '@/types/kanban.types';
 
-interface KanbanColumnRow {
-  id: string;
-  kanban_id: string;
-  name: string;
-  color: string | null;
-  icon: string | null;
-  wip_limit: number | null;
-  visible: number;
-  position: number;
-  collapsed: number;
-}
-
-function rowToColumn(row: KanbanColumnRow): KanbanColumn {
-  return {
-    id: row.id,
-    kanbanId: row.kanban_id,
-    name: row.name,
-    color: row.color,
-    icon: row.icon,
-    wipLimit: row.wip_limit,
-    collapsed: !!row.collapsed,
-    visible: !!row.visible,
-    position: row.position,
-  };
-}
-
 export async function getColumnsByKanban(kanbanId: string): Promise<KanbanColumn[]> {
-  const db = await getDb();
-  const rows = await db.select<KanbanColumnRow[]>('SELECT * FROM kanban_columns WHERE kanban_id = $1 ORDER BY position ASC', [kanbanId]);
-  return rows.map(rowToColumn);
+  const data = await loadKanbanData();
+  return data.columns
+    .filter((c) => c.kanbanId === kanbanId)
+    .sort((a, b) => a.position - b.position);
 }
 
 export async function createColumn(input: CreateKanbanColumnInput): Promise<string> {
-  const db = await getDb();
+  const data = await loadKanbanData();
   const id = generateId();
 
-  const existing = await db.select<{ maxPos: number | null }[]>(
-    'SELECT MAX(position) as maxPos FROM kanban_columns WHERE kanban_id = $1',
-    [input.kanbanId]
-  );
-  const nextPosition = (existing[0]?.maxPos ?? -1) + 1;
+  const siblings = data.columns.filter((c) => c.kanbanId === input.kanbanId);
+  const nextPosition = siblings.length > 0 ? Math.max(...siblings.map((c) => c.position)) + 1 : 0;
 
-  await db.execute(
-    'INSERT INTO kanban_columns (id, kanban_id, name, color, icon, wip_limit, position) VALUES ($1, $2, $3, $4, $5, $6, $7)',
-    [id, input.kanbanId, input.name, input.color ?? null, input.icon ?? null, input.wipLimit ?? null, nextPosition]
-  );
+  data.columns.push({
+    id,
+    kanbanId: input.kanbanId,
+    name: input.name,
+    color: input.color ?? null,
+    icon: input.icon ?? null,
+    wipLimit: input.wipLimit ?? null,
+    visible: true,
+    // nunca existiu de verdade no schema SQL (a tabela não tem essa coluna) — sempre foi false;
+    // o estado real de "colapsada" vive em Kanban.viewPrefs.collapsedColumnIds.
+    collapsed: false,
+    position: nextPosition,
+  });
+
+  await saveKanbanData(data);
   return id;
 }
 
 export async function updateColumn(id: string, input: UpdateKanbanColumnInput): Promise<void> {
-  const entries: [string, unknown][] = [];
-  if (input.name !== undefined) entries.push(['name', input.name]);
-  if (input.color !== undefined) entries.push(['color', input.color]);
-  if (input.icon !== undefined) entries.push(['icon', input.icon]);
-  if (input.wipLimit !== undefined) entries.push(['wip_limit', input.wipLimit]);
-  if (input.visible !== undefined) entries.push(['visible', input.visible ? 1 : 0]);
-  if (entries.length === 0) return;
+  const data = await loadKanbanData();
+  const column = data.columns.find((c) => c.id === id);
+  if (!column) return;
 
-  const db = await getDb();
-  const setClause = entries.map(([key], i) => `${key} = $${i + 1}`).join(', ');
-  const values = entries.map(([, v]) => v);
-  values.push(id);
-  await db.execute(`UPDATE kanban_columns SET ${setClause} WHERE id = $${entries.length + 1}`, values);
+  let changed = false;
+  if (input.name !== undefined) { column.name = input.name; changed = true; }
+  if (input.color !== undefined) { column.color = input.color; changed = true; }
+  if (input.icon !== undefined) { column.icon = input.icon; changed = true; }
+  if (input.wipLimit !== undefined) { column.wipLimit = input.wipLimit; changed = true; }
+  if (input.visible !== undefined) { column.visible = input.visible; changed = true; }
+  if (!changed) return;
+
+  await saveKanbanData(data);
 }
 
 export async function reorderColumns(kanbanId: string, orderedIds: string[]): Promise<void> {
-  const db = await getDb();
-  for (let index = 0; index < orderedIds.length; index++) {
-    await db.execute('UPDATE kanban_columns SET position = $1 WHERE id = $2 AND kanban_id = $3', [index, orderedIds[index], kanbanId]);
-  }
+  const data = await loadKanbanData();
+  orderedIds.forEach((id, index) => {
+    const column = data.columns.find((c) => c.id === id && c.kanbanId === kanbanId);
+    if (column) column.position = index;
+  });
+  await saveKanbanData(data);
 }
 
+/** Cascade manual (antes era ON DELETE CASCADE). */
 export async function deleteColumn(id: string): Promise<void> {
-  const db = await getDb();
-  await db.execute('DELETE FROM kanban_columns WHERE id = $1', [id]);
+  const data = await loadKanbanData();
+
+  const groupIds = new Set(data.cardGroups.filter((g) => g.columnId === id).map((g) => g.id));
+  const cardIds = new Set(
+    data.cards
+      .filter((c) => c.columnId === id || (c.cardGroupId && groupIds.has(c.cardGroupId)))
+      .map((c) => c.id)
+  );
+
+  data.checklistItems = data.checklistItems.filter((item) => !cardIds.has(item.cardId));
+  data.cards = data.cards.filter((c) => !cardIds.has(c.id));
+  data.cardGroups = data.cardGroups.filter((g) => !groupIds.has(g.id));
+  data.columns = data.columns.filter((c) => c.id !== id);
+
+  await saveKanbanData(data);
 }
 
 export async function duplicateColumn(id: string): Promise<string> {
-  const db = await getDb();
-  const rows = await db.select<KanbanColumnRow[]>('SELECT * FROM kanban_columns WHERE id = $1', [id]);
-  const original = rows[0];
+  const data = await loadKanbanData();
+  const original = data.columns.find((c) => c.id === id);
   if (!original) throw new Error('Coluna não encontrada para duplicar');
   return createColumn({
-    kanbanId: original.kanban_id,
+    kanbanId: original.kanbanId,
     name: `${original.name} (cópia)`,
     color: original.color,
     icon: original.icon,
-    wipLimit: original.wip_limit,
+    wipLimit: original.wipLimit,
   });
 }

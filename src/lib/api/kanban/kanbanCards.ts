@@ -1,127 +1,97 @@
-import { getDb } from '@/lib/db/client';
 import { generateId } from '@/lib/utils/uuid';
 import { toLocalISO } from '@/lib/utils/date';
 import type { KanbanCard, CreateKanbanCardInput, UpdateKanbanCardInput } from '@/types/kanban.types';
+import { loadKanbanData, saveKanbanData } from '@/Kanban/api/kanbanDataStore';
 
-interface KanbanCardRow {
-  id: string;
-  kanban_id: string | null;
-  column_id: string | null;
-  card_group_id: string | null;
-  title: string;
-  description: string | null;
-  cover_path: string | null;
-  color: string | null;
-  priority: KanbanCard['priority'];
-  labels: string;
-  assigned_to: string | null;
-  start_date: string | null;
-  due_date: string | null;
-  position: number;
-  archived: number;
-  created_at: string;
-  updated_at: string;
-}
-
-function rowToCard(row: KanbanCardRow): KanbanCard {
-  return {
-    id: row.id,
-    kanbanId: row.kanban_id,
-    columnId: row.column_id,
-    cardGroupId: row.card_group_id,
-    title: row.title,
-    description: row.description,
-    coverPath: row.cover_path,
-    color: row.color,
-    priority: row.priority,
-    labels: JSON.parse(row.labels),
-    assignedTo: row.assigned_to,
-    startDate: row.start_date,
-    dueDate: row.due_date,
-    position: row.position,
-    archived: !!row.archived,
-    createdAt: row.created_at,
-    updatedAt: row.updated_at,
-  };
+function applyPositions(cards: KanbanCard[], orderedIds: string[]): void {
+  orderedIds.forEach((id, index) => {
+    const card = cards.find((c) => c.id === id);
+    if (card) card.position = index;
+  });
 }
 
 export async function getCardsByKanban(kanbanId: string, includeArchived = false): Promise<KanbanCard[]> {
-  const db = await getDb();
-  const query = includeArchived
-    ? `SELECT c.* FROM kanban_cards c
-       LEFT JOIN kanban_card_groups g ON g.id = c.card_group_id
-       WHERE c.kanban_id = $1 OR g.kanban_id = $1
-       ORDER BY c.position ASC`
-    : `SELECT c.* FROM kanban_cards c
-       LEFT JOIN kanban_card_groups g ON g.id = c.card_group_id
-       WHERE (c.kanban_id = $1 OR g.kanban_id = $1) AND c.archived = 0
-       ORDER BY c.position ASC`;
-  const rows = await db.select<KanbanCardRow[]>(query, [kanbanId]);
-  return rows.map(rowToCard);
+  const data = await loadKanbanData();
+  const groupIdsInKanban = new Set(data.cardGroups.filter((g) => g.kanbanId === kanbanId).map((g) => g.id));
+  return data.cards
+    .filter((c) => c.kanbanId === kanbanId || (c.cardGroupId && groupIdsInKanban.has(c.cardGroupId)))
+    .filter((c) => includeArchived || !c.archived)
+    .sort((a, b) => a.position - b.position);
 }
 
 export async function getCardById(id: string): Promise<KanbanCard | null> {
-  const db = await getDb();
-  const rows = await db.select<KanbanCardRow[]>('SELECT * FROM kanban_cards WHERE id = $1', [id]);
-  return rows[0] ? rowToCard(rows[0]) : null;
+  const data = await loadKanbanData();
+  return data.cards.find((c) => c.id === id) ?? null;
 }
 
 export async function createCard(input: CreateKanbanCardInput): Promise<string> {
-  const db = await getDb();
+  const data = await loadKanbanData();
   const id = generateId();
   const now = toLocalISO(new Date());
 
-  // const scopeColumn = 'column_id';
-  const scopeValue = input.cardGroupId ? 'card_group_id' : 'column_id';
-  const scopeId = input.cardGroupId ?? input.columnId;
-  const existing = await db.select<{ maxPos: number | null }[]>(
-    `SELECT MAX(position) as maxPos FROM kanban_cards WHERE ${scopeValue} = $1`,
-    [scopeId]
-  );
-  const nextPosition = (existing[0]?.maxPos ?? -1) + 1;
+  const siblings = input.cardGroupId
+    ? data.cards.filter((c) => c.cardGroupId === input.cardGroupId)
+    : data.cards.filter((c) => c.columnId === input.columnId);
+  const nextPosition = siblings.length > 0 ? Math.max(...siblings.map((c) => c.position)) + 1 : 0;
 
-  await db.execute(
-    `INSERT INTO kanban_cards (id, kanban_id, column_id, card_group_id, title, description, color, priority, labels, start_date, due_date, position, created_at, updated_at)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $13)`,
-    [
-      id, input.kanbanId ?? null, input.columnId ?? null, input.cardGroupId ?? null, input.title, input.description ?? null, input.color ?? null,
-      input.priority ?? null, JSON.stringify(input.labels ?? []), input.startDate ?? null, input.dueDate ?? null,
-      nextPosition, now,
-    ]
-  );
+  data.cards.push({
+    id,
+    kanbanId: input.kanbanId ?? null,
+    columnId: input.columnId ?? null,
+    cardGroupId: input.cardGroupId ?? null,
+    title: input.title,
+    description: input.description ?? null,
+    coverPath: null,
+    color: input.color ?? null,
+    priority: input.priority ?? null,
+    labels: input.labels ?? [],
+    assignedTo: null,
+    startDate: input.startDate ?? null,
+    dueDate: input.dueDate ?? null,
+    position: nextPosition,
+    archived: false,
+    createdAt: now,
+    updatedAt: now,
+  });
+
+  await saveKanbanData(data);
   return id;
 }
 
 export async function updateCard(id: string, input: UpdateKanbanCardInput): Promise<void> {
-  const entries: [string, unknown][] = [];
-  if (input.title !== undefined) entries.push(['title', input.title]);
-  if (input.description !== undefined) entries.push(['description', input.description]);
-  if (input.coverPath !== undefined) entries.push(['cover_path', input.coverPath]);
-  if (input.color !== undefined) entries.push(['color', input.color]);
-  if (input.priority !== undefined) entries.push(['priority', input.priority]);
-  if (input.labels !== undefined) entries.push(['labels', JSON.stringify(input.labels)]);
-  if (input.assignedTo !== undefined) entries.push(['assigned_to', input.assignedTo]);
-  if (input.startDate !== undefined) entries.push(['start_date', input.startDate]);
-  if (input.dueDate !== undefined) entries.push(['due_date', input.dueDate]);
-  if (input.columnId !== undefined) entries.push(['column_id', input.columnId]);
-  if (input.archived !== undefined) entries.push(['archived', input.archived ? 1 : 0]);
-  if (entries.length === 0) return;
-  entries.push(['updated_at', toLocalISO(new Date())]);
+  const data = await loadKanbanData();
+  const card = data.cards.find((c) => c.id === id);
+  if (!card) return;
 
-  const db = await getDb();
-  const setClause = entries.map(([key], i) => `${key} = $${i + 1}`).join(', ');
-  const values = entries.map(([, v]) => v);
-  values.push(id);
-  await db.execute(`UPDATE kanban_cards SET ${setClause} WHERE id = $${entries.length + 1}`, values);
+  let changed = false;
+  if (input.title !== undefined) { card.title = input.title; changed = true; }
+  if (input.description !== undefined) { card.description = input.description; changed = true; }
+  if (input.coverPath !== undefined) { card.coverPath = input.coverPath; changed = true; }
+  if (input.color !== undefined) { card.color = input.color; changed = true; }
+  if (input.priority !== undefined) { card.priority = input.priority; changed = true; }
+  if (input.labels !== undefined) { card.labels = input.labels; changed = true; }
+  if (input.assignedTo !== undefined) { card.assignedTo = input.assignedTo; changed = true; }
+  if (input.startDate !== undefined) { card.startDate = input.startDate; changed = true; }
+  if (input.dueDate !== undefined) { card.dueDate = input.dueDate; changed = true; }
+  if (input.columnId !== undefined) { card.columnId = input.columnId; changed = true; }
+  if (input.archived !== undefined) { card.archived = input.archived; changed = true; }
+  if (!changed) return;
+
+  card.updatedAt = toLocalISO(new Date());
+  await saveKanbanData(data);
 }
 
+/** Cascade manual: apaga também os checklist items do card (antes era ON DELETE CASCADE). */
 export async function deleteCard(id: string): Promise<void> {
-  const db = await getDb();
-  await db.execute('DELETE FROM kanban_cards WHERE id = $1', [id]);
+  const data = await loadKanbanData();
+  data.checklistItems = data.checklistItems.filter((item) => item.cardId !== id);
+  data.cards = data.cards.filter((c) => c.id !== id);
+  await saveKanbanData(data);
 }
 
 export async function duplicateCard(id: string): Promise<string> {
-  const original = await getCardById(id);
+  const data = await loadKanbanData();
+  const original = data.cards.find((c) => c.id === id);
   if (!original) throw new Error('Card não encontrado para duplicar');
   return createCard({
     kanbanId: original.kanbanId,
@@ -143,18 +113,17 @@ export async function archiveCard(id: string, archived: boolean): Promise<void> 
 
 /** Move um card pra outra coluna e/ou reordena os cards da coluna de destino. */
 export async function moveCard(cardId: string, targetColumnId: string, orderedCardIdsInColumn: string[]): Promise<void> {
-  const db = await getDb();
-  await db.execute('UPDATE kanban_cards SET column_id = $1 WHERE id = $2', [targetColumnId, cardId]);
-  for (let index = 0; index < orderedCardIdsInColumn.length; index++) {
-    await db.execute('UPDATE kanban_cards SET position = $1 WHERE id = $2', [index, orderedCardIdsInColumn[index]]);
-  }
+  const data = await loadKanbanData();
+  const card = data.cards.find((c) => c.id === cardId);
+  if (card) card.columnId = targetColumnId;
+  applyPositions(data.cards, orderedCardIdsInColumn);
+  await saveKanbanData(data);
 }
 
 export async function reorderWithinColumn(orderedCardIds: string[]): Promise<void> {
-  const db = await getDb();
-  for (let index = 0; index < orderedCardIds.length; index++) {
-    await db.execute('UPDATE kanban_cards SET position = $1 WHERE id = $2', [index, orderedCardIds[index]]);
-  }
+  const data = await loadKanbanData();
+  applyPositions(data.cards, orderedCardIds);
+  await saveKanbanData(data);
 }
 
 export async function getCardCountsByKanbanIds(kanbanIds: string[]): Promise<Record<string, number>> {
@@ -162,13 +131,12 @@ export async function getCardCountsByKanbanIds(kanbanIds: string[]): Promise<Rec
   for (const id of kanbanIds) result[id] = 0;
   if (kanbanIds.length === 0) return result;
 
-  const db = await getDb();
-  const placeholders = kanbanIds.map((_, i) => `$${i + 1}`).join(', ');
-  const rows = await db.select<{ kanban_id: string; count: number }[]>(
-    `SELECT kanban_id, COUNT(*) as count FROM kanban_cards WHERE kanban_id IN (${placeholders}) AND archived = 0 GROUP BY kanban_id`,
-    kanbanIds
-  );
-  for (const r of rows) result[r.kanban_id] = r.count;
+  const data = await loadKanbanData();
+  for (const c of data.cards) {
+    if (c.kanbanId && kanbanIds.includes(c.kanbanId) && !c.archived) {
+      result[c.kanbanId] = (result[c.kanbanId] ?? 0) + 1;
+    }
+  }
   return result;
 }
 
@@ -183,54 +151,66 @@ export async function getCardCountsByColumnForKanbans(kanbanIds: string[]): Prom
   for (const id of kanbanIds) result[id] = [];
   if (kanbanIds.length === 0) return result;
 
-  const db = await getDb();
-  const placeholders = kanbanIds.map((_, i) => `$${i + 1}`).join(', ');
-  const rows = await db.select<{ kanban_id: string; column_id: string; column_name: string; column_position: number; count: number }[]>(
-    `SELECT c.kanban_id as kanban_id, col.id as column_id, col.name as column_name, col.position as column_position, COUNT(c.id) as count
-     FROM kanban_columns col
-     LEFT JOIN kanban_cards c ON c.column_id = col.id AND c.archived = 0
-     WHERE col.kanban_id IN (${placeholders}) AND col.visible = 1
-     GROUP BY col.id
-     ORDER BY col.kanban_id ASC, col.position ASC`,
-    kanbanIds
-  );
+  const data = await loadKanbanData();
+  const kanbanIdSet = new Set(kanbanIds);
 
-  for (const r of rows) {
-    if (!result[r.kanban_id]) result[r.kanban_id] = [];
-    result[r.kanban_id].push({ columnId: r.column_id, columnName: r.column_name, count: r.count });
+  const relevantColumns = data.columns
+    .filter((col) => kanbanIdSet.has(col.kanbanId) && col.visible)
+    .sort((a, b) => a.position - b.position);
+
+  for (const col of relevantColumns) {
+    const count = data.cards.filter((c) => c.columnId === col.id && !c.archived).length;
+    result[col.kanbanId].push({ columnId: col.id, columnName: col.name, count });
   }
+
   return result;
 }
 
 export async function reorderCardsInGroup(orderedCardIds: string[]): Promise<void> {
-  const db = await getDb();
-  for (let index = 0; index < orderedCardIds.length; index++) {
-    await db.execute('UPDATE kanban_cards SET position = $1 WHERE id = $2', [index, orderedCardIds[index]]);
-  }
+  const data = await loadKanbanData();
+  applyPositions(data.cards, orderedCardIds);
+  await saveKanbanData(data);
 }
 
 export async function getCardsByGroup(groupId: string): Promise<KanbanCard[]> {
-  const db = await getDb();
-  const rows = await db.select<KanbanCardRow[]>(
-    'SELECT * FROM kanban_cards WHERE card_group_id = $1 AND archived = 0 ORDER BY position ASC',
-    [groupId]
-  );
-  return rows.map(rowToCard);
+  const data = await loadKanbanData();
+  return data.cards
+    .filter((c) => c.cardGroupId === groupId && !c.archived)
+    .sort((a, b) => a.position - b.position);
 }
 
 export async function moveCardIntoGroup(cardId: string, groupId: string, orderedCardIdsInGroup: string[]): Promise<void> {
-  const db = await getDb();
-  await db.execute('UPDATE kanban_cards SET card_group_id = $1, kanban_id = NULL, column_id = NULL WHERE id = $2', [groupId, cardId]);
-  for (let index = 0; index < orderedCardIdsInGroup.length; index++) {
-    await db.execute('UPDATE kanban_cards SET position = $1 WHERE id = $2', [index, orderedCardIdsInGroup[index]]);
+  const data = await loadKanbanData();
+  const card = data.cards.find((c) => c.id === cardId);
+  if (card) {
+    card.cardGroupId = groupId;
+    card.kanbanId = null;
+    card.columnId = null;
   }
+  applyPositions(data.cards, orderedCardIdsInGroup);
+  await saveKanbanData(data);
 }
 
 export async function moveCardOutOfGroup(cardId: string, kanbanId: string, columnId: string, orderedIdsInColumn: string[]): Promise<void> {
-  const db = await getDb();
-  await db.execute('UPDATE kanban_cards SET card_group_id = NULL, kanban_id = $1, column_id = $2 WHERE id = $3', [kanbanId, columnId, cardId]);
-  for (let index = 0; index < orderedIdsInColumn.length; index++) {
-    await db.execute('UPDATE kanban_cards SET position = $1 WHERE id = $2', [index, orderedIdsInColumn[index]]);
+  const data = await loadKanbanData();
+  const card = data.cards.find((c) => c.id === cardId);
+  if (card) {
+    card.cardGroupId = null;
+    card.kanbanId = kanbanId;
+    card.columnId = columnId;
   }
+  applyPositions(data.cards, orderedIdsInColumn);
+  await saveKanbanData(data);
 }
 
+/**
+ * Cards "soltos" (sem grupo) vinculados direto a um card-pai — resultado de
+ * `deleteParentCardGroup`, ou de qualquer card criado futuramente já direto
+ * no card-pai sem passar por um grupo. Ver ParentCardGroup em kanban.types.ts.
+ */
+export async function getUngroupedCardsByParentCard(parentCardId: string): Promise<KanbanCard[]> {
+  const data = await loadKanbanData();
+  return data.cards
+    .filter((c) => c.parentCardId === parentCardId && !c.cardGroupId && !c.archived)
+    .sort((a, b) => a.position - b.position);
+}

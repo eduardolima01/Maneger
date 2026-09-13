@@ -17,6 +17,7 @@ export interface KanbanCard {
   id: string;
   kanbanId: string | null;
   columnId: string | null;
+  parentCardId?: string | null;
   cardGroupId: string | null;
   title: string;
   description: string | null;
@@ -38,6 +39,7 @@ export interface CreateKanbanCardInput {
   columnId?: string | null;
   cardGroupId?: string;
   title: string;
+  parentCardId?: string | null;
   description?: string | null;
   color?: string | null;
   priority?: TaskPriority | null;
@@ -167,6 +169,13 @@ export interface KanbanCardGroup {
   id: string;
   kanbanId: string;
   columnId: string;
+  name: string;
+  position: number;
+}
+
+export interface ParentCardGroup {
+  id: string;
+  parentCardId: string;
   name: string;
   position: number;
 }

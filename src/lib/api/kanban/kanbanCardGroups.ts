@@ -1,74 +1,140 @@
-import { getDb } from '@/lib/db/client';
+import { loadKanbanData, saveKanbanData } from '@/Kanban/api/kanbanDataStore';
 import { generateId } from '@/lib/utils/uuid';
-import type { KanbanCardGroup } from '@/types/kanban.types';
-
-interface GroupRow {
-  id: string;
-  kanban_id: string;
-  column_id: string;
-  name: string;
-  position: number;
-}
-
-function rowToGroup(row: GroupRow): KanbanCardGroup {
-  return { id: row.id, kanbanId: row.kanban_id, columnId: row.column_id, name: row.name, position: row.position };
-}
+import type { KanbanCardGroup, ParentCardGroup } from '@/types/kanban.types';
 
 export async function getGroupsByKanban(kanbanId: string): Promise<KanbanCardGroup[]> {
-  const db = await getDb();
-  const rows = await db.select<GroupRow[]>('SELECT * FROM kanban_card_groups WHERE kanban_id = $1 ORDER BY position ASC', [kanbanId]);
-  return rows.map(rowToGroup);
+  const data = await loadKanbanData();
+  return data.cardGroups
+    .filter((g) => g.kanbanId === kanbanId)
+    .sort((a, b) => a.position - b.position);
 }
 
 export async function createGroup(kanbanId: string, columnId: string, name: string): Promise<string> {
-  const db = await getDb();
+  const data = await loadKanbanData();
   const id = generateId();
-  const existing = await db.select<{ maxPos: number | null }[]>(
-    'SELECT MAX(position) as maxPos FROM kanban_card_groups WHERE column_id = $1',
-    [columnId]
-  );
-  const nextPosition = (existing[0]?.maxPos ?? -1) + 1;
-  await db.execute('INSERT INTO kanban_card_groups (id, kanban_id, column_id, name, position) VALUES ($1, $2, $3, $4, $5)', [id, kanbanId, columnId, name, nextPosition]);
+
+  const siblings = data.cardGroups.filter((g) => g.columnId === columnId);
+  const nextPosition = siblings.length > 0 ? Math.max(...siblings.map((g) => g.position)) + 1 : 0;
+
+  data.cardGroups.push({ id, kanbanId, columnId, name, position: nextPosition });
+  await saveKanbanData(data);
   return id;
 }
 
 export async function renameGroup(id: string, name: string): Promise<void> {
-  const db = await getDb();
-  await db.execute('UPDATE kanban_card_groups SET name = $1 WHERE id = $2', [name, id]);
+  const data = await loadKanbanData();
+  const group = data.cardGroups.find((g) => g.id === id);
+  if (!group) return;
+  group.name = name;
+  await saveKanbanData(data);
 }
 
-/** Move o grupo (com todos os cards dele, que não mudam de group_id) pra outra coluna. */
+/**
+ * Move o grupo (com todos os cards dele, que não mudam de group_id) pra outra coluna.
+ * `orderedGroupAndCardIdsInColumn` é uma lista mista de ids de grupo E de card na mesma
+ * coluna (mesmo comportamento do original: só os ids que batem com um grupo de verdade
+ * têm a posição atualizada aqui; ids de card na lista são ignorados por esta função).
+ */
 export async function moveGroupToColumn(groupId: string, targetColumnId: string, orderedGroupAndCardIdsInColumn: string[]): Promise<void> {
-  const db = await getDb();
-  await db.execute('UPDATE kanban_card_groups SET column_id = $1 WHERE id = $2', [targetColumnId, groupId]);
-  for (let index = 0; index < orderedGroupAndCardIdsInColumn.length; index++) {
-    await db.execute('UPDATE kanban_card_groups SET position = $1 WHERE id = $2', [index, orderedGroupAndCardIdsInColumn[index]]);
-  }
+  const data = await loadKanbanData();
+  const group = data.cardGroups.find((g) => g.id === groupId);
+  if (group) group.columnId = targetColumnId;
+
+  orderedGroupAndCardIdsInColumn.forEach((id, index) => {
+    const g = data.cardGroups.find((g) => g.id === id);
+    if (g) g.position = index;
+  });
+
+  await saveKanbanData(data);
 }
 
 export async function reorderGroupPosition(orderedGroupIds: string[]): Promise<void> {
-  const db = await getDb();
-  for (let index = 0; index < orderedGroupIds.length; index++) {
-    await db.execute('UPDATE kanban_card_groups SET position = $1 WHERE id = $2', [index, orderedGroupIds[index]]);
-  }
+  const data = await loadKanbanData();
+  orderedGroupIds.forEach((id, index) => {
+    const g = data.cardGroups.find((g) => g.id === id);
+    if (g) g.position = index;
+  });
+  await saveKanbanData(data);
 }
 
 /** Exclui o grupo SEM apagar os cards — eles voltam soltos pra coluna do grupo. */
 export async function deleteGroupAndUngroupCards(id: string, kanbanId: string, columnId: string): Promise<void> {
-  const db = await getDb();
-  const existing = await db.select<{ maxPos: number | null }[]>(
-    'SELECT MAX(position) as maxPos FROM kanban_cards WHERE column_id = $1',
-    [columnId]
-  );
-  let nextPosition = (existing[0]?.maxPos ?? -1) + 1;
+  const data = await loadKanbanData();
 
-  const orphanCards = await db.select<{ id: string }[]>('SELECT id FROM kanban_cards WHERE card_group_id = $1', [id]);
-  for (const c of orphanCards) {
-    await db.execute(
-      'UPDATE kanban_cards SET card_group_id = NULL, kanban_id = $1, column_id = $2, position = $3 WHERE id = $4',
-      [kanbanId, columnId, nextPosition++, c.id]
-    );
+  const siblings = data.cards.filter((c) => c.columnId === columnId);
+  let nextPosition = siblings.length > 0 ? Math.max(...siblings.map((c) => c.position)) + 1 : 0;
+
+  for (const card of data.cards) {
+    if (card.cardGroupId === id) {
+      card.cardGroupId = null;
+      card.kanbanId = kanbanId;
+      card.columnId = columnId;
+      card.position = nextPosition++;
+    }
   }
 
-  await db.execute('DELETE FROM kanban_card_groups WHERE id = $1', [id]);
+  data.cardGroups = data.cardGroups.filter((g) => g.id !== id);
+
+  await saveKanbanData(data);
+}
+
+// ---------------------------------------------------------------------------
+// Fluxo separado: grupos de cards vinculados só a um card-pai (sem kanban/coluna).
+// Usado por src/lib/hooks/kanban/useCardGroups.ts + CardGroupsSection.tsx.
+// ---------------------------------------------------------------------------
+
+export async function getGroupsByParentCard(parentCardId: string): Promise<ParentCardGroup[]> {
+  const data = await loadKanbanData();
+  return data.parentCardGroups
+    .filter((g) => g.parentCardId === parentCardId)
+    .sort((a, b) => a.position - b.position);
+}
+
+export async function createGroupForParentCard(parentCardId: string, name: string): Promise<string> {
+  const data = await loadKanbanData();
+  const id = generateId();
+
+  const siblings = data.parentCardGroups.filter((g) => g.parentCardId === parentCardId);
+  const nextPosition = siblings.length > 0 ? Math.max(...siblings.map((g) => g.position)) + 1 : 0;
+
+  data.parentCardGroups.push({ id, parentCardId, name, position: nextPosition });
+  await saveKanbanData(data);
+  return id;
+}
+
+export async function renameParentCardGroup(id: string, name: string): Promise<void> {
+  const data = await loadKanbanData();
+  const group = data.parentCardGroups.find((g) => g.id === id);
+  if (!group) return;
+  group.name = name;
+  await saveKanbanData(data);
+}
+
+/**
+ * Desagrupa (NÃO apaga os cards): eles ficam soltos, vinculados direto ao
+ * card-pai via `parentCardId`, com `cardGroupId: null`.
+ */
+export async function deleteParentCardGroup(id: string): Promise<void> {
+  const data = await loadKanbanData();
+  const group = data.parentCardGroups.find((g) => g.id === id);
+  if (!group) return;
+
+  for (const card of data.cards) {
+    if (card.cardGroupId === id) {
+      card.cardGroupId = null;
+      card.parentCardId = group.parentCardId;
+    }
+  }
+
+  data.parentCardGroups = data.parentCardGroups.filter((g) => g.id !== id);
+  await saveKanbanData(data);
+}
+
+export async function reorderParentCardGroups(parentCardId: string, orderedIds: string[]): Promise<void> {
+  const data = await loadKanbanData();
+  orderedIds.forEach((id, index) => {
+    const group = data.parentCardGroups.find((g) => g.id === id && g.parentCardId === parentCardId);
+    if (group) group.position = index;
+  });
+  await saveKanbanData(data);
 }

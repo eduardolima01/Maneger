@@ -368,6 +368,29 @@ pub fn run() {
         fs::write(&path, data).map_err(|e| e.to_string())
     }
 
+    #[tauri::command]
+    fn save_kanban_overview_prefs(data: String) -> Result<(), String> {
+        let dir = std::env::current_dir().map_err(|e| e.to_string())?;
+        let path = dir.join("kanban-overview-prefs.json");
+        fs::write(&path, data).map_err(|e| e.to_string())
+    }
+
+    #[tauri::command]
+    fn load_kanban_data() -> Result<String, String> {
+        let dir = std::env::current_dir().map_err(|e| e.to_string())?;
+        let path = dir.join("kanban-data.json");
+        if !path.exists() {
+            return Ok("{}".to_string());
+        }
+        fs::read_to_string(&path).map_err(|e| e.to_string())
+    }
+
+    #[tauri::command]
+    fn save_kanban_data(data: String) -> Result<(), String> {
+        let dir = std::env::current_dir().map_err(|e| e.to_string())?;
+        let path = dir.join("kanban-data.json");
+        fs::write(&path, data).map_err(|e| e.to_string())
+    }
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
@@ -384,6 +407,9 @@ pub fn run() {
             save_project_cover,
             delete_project_cover,
             load_kanban_overview_prefs,
+            save_kanban_overview_prefs,
+            load_kanban_data,
+            save_kanban_data,
             load_tabs_state,
             save_tabs_state,
             load_pomodoro_data,

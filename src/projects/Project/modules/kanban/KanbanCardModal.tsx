@@ -43,10 +43,10 @@ export default function KanbanCardModal({ isOpen, onClose, card, onUpdate, onDup
   useEffect(() => {
     if (isOpen && card) {
       setLoadingSubKanban(true);
-      getSubKanbanByCardId(card.id).then((k) => {
-        setSubKanban(k);
-        setLoadingSubKanban(false);
-      });
+      // getSubKanbanByCardId(card.id).then((k) => {
+      //   setSubKanban(k);
+      //   setLoadingSubKanban(false);
+      // });
     } else {
       setSubKanban(null);
     }

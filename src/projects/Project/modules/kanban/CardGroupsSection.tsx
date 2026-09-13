@@ -29,9 +29,19 @@ function SortableCardRow({ card, onOpen, onRequestDelete }: { card: KanbanCard; 
   );
 }
 
+/** Linha de card solto (sem grupo) — mesma aparência da SortableCardRow, mas sem drag (não tem lista pra reordenar). */
+function LooseCardRow({ card, onOpen, onRequestDelete }: { card: KanbanCard; onOpen: () => void; onRequestDelete: () => void }) {
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 8px', border: '1px solid #eee', borderRadius: 4, marginBottom: 4, backgroundColor: '#fff' }}>
+      <span onClick={onOpen} style={{ flex: 1, fontSize: 13, cursor: 'pointer' }}>{card.title}</span>
+      <button onClick={onRequestDelete} style={{ border: 'none', background: 'none', cursor: 'pointer', color: '#c62828', fontSize: 12 }}>✕</button>
+    </div>
+  );
+}
+
 export default function CardGroupsSection({ parentCardId }: CardGroupsSectionProps) {
   const {
-    groups, cardsByGroup, loading,
+    groups, cardsByGroup, ungroupedCards, loading,
     createGroup, renameGroup, removeGroup, reorderGroups,
     createCardInGroup, removeCard, reorderCardsInGroup, reload,
   } = useCardGroups(parentCardId);
@@ -127,6 +137,22 @@ export default function CardGroupsSection({ parentCardId }: CardGroupsSectionPro
         </SortableContext>
       </DndContext>
 
+      {ungroupedCards.length > 0 && (
+        <div style={{ border: '1px dashed #ccc', borderRadius: 6, padding: 8, marginBottom: 8 }}>
+          <div style={{ fontSize: 12, fontWeight: 600, color: '#999', marginBottom: 6 }}>
+            Sem grupo
+          </div>
+          {ungroupedCards.map((c) => (
+            <LooseCardRow
+              key={c.id}
+              card={c}
+              onOpen={() => setOpenChildCard(c)}
+              onRequestDelete={() => requestDeleteChildCard(c.id, c.title)}
+            />
+          ))}
+        </div>
+      )}
+
       <div style={{ display: 'flex', gap: 6, marginTop: 8 }}>
         <input
           value={newGroupName}
@@ -137,6 +163,14 @@ export default function CardGroupsSection({ parentCardId }: CardGroupsSectionPro
         />
         <Button variant="secondary" onClick={handleCreateGroup}>+ Grupo</Button>
       </div>
+
+      <ConfirmDialog
+        isOpen={deleteGroupTarget !== null}
+        title="Desfazer grupo?"
+        message={`O grupo "${deleteGroupTarget?.name}" será removido, mas os cards dentro dele voltam soltos — nenhum card é apagado.`}
+        onConfirm={() => { if (deleteGroupTarget) removeGroup(deleteGroupTarget.id); setDeleteGroupTarget(null); }}
+        onCancel={() => setDeleteGroupTarget(null)}
+      />
 
       <ConfirmDialog
         isOpen={deleteGroupTarget !== null}
@@ -231,4 +265,5 @@ function SortableGroupBlock({
     </div>
   );
 }
+
 
