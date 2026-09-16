@@ -18,6 +18,7 @@ import CoverZoomModal from '@/components/layout/CoverZoomModal';
 import CardTimerPopup from '@/Kanban/Timer/CardTimerPopup';
 import { useGlobalCardTimer } from '@/Kanban/Timer/store/cardTimerStore';
 import { getCardTimerSessions } from '@/Kanban/Timer/cardTimer';
+import InlineChecklist from '@/Kanban/components/Inlinechecklist';
 
 interface KanbanCardProps {
   card: CardType;
@@ -120,6 +121,9 @@ export default function KanbanCard({
   const [editingTitle, setEditingTitle] = useState(false);
   const [titleDraft, setTitleDraft] = useState(card.title);
   const [titleHover, setTitleHover] = useState(false);
+  const [checklistOpen, setChecklistOpen] = useState(false);
+  const [liveChecklistProgress, setLiveChecklistProgress] = useState<ChecklistProgress | null>(null);
+  const displayedChecklistProgress = liveChecklistProgress ?? checklistProgress;
 
   const cornerHoverTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const CORNER_HOVER_DELAY = 300; // levemente maior que o dos itens — é fácil passar o mouse ali sem querer
@@ -440,12 +444,6 @@ export default function KanbanCard({
               );
             })}
 
-            {checklistProgress && checklistProgress.total > 0 && (
-              <span style={{ color: checklistProgress.done === checklistProgress.total ? '#33b679' : '#666' }}>
-                ☑ {checklistProgress.done}/{checklistProgress.total} ({Math.round((checklistProgress.done / checklistProgress.total) * 100)}%)
-              </span>
-            )}
-
             {card.dueDate && (() => {
               const info = getDueDateInfo(card.dueDate);
               return <span style={{ color: info.color, fontWeight: info.color === '#666' ? 400 : 600 }}>📅 {info.label}</span>;
@@ -456,6 +454,29 @@ export default function KanbanCard({
                 ⏱ {formatCardTimerTotal(displayedTimerSeconds)}
               </span>
             )}
+          </div>
+        )}
+
+        {!compact && (checklistOpen || (displayedChecklistProgress && displayedChecklistProgress.total > 0)) && (
+          <div onClick={(e) => e.stopPropagation()} onPointerDown={(e) => e.stopPropagation()}>
+            <button
+              onClick={() => setChecklistOpen((v) => {
+                const next = !v;
+                if (!next) setLiveChecklistProgress(null); // ao fechar, volta a confiar no prop (mais fresco na próxima recarga do board)
+                return next;
+              })}
+              style={{
+                display: 'flex', alignItems: 'center', gap: 4, fontSize: 10, marginTop: 4,
+                color: displayedChecklistProgress && displayedChecklistProgress.total > 0
+                  ? (displayedChecklistProgress.done === displayedChecklistProgress.total ? '#33b679' : '#666')
+                  : '#999',
+                background: 'none', border: 'none', cursor: 'pointer', padding: '2px 0',
+              }}
+            >
+              <span>{checklistOpen ? '▾' : '▸'}</span>
+              <span>☑ {displayedChecklistProgress && displayedChecklistProgress.total > 0 ? `${displayedChecklistProgress.done}/${displayedChecklistProgress.total}` : 'Checklist'}</span>
+            </button>
+            {checklistOpen && <InlineChecklist cardId={card.id} onProgressChange={setLiveChecklistProgress} />}
           </div>
         )}
 
@@ -607,4 +628,3 @@ export default function KanbanCard({
     </>
   );
 }
-

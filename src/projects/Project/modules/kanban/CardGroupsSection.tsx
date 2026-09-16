@@ -166,14 +166,6 @@ export default function CardGroupsSection({ parentCardId }: CardGroupsSectionPro
 
       <ConfirmDialog
         isOpen={deleteGroupTarget !== null}
-        title="Desfazer grupo?"
-        message={`O grupo "${deleteGroupTarget?.name}" será removido, mas os cards dentro dele voltam soltos — nenhum card é apagado.`}
-        onConfirm={() => { if (deleteGroupTarget) removeGroup(deleteGroupTarget.id); setDeleteGroupTarget(null); }}
-        onCancel={() => setDeleteGroupTarget(null)}
-      />
-
-      <ConfirmDialog
-        isOpen={deleteGroupTarget !== null}
         title="Excluir grupo?"
         message={`Deseja realmente excluir "${deleteGroupTarget?.name}"? Todos os cards dentro dele também serão excluídos. Esta ação não pode ser desfeita.`}
         onConfirm={() => { if (deleteGroupTarget) removeGroup(deleteGroupTarget.id); setDeleteGroupTarget(null); }}

@@ -44,6 +44,7 @@ export async function createCard(input: CreateKanbanCardInput): Promise<string> 
     coverPath: null,
     color: input.color ?? null,
     priority: input.priority ?? null,
+    status: input.status ?? 'pendente',
     labels: input.labels ?? [],
     assignedTo: null,
     startDate: input.startDate ?? null,
@@ -69,6 +70,7 @@ export async function updateCard(id: string, input: UpdateKanbanCardInput): Prom
   if (input.coverPath !== undefined) { card.coverPath = input.coverPath; changed = true; }
   if (input.color !== undefined) { card.color = input.color; changed = true; }
   if (input.priority !== undefined) { card.priority = input.priority; changed = true; }
+  if (input.status !== undefined) { card.status = input.status; changed = true; }
   if (input.labels !== undefined) { card.labels = input.labels; changed = true; }
   if (input.assignedTo !== undefined) { card.assignedTo = input.assignedTo; changed = true; }
   if (input.startDate !== undefined) { card.startDate = input.startDate; changed = true; }
@@ -101,6 +103,7 @@ export async function duplicateCard(id: string): Promise<string> {
     description: original.description,
     color: original.color,
     priority: original.priority,
+    status: original.status,
     labels: original.labels,
     startDate: original.startDate,
     dueDate: original.dueDate,

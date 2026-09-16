@@ -8,11 +8,12 @@ import { CSS } from '@dnd-kit/utilities';
 import Modal from '@/components/ui/Modal';
 import Button from '@/components/layout/Button';
 import ConfirmDialog from '@/components/ui/ConfirmDialog';
+import ImageUploadField from '@/components/ImageUploadField';
 import type { KanbanColumn } from '@/types/kanban.types';
 
 interface ColumnRowProps {
   column: KanbanColumn;
-  onUpdate: (input: Partial<{ name: string; wipLimit: number | null; visible: boolean; color: string | null }>) => void;
+  onUpdate: (input: Partial<{ name: string; wipLimit: number | null; visible: boolean; color: string | null; coverPath: string | null }>) => void;
   onDuplicate: () => void;
   onRequestDelete: () => void;
 }
@@ -20,43 +21,77 @@ interface ColumnRowProps {
 function ColumnRow({ column, onUpdate, onDuplicate, onRequestDelete }: ColumnRowProps) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: column.id });
   const [nameDraft, setNameDraft] = useState(column.name);
+  const [showCoverEditor, setShowCoverEditor] = useState(false);
 
   const style: React.CSSProperties = { transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.5 : 1 };
 
   return (
-    <div ref={setNodeRef} style={{ ...style, display: 'flex', alignItems: 'center', gap: 6, border: '1px solid #eee', borderRadius: 4, padding: '6px 8px' }}>
-      <span {...attributes} {...listeners} style={{ color: '#bbb', fontSize: 12, cursor: 'grab', touchAction: 'none' }} title="Arrastar">⠿</span>
+    <div ref={setNodeRef} style={{ ...style, border: '1px solid #eee', borderRadius: 4, padding: '6px 8px' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+        <span {...attributes} {...listeners} style={{ color: '#bbb', fontSize: 12, cursor: 'grab', touchAction: 'none' }} title="Arrastar">⠿</span>
 
-      <input
-        value={nameDraft}
-        onChange={(e) => setNameDraft(e.target.value)}
-        onBlur={() => nameDraft.trim() && nameDraft !== column.name && onUpdate({ name: nameDraft.trim() })}
-        style={{ flex: 1, fontSize: 13, border: 'none', outline: 'none' }}
-      />
+        <input
+          value={nameDraft}
+          onChange={(e) => setNameDraft(e.target.value)}
+          onBlur={() => nameDraft.trim() && nameDraft !== column.name && onUpdate({ name: nameDraft.trim() })}
+          style={{ flex: 1, fontSize: 13, border: 'none', outline: 'none' }}
+        />
 
-      <input
-        type="color"
-        value={column.color ?? '#cccccc'}
-        onChange={(e) => onUpdate({ color: e.target.value })}
-        style={{ width: 24, height: 24, padding: 0, border: '1px solid #ccc', borderRadius: 4, cursor: 'pointer' }}
-      />
+        <input
+          type="color"
+          value={column.color ?? '#cccccc'}
+          onChange={(e) => onUpdate({ color: e.target.value })}
+          style={{ width: 24, height: 24, padding: 0, border: '1px solid #ccc', borderRadius: 4, cursor: 'pointer' }}
+        />
 
-      <input
-        type="number"
-        min={0}
-        placeholder="WIP"
-        value={column.wipLimit ?? ''}
-        onChange={(e) => onUpdate({ wipLimit: e.target.value === '' ? null : Number(e.target.value) })}
-        style={{ width: 50, fontSize: 12, padding: 4 }}
-      />
+        <input
+          type="number"
+          min={0}
+          placeholder="WIP"
+          value={column.wipLimit ?? ''}
+          onChange={(e) => onUpdate({ wipLimit: e.target.value === '' ? null : Number(e.target.value) })}
+          style={{ width: 50, fontSize: 12, padding: 4 }}
+        />
 
-      <label style={{ display: 'flex', alignItems: 'center', gap: 2, fontSize: 11 }}>
-        <input type="checkbox" checked={column.visible} onChange={(e) => onUpdate({ visible: e.target.checked })} />
-        vis.
-      </label>
+        <label style={{ display: 'flex', alignItems: 'center', gap: 2, fontSize: 11 }}>
+          <input type="checkbox" checked={column.visible} onChange={(e) => onUpdate({ visible: e.target.checked })} />
+          vis.
+        </label>
 
-      <button onClick={onDuplicate} title="Duplicar" style={{ border: 'none', background: 'none', cursor: 'pointer', fontSize: 12 }}>⧉</button>
-      <button onClick={onRequestDelete} style={{ border: 'none', background: 'none', cursor: 'pointer', color: '#c62828', fontSize: 12 }}>✕</button>
+        <button
+          onClick={() => setShowCoverEditor((v) => !v)}
+          title="Capa da coluna"
+          style={{
+            border: 'none', background: 'none', cursor: 'pointer', fontSize: 13,
+            opacity: column.coverPath ? 1 : 0.4,
+          }}
+        >
+          🖼️
+        </button>
+
+        <button onClick={onDuplicate} title="Duplicar" style={{ border: 'none', background: 'none', cursor: 'pointer', fontSize: 12 }}>⧉</button>
+        <button onClick={onRequestDelete} style={{ border: 'none', background: 'none', cursor: 'pointer', color: '#c62828', fontSize: 12 }}>✕</button>
+      </div>
+
+      {showCoverEditor && (
+        <div style={{ marginTop: 8, paddingTop: 8, borderTop: '1px dashed #eee', display: 'flex', flexDirection: 'column', gap: 6 }}>
+          <label style={{ fontSize: 11, fontWeight: 600, color: '#666' }}>Capa da coluna (aparece no calendário)</label>
+          <ImageUploadField
+            entityId={column.id}
+            currentPath={column.coverPath}
+            onUploaded={(path) => onUpdate({ coverPath: path })}
+            height={80}
+          />
+          {column.coverPath && (
+            <button
+              onClick={() => onUpdate({ coverPath: null })}
+              style={{ alignSelf: 'flex-start', fontSize: 11, color: '#c62828', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
+            >
+              Remover capa
+            </button>
+          )}
+        </div>
+      )}
     </div>
   );
 }
@@ -138,4 +173,3 @@ export default function KanbanColumnSettingsModal({
     </>
   );
 }
-

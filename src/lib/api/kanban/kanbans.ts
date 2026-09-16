@@ -1,7 +1,7 @@
 import { getDb } from '@/lib/db/client';
 import { generateId } from '@/lib/utils/uuid';
 import { toLocalISO } from '@/lib/utils/date';
-import { defaultViewPrefs } from '@/types/kanban.types';
+import { defaultViewPrefs, defaultCardFieldConfig } from '@/types/kanban.types';
 import type { Kanban, CreateKanbanInput, UpdateKanbanInput, KanbanWithProject } from '@/types/kanban.types';
 import { loadKanbanData, saveKanbanData } from '@/Kanban/api/kanbanDataStore';
 
@@ -35,6 +35,9 @@ export async function createKanban(input: CreateKanbanInput): Promise<string> {
     name: input.name,
     description: input.description ?? null,
     color: input.color ?? null,
+    backgroundColor: input.backgroundColor ?? null,
+    backgroundImagePath: input.backgroundImagePath ?? null,
+    cardFieldConfig: input.cardFieldConfig ?? defaultCardFieldConfig(),
     isDefault: isFirstKanban,
     archived: false,
     position: nextPosition,
@@ -51,6 +54,7 @@ export async function createKanban(input: CreateKanbanInput): Promise<string> {
       name: DEFAULT_COLUMN_NAMES[i],
       color: null,
       icon: null,
+      coverPath: null,
       wipLimit: null,
       visible: true,
       collapsed: false,
@@ -71,6 +75,9 @@ export async function updateKanban(id: string, input: UpdateKanbanInput): Promis
   if (input.name !== undefined) { kanban.name = input.name; changed = true; }
   if (input.description !== undefined) { kanban.description = input.description; changed = true; }
   if (input.color !== undefined) { kanban.color = input.color; changed = true; }
+  if (input.backgroundColor !== undefined) { kanban.backgroundColor = input.backgroundColor; changed = true; }
+  if (input.backgroundImagePath !== undefined) { kanban.backgroundImagePath = input.backgroundImagePath; changed = true; }
+  if (input.cardFieldConfig !== undefined) { kanban.cardFieldConfig = input.cardFieldConfig; changed = true; }
   if (input.archived !== undefined) { kanban.archived = input.archived; changed = true; }
   if (input.viewPrefs !== undefined) { kanban.viewPrefs = input.viewPrefs; changed = true; }
   if (!changed) return;
@@ -138,6 +145,9 @@ export async function duplicateKanban(id: string): Promise<string> {
     name: `${original.name} (cópia)`,
     description: original.description,
     color: original.color,
+    backgroundColor: original.backgroundColor,
+    backgroundImagePath: original.backgroundImagePath,
+    cardFieldConfig: original.cardFieldConfig,
   });
 
   const originalColumns = data.columns
@@ -154,6 +164,7 @@ export async function duplicateKanban(id: string): Promise<string> {
       name: col.name,
       color: col.color,
       icon: col.icon,
+      coverPath: col.coverPath,
       wipLimit: col.wipLimit,
       visible: col.visible,
       collapsed: false,

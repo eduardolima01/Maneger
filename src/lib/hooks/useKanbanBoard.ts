@@ -96,8 +96,19 @@ export function useKanbanBoard(kanban: Kanban) {
     await reload();
   }, [kanbanId, reload]);
 
+  const createSubgroup = useCallback(async (parentGroupId: string, name: string) => {
+    await groupsApi.createSubgroup(parentGroupId, name);
+    await reload();
+  }, [reload]);
+
   const renameGroup = useCallback(async (id: string, name: string) => {
     await groupsApi.renameGroup(id, name);
+    await reload();
+  }, [reload]);
+
+  /** Capa, emoji, descrição e/ou cor de fundo do grupo/subgrupo — nome continua em renameGroup. */
+  const updateGroupAppearance = useCallback(async (id: string, input: Parameters<typeof groupsApi.updateGroupAppearance>[1]) => {
+    await groupsApi.updateGroupAppearance(id, input);
     await reload();
   }, [reload]);
 
@@ -353,7 +364,7 @@ export function useKanbanBoard(kanban: Kanban) {
     createCardInGroup,
     renameLabel, deleteLabel,
     fixInconsistentGroupLabels,
-    createGroup, renameGroup, deleteGroup, moveCardIntoGroup, moveCardOutOfGroup, moveGroupToColumn,
+    createGroup, createSubgroup, renameGroup, deleteGroup, updateGroupAppearance, moveCardIntoGroup, moveCardOutOfGroup, moveGroupToColumn,
     createColumn, updateColumn, removeColumn, duplicateColumn, reorderColumns,
     bulkMoveCards, bulkDeleteCards, bulkSetColor, bulkToggleLabel,
     duplicateCardMultiple, createCardsBatch,
@@ -361,4 +372,3 @@ export function useKanbanBoard(kanban: Kanban) {
     reorderCardsInGroup,
   };
 }
-

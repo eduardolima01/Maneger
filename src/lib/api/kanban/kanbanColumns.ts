@@ -22,6 +22,7 @@ export async function createColumn(input: CreateKanbanColumnInput): Promise<stri
     name: input.name,
     color: input.color ?? null,
     icon: input.icon ?? null,
+    coverPath: input.coverPath ?? null,
     wipLimit: input.wipLimit ?? null,
     visible: true,
     // nunca existiu de verdade no schema SQL (a tabela não tem essa coluna) — sempre foi false;
@@ -43,6 +44,7 @@ export async function updateColumn(id: string, input: UpdateKanbanColumnInput): 
   if (input.name !== undefined) { column.name = input.name; changed = true; }
   if (input.color !== undefined) { column.color = input.color; changed = true; }
   if (input.icon !== undefined) { column.icon = input.icon; changed = true; }
+  if (input.coverPath !== undefined) { column.coverPath = input.coverPath; changed = true; }
   if (input.wipLimit !== undefined) { column.wipLimit = input.wipLimit; changed = true; }
   if (input.visible !== undefined) { column.visible = input.visible; changed = true; }
   if (!changed) return;
@@ -87,6 +89,7 @@ export async function duplicateColumn(id: string): Promise<string> {
     name: `${original.name} (cópia)`,
     color: original.color,
     icon: original.icon,
+    coverPath: original.coverPath,
     wipLimit: original.wipLimit,
   });
 }

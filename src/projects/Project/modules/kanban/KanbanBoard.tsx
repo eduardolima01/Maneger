@@ -4,13 +4,18 @@ import {
   type DragEndEvent,
 } from '@dnd-kit/core';
 import { SortableContext, horizontalListSortingStrategy, arrayMove } from '@dnd-kit/sortable';
+import { convertFileSrc } from '@tauri-apps/api/core';
 import KanbanColumn from './KanbanColumn';
+import KanbanBackgroundModal from '@/Kanban/components/Kanbanbackgroundmodal';
+import KanbanCalendarView from '@/Kanban/components/Kanbancalendarview';
 import KanbanToolbar from './KanbanToolbar';
 import KanbanColumnSettingsModal from './KanbanColumnSettingsModal';
 import KanbanCardModal from './KanbanCardModal';
 import ConfirmDialog from '@/components/ui/ConfirmDialog';
 import { useKanbanBoard } from '@/lib/hooks/useKanbanBoard';
-import type { Kanban } from '@/types/kanban.types';
+import { updateKanban } from '@/lib/api/kanban/kanbans';
+import type { Kanban, CardFieldConfig } from '@/types/kanban.types';
+import { mergeCardFieldConfig } from '@/types/kanban.types';
 import { clearGroupLabels, ParsedLabel, parseLabel, setSingleGroupLabel } from '@/Kanban/utils/kanbanLabels';
 import LabelManagerModal from './LabelManagerModal';
 import Button from '@/components/layout/Button';
@@ -44,12 +49,57 @@ export default function KanbanBoard({ kanban }: KanbanBoardProps) {
   const selectionStartRef = useRef<{ x: number; y: number } | null>(null);
   const selectionBoxRef = useRef<{ x: number; y: number; width: number; height: number } | null>(null);
   const [bulkDeleteConfirm, setBulkDeleteConfirm] = useState(false);
+  const [viewMode, setViewMode] = useState<'board' | 'calendar'>('board');
+  const [showArchivedColumns, setShowArchivedColumns] = useState(false);
+  const archivedColumns = board.columns.filter((c) => !c.visible).sort((a, b) => a.position - b.position);
+  const [backgroundModalOpen, setBackgroundModalOpen] = useState(false);
+  const [background, setBackground] = useState<{ backgroundColor: string | null; backgroundImagePath: string | null }>({
+    backgroundColor: kanban.backgroundColor,
+    backgroundImagePath: kanban.backgroundImagePath,
+  });
+
+  // Se o usuário trocar de kanban (ex: abrir um sub-kanban dentro de um card), o plano de
+  // fundo local precisa acompanhar — sem isso ficaria mostrando o fundo do kanban anterior.
+  useEffect(() => {
+    setBackground({ backgroundColor: kanban.backgroundColor, backgroundImagePath: kanban.backgroundImagePath });
+  }, [kanban.id, kanban.backgroundColor, kanban.backgroundImagePath]);
+
+  function handleUpdateBackground(input: Partial<{ backgroundColor: string | null; backgroundImagePath: string | null }>) {
+    setBackground((prev) => ({ ...prev, ...input }));
+    updateKanban(kanban.id, input);
+  }
+
+  const [cardFieldConfig, setCardFieldConfig] = useState<CardFieldConfig[]>(mergeCardFieldConfig(kanban.cardFieldConfig));
+
+  useEffect(() => {
+    setCardFieldConfig(mergeCardFieldConfig(kanban.cardFieldConfig));
+  }, [kanban.id, kanban.cardFieldConfig]);
+
+  function handleUpdateCardFieldConfig(config: CardFieldConfig[]) {
+    setCardFieldConfig(config);
+    updateKanban(kanban.id, { cardFieldConfig: config });
+  }
 
   const [focusDescriptionToken, setFocusDescriptionToken] = useState<number | undefined>(undefined);
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 8 } }));
 
   const visibleColumns = board.columns.filter((c) => c.visible);
+  const displayedColumns = showArchivedColumns ? [...visibleColumns, ...archivedColumns] : visibleColumns;
+
+  const groupsByParent = useMemo(() => {
+    const map = new Map<string, typeof board.groups>();
+    for (const g of board.groups) {
+      if (!g.parentGroupId) continue;
+      const list = map.get(g.parentGroupId) ?? [];
+      list.push(g);
+      map.set(g.parentGroupId, list);
+    }
+    return map;
+  }, [board.groups]);
+
+  // Agora vai pelo hook de verdade (useKanbanBoard.ts já tem createSubgroup, que chama reload()
+  // como todas as outras mutações) — a tela atualiza sozinha, sem precisar recarregar a página.
   const allLabels = Array.from(new Set(board.cards.flatMap((c) => c.labels)));
 
   const allParsedLabels: ParsedLabel[] = useMemo(() => {
@@ -383,8 +433,23 @@ export default function KanbanBoard({ kanban }: KanbanBoardProps) {
   }, [selectedCardIds.size]);
 
   return (
-    <div>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+    <div
+      style={{
+        borderRadius: 8,
+        padding: background.backgroundImagePath || background.backgroundColor ? 12 : 0,
+        ...(background.backgroundImagePath
+          ? {
+            backgroundImage: `url(${convertFileSrc(background.backgroundImagePath)})`,
+            backgroundSize: 'cover',
+            backgroundPosition: 'center',
+            backgroundRepeat: 'no-repeat',
+          }
+          : background.backgroundColor
+            ? { backgroundColor: background.backgroundColor }
+            : {}),
+      }}
+    >
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8, backgroundColor: '#fff', padding: 8, borderRadius: 8 }}>
         <div style={{ flex: 1 }}>
           <KanbanToolbar
             search={board.search}
@@ -399,179 +464,211 @@ export default function KanbanBoard({ kanban }: KanbanBoardProps) {
             onOpenLabelManager={() => setLabelManagerOpen(true)}
           />
         </div>
+        <Button variant="secondary" onClick={() => setViewMode((m) => (m === 'board' ? 'calendar' : 'board'))}>
+          {viewMode === 'board' ? '📅 Calendário' : '📋 Colunas'}
+        </Button>
+        <Button variant="secondary" onClick={() => setShowArchivedColumns((v) => !v)}>
+          {showArchivedColumns ? '🗄 Ocultar arquivadas' : `🗄 Arquivadas${archivedColumns.length > 0 ? ` (${archivedColumns.length})` : ''}`}
+        </Button>
+        <Button variant="secondary" onClick={() => setBackgroundModalOpen(true)}>🎨 Fundo</Button>
         <Button variant="secondary" onClick={() => setGenerateModalOpen(true)}>+ Gerar cards</Button>
       </div>
 
-      <DndContext sensors={sensors} collisionDetection={closestCorners} onDragEnd={handleDragEnd}>
-        <SortableContext items={visibleColumns.map((c) => c.id)} strategy={horizontalListSortingStrategy}>
-          <div
-            ref={boardContainerRef}
-            onMouseDown={handleContainerMouseDown}
-            style={{ display: 'flex', gap: 12, overflowX: 'auto', paddingBottom: 8, alignItems: 'stretch', minHeight: 400 }}
-          >
-            {visibleColumns.map((col) => (
-              <div key={col.id} style={{ display: 'flex', flexDirection: 'column' }}>
-                {(() => {
-                  const columnCards = board.ungroupedCardsByColumn.get(col.id) ?? [];
-                  const columnGroups = board.groupsByColumn.get(col.id) ?? [];
-                  const isEmpty = columnCards.length === 0 && columnGroups.length === 0;
-                  const customWidth = board.viewPrefs.columnWidths[col.id];
-                  const resolvedWidth = customWidth ?? (isEmpty ? EMPTY_COLUMN_WIDTH : DEFAULT_COLUMN_WIDTH);
-                  return (
-                    <KanbanColumn
-                      column={col}
-                      cards={columnCards}
-                      groups={columnGroups}
-                      cardsByGroup={board.cardsByGroup}
-                      collapsedGroupIds={collapsedGroupIds}
-                      onToggleGroupCollapsed={toggleGroupCollapsed}
-                      density={board.viewPrefs.density}
-                      width={resolvedWidth}
-                      collapsed={collapsedIds.has(col.id)}
-                      onToggleCollapsed={() => toggleColumnCollapsed(col.id)}
-                      onRename={(name) => board.updateColumn(col.id, { name })}
-                      onColumnMenu={() => setColumnSettingsOpen(true)}
-                      cardsWithSubKanban={board.cardsWithSubKanban}
-                      onCardDuplicate={board.duplicateCard}
-                      checklistProgress={board.checklistProgress}
-                      onCardRequestDelete={(id, title) => setDeleteTarget({ id, title })}
-                      onRenameGroup={board.renameGroup}
-                      onRequestDeleteGroup={(groupId) => setDeleteGroupTarget(groupId)}
-                      onAddCardToGroup={board.createCardInGroup}
-                      onReorderGroupCards={board.reorderCardsInGroup}
-                      allLabels={allParsedLabels}
-                      onUpdateCardLabels={(id, labels) => board.updateCard(id, { labels })}
-                      onUpdateCardDueDate={(id, dueDate) => board.updateCard(id, { dueDate })}
-                      onUpdateCardTitle={(id, title) => board.updateCard(id, { title })}
-                      onUpdateCardColor={(id, color) => board.updateCard(id, { color })}
-                      onDuplicateMultiple={board.duplicateCardMultiple}
-                      onUpdateCoverPath={(id, path) => board.updateCard(id, { coverPath: path })}
+      {viewMode === 'board' && (
+        <>
+          <DndContext sensors={sensors} collisionDetection={closestCorners} onDragEnd={handleDragEnd}>
+            <SortableContext items={displayedColumns.map((c) => c.id)} strategy={horizontalListSortingStrategy}>
+              <div
+                ref={boardContainerRef}
+                onMouseDown={handleContainerMouseDown}
+                style={{ display: 'flex', gap: 12, overflowX: 'auto', paddingBottom: 8, alignItems: 'stretch', minHeight: 400 }}
+              >
+                {displayedColumns.map((col) => (
+                  <div key={col.id} style={{ display: 'flex', flexDirection: 'column' }}>
+                    {(() => {
+                      const columnCards = board.ungroupedCardsByColumn.get(col.id) ?? [];
+                      // filtro defensivo: groupsByColumn (calculado no hook) ainda não sabe distinguir
+                      // subgrupo de grupo top-level — sem isso, um subgrupo apareceria duplicado
+                      // (uma vez solto na coluna, outra vez aninhado dentro do grupo-pai).
+                      const columnGroups = (board.groupsByColumn.get(col.id) ?? []).filter((g) => !g.parentGroupId);
+                      const isEmpty = columnCards.length === 0 && columnGroups.length === 0;
+                      const customWidth = board.viewPrefs.columnWidths[col.id];
+                      const resolvedWidth = customWidth ?? (isEmpty ? EMPTY_COLUMN_WIDTH : DEFAULT_COLUMN_WIDTH);
+                      return (
+                        <KanbanColumn
+                          column={col}
+                          cards={columnCards}
+                          groups={columnGroups}
+                          cardsByGroup={board.cardsByGroup}
+                          collapsedGroupIds={collapsedGroupIds}
+                          onToggleGroupCollapsed={toggleGroupCollapsed}
+                          density={board.viewPrefs.density}
+                          width={resolvedWidth}
+                          collapsed={collapsedIds.has(col.id)}
+                          onToggleCollapsed={() => toggleColumnCollapsed(col.id)}
+                          onRename={(name) => board.updateColumn(col.id, { name })}
+                          onColumnMenu={() => setColumnSettingsOpen(true)}
+                          cardsWithSubKanban={board.cardsWithSubKanban}
+                          onCardDuplicate={board.duplicateCard}
+                          checklistProgress={board.checklistProgress}
+                          onCardRequestDelete={(id, title) => setDeleteTarget({ id, title })}
+                          onRenameGroup={board.renameGroup}
+                          onRequestDeleteGroup={(groupId) => setDeleteGroupTarget(groupId)}
+                          onAddCardToGroup={board.createCardInGroup}
+                          onCreateSubgroup={board.createSubgroup}
+                          onUpdateGroupAppearance={board.updateGroupAppearance}
+                          groupsByParent={groupsByParent}
+                          groupHeights={board.viewPrefs.groupHeights ?? {}}
+                          onResizeGroupHeight={(groupId, h) => board.saveViewPrefs({ groupHeights: { ...(board.viewPrefs.groupHeights ?? {}), [groupId]: h } })}
+                          onReorderGroupCards={board.reorderCardsInGroup}
+                          allLabels={allParsedLabels}
+                          onUpdateCardLabels={(id, labels) => board.updateCard(id, { labels })}
+                          onUpdateCardDueDate={(id, dueDate) => board.updateCard(id, { dueDate })}
+                          onUpdateCardTitle={(id, title) => board.updateCard(id, { title })}
+                          onUpdateCardColor={(id, color) => board.updateCard(id, { color })}
+                          onDuplicateMultiple={board.duplicateCardMultiple}
+                          onUpdateCoverPath={(id, path) => board.updateCard(id, { coverPath: path })}
+                          onUpdateColumnCover={(path) => board.updateColumn(col.id, { coverPath: path })}
+                          onResizeColumnWidth={(newWidth) => board.saveViewPrefs({ columnWidths: { ...board.viewPrefs.columnWidths, [col.id]: newWidth } })}
+                          onArchive={() => board.updateColumn(col.id, { visible: !col.visible })}
 
-                      onCardClick={handleCardClick}
-                      selectedCardIds={selectedCardIds}
-                      onCardSelectToggle={toggleCardSelection}
-                      onBulkDelete={() => setBulkDeleteConfirm(true)}
-                      onBulkSetColor={board.bulkSetColor}
-                      onBulkToggleLabel={board.bulkToggleLabel}
-                      projectId={kanban.projectId}
-                    />
-                  );
-                })()}
-                {!collapsedIds.has(col.id) && (
-                  newCardColumnId === col.id ? (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginTop: 4 }}>
-                      <div style={{ display: 'flex', gap: 4 }}>
-                        <textarea
-                          ref={newCardInputRef}
-                          autoFocus
-                          value={newCardTitle}
-                          onChange={(e) => setNewCardTitle(e.target.value)}
-                          onKeyDown={(e) => {
-                            if (e.key === 'Enter' && !e.shiftKey) {
-                              e.preventDefault();
-                              handleCreateCard();
-                            }
-                          }}
-                          onBlur={() => !newCardTitle.trim() && setNewCardColumnId(null)}
-                          placeholder="Título do card... (Shift+Enter = várias linhas viram vários cards)"
-                          rows={2}
-                          style={{ flex: 1, padding: 6, fontSize: 12, resize: 'vertical', fontFamily: 'inherit' }}
+                          onCardClick={handleCardClick}
+                          selectedCardIds={selectedCardIds}
+                          onCardSelectToggle={toggleCardSelection}
+                          onBulkDelete={() => setBulkDeleteConfirm(true)}
+                          onBulkSetColor={board.bulkSetColor}
+                          onBulkToggleLabel={board.bulkToggleLabel}
+                          projectId={kanban.projectId}
                         />
+                      );
+                    })()}
+                    {!collapsedIds.has(col.id) && (
+                      newCardColumnId === col.id ? (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginTop: 4, backgroundColor: '#fff', padding: 6, borderRadius: 4 }}>
+                          <div style={{ display: 'flex', gap: 4 }}>
+                            <textarea
+                              ref={newCardInputRef}
+                              autoFocus
+                              value={newCardTitle}
+                              onChange={(e) => setNewCardTitle(e.target.value)}
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter' && !e.shiftKey) {
+                                  e.preventDefault();
+                                  handleCreateCard();
+                                }
+                              }}
+                              onBlur={() => !newCardTitle.trim() && setNewCardColumnId(null)}
+                              placeholder="Título do card... (Shift+Enter = várias linhas viram vários cards)"
+                              rows={2}
+                              style={{ flex: 1, padding: 6, fontSize: 12, resize: 'vertical', fontFamily: 'inherit' }}
+                            />
+                            <button
+                              onClick={handleCreateCard}
+                              disabled={!newCardTitle.trim()}
+                              title="Adicionar card"
+                              style={{
+                                padding: '6px 10px', fontSize: 12, border: 'none', borderRadius: 4,
+                                backgroundColor: newCardTitle.trim() ? '#1a73e8' : '#ccc',
+                                color: '#fff', cursor: newCardTitle.trim() ? 'pointer' : 'default',
+                              }}
+                            >
+                              +
+                            </button>
+                          </div>
+                          <button
+                            onClick={() => { setNewCardColumnId(null); setNewCardTitle(''); }}
+                            style={{ fontSize: 11, color: '#666', background: 'none', border: 'none', cursor: 'pointer', textAlign: 'left', padding: 0 }}
+                          >
+                            ✕ Cancelar
+                          </button>
+                        </div>
+
+                      ) : (
                         <button
-                          onClick={handleCreateCard}
-                          disabled={!newCardTitle.trim()}
-                          title="Adicionar card"
-                          style={{
-                            padding: '6px 10px', fontSize: 12, border: 'none', borderRadius: 4,
-                            backgroundColor: newCardTitle.trim() ? '#1a73e8' : '#ccc',
-                            color: '#fff', cursor: newCardTitle.trim() ? 'pointer' : 'default',
-                          }}
+                          onClick={() => setNewCardColumnId(col.id)}
+                          style={{ marginTop: 4, padding: '6px', fontSize: 12, color: '#666', backgroundColor: '#fff', border: '1px dashed #ccc', borderRadius: 4, cursor: 'pointer' }}
                         >
-                          +
+                          + Novo card
                         </button>
-                      </div>
-                      <button
-                        onClick={() => { setNewCardColumnId(null); setNewCardTitle(''); }}
-                        style={{ fontSize: 11, color: '#666', background: 'none', border: 'none', cursor: 'pointer', textAlign: 'left', padding: 0 }}
-                      >
-                        ✕ Cancelar
-                      </button>
-                    </div>
 
-                  ) : (
-                    <button
-                      onClick={() => setNewCardColumnId(col.id)}
-                      style={{ marginTop: 4, padding: '6px', fontSize: 12, color: '#666', background: 'none', border: '1px dashed #ccc', borderRadius: 4, cursor: 'pointer' }}
-                    >
-                      + Novo card
-                    </button>
+                      )
+                    )}
 
-                  )
-                )}
-
-                {!collapsedIds.has(col.id) && !newCardColumnId && (
-                  newGroupColumnId === col.id ? (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginTop: 4 }}>
-                      <div style={{ display: 'flex', gap: 4 }}>
-                        <input
-                          ref={newGroupInputRef}
-                          autoFocus
-                          value={newGroupName}
-                          onChange={(e) => setNewGroupName(e.target.value)}
-                          onKeyDown={(e) => e.key === 'Enter' && handleCreateGroup()}
-                          placeholder="Nome do grupo..."
-                          style={{ flex: 1, padding: 6, fontSize: 12 }}
-                        />
+                    {!collapsedIds.has(col.id) && !newCardColumnId && (
+                      newGroupColumnId === col.id ? (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginTop: 4, backgroundColor: '#fff', padding: 6, borderRadius: 4 }}>
+                          <div style={{ display: 'flex', gap: 4 }}>
+                            <input
+                              ref={newGroupInputRef}
+                              autoFocus
+                              value={newGroupName}
+                              onChange={(e) => setNewGroupName(e.target.value)}
+                              onKeyDown={(e) => e.key === 'Enter' && handleCreateGroup()}
+                              placeholder="Nome do grupo..."
+                              style={{ flex: 1, padding: 6, fontSize: 12 }}
+                            />
+                            <button
+                              onClick={handleCreateGroup}
+                              disabled={!newGroupName.trim()}
+                              title="Adicionar grupo"
+                              style={{
+                                padding: '6px 10px', fontSize: 12, border: 'none', borderRadius: 4,
+                                backgroundColor: newGroupName.trim() ? '#666' : '#ccc',
+                                color: '#fff', cursor: newGroupName.trim() ? 'pointer' : 'default',
+                              }}
+                            >
+                              +
+                            </button>
+                          </div>
+                          <button
+                            onClick={() => { setNewGroupColumnId(null); setNewGroupName(''); }}
+                            style={{ fontSize: 11, color: '#666', background: 'none', border: 'none', cursor: 'pointer', textAlign: 'left', padding: 0 }}
+                          >
+                            ✕ Cancelar
+                          </button>
+                        </div>
+                      ) : (
                         <button
-                          onClick={handleCreateGroup}
-                          disabled={!newGroupName.trim()}
-                          title="Adicionar grupo"
-                          style={{
-                            padding: '6px 10px', fontSize: 12, border: 'none', borderRadius: 4,
-                            backgroundColor: newGroupName.trim() ? '#666' : '#ccc',
-                            color: '#fff', cursor: newGroupName.trim() ? 'pointer' : 'default',
-                          }}
+                          onClick={() => setNewGroupColumnId(col.id)}
+                          style={{ marginTop: 4, padding: '4px', fontSize: 11, color: '#999', backgroundColor: '#fff', border: 'none', cursor: 'pointer' }}
                         >
-                          +
+                          + Novo grupo
                         </button>
-                      </div>
-                      <button
-                        onClick={() => { setNewGroupColumnId(null); setNewGroupName(''); }}
-                        style={{ fontSize: 11, color: '#666', background: 'none', border: 'none', cursor: 'pointer', textAlign: 'left', padding: 0 }}
-                      >
-                        ✕ Cancelar
-                      </button>
-                    </div>
-                  ) : (
-                    <button
-                      onClick={() => setNewGroupColumnId(col.id)}
-                      style={{ marginTop: 4, padding: '4px', fontSize: 11, color: '#999', background: 'none', border: 'none', cursor: 'pointer' }}
-                    >
-                      + Novo grupo
-                    </button>
-                  )
-                )}
+                      )
+                    )}
+                  </div>
+                ))}
               </div>
-            ))}
-          </div>
-        </SortableContext>
-      </DndContext>
+            </SortableContext>
+          </DndContext>
 
-      {selectionBox && (
-        <div
-          style={{
-            position: 'fixed', left: selectionBox.x, top: selectionBox.y,
-            width: selectionBox.width, height: selectionBox.height,
-            backgroundColor: 'rgba(26, 115, 232, 0.15)', border: '1px solid #1a73e8',
-            zIndex: 999, pointerEvents: 'none',
-          }}
-        />
+          {selectionBox && (
+            <div
+              style={{
+                position: 'fixed', left: selectionBox.x, top: selectionBox.y,
+                width: selectionBox.width, height: selectionBox.height,
+                backgroundColor: 'rgba(26, 115, 232, 0.15)', border: '1px solid #1a73e8',
+                zIndex: 999, pointerEvents: 'none',
+              }}
+            />
+          )}
+
+          {visibleColumns.length === 0 && !board.loading && (
+            <p style={{ color: '#999', fontSize: 13, textAlign: 'center', padding: 24 }}>
+              Nenhuma coluna visível. Abra "⚙ Colunas" pra criar ou mostrar alguma.
+            </p>
+          )}
+        </>
       )}
 
-      {visibleColumns.length === 0 && !board.loading && (
-        <p style={{ color: '#999', fontSize: 13, textAlign: 'center', padding: 24 }}>
-          Nenhuma coluna visível. Abra "⚙ Colunas" pra criar ou mostrar alguma.
-        </p>
+      {viewMode === 'calendar' && (
+        <KanbanCalendarView
+          cards={board.cards}
+          columns={board.columns}
+          groups={board.groups}
+          checklistProgress={board.checklistProgress}
+          onCardClick={handleCardClick}
+        />
       )}
 
       <KanbanGenerateCardsModal
@@ -592,6 +689,15 @@ export default function KanbanBoard({ kanban }: KanbanBoardProps) {
         onReorder={board.reorderColumns}
       />
 
+      <KanbanBackgroundModal
+        isOpen={backgroundModalOpen}
+        onClose={() => setBackgroundModalOpen(false)}
+        kanban={kanban}
+        backgroundColor={background.backgroundColor}
+        backgroundImagePath={background.backgroundImagePath}
+        onUpdate={handleUpdateBackground}
+      />
+
       <LabelManagerModal
         isOpen={labelManagerOpen}
         onClose={() => setLabelManagerOpen(false)}
@@ -606,6 +712,9 @@ export default function KanbanBoard({ kanban }: KanbanBoardProps) {
         isOpen={selectedCardId !== null}
         onClose={() => setSelectedCardId(null)}
         card={selectedCard}
+        kanban={kanban}
+        cardFieldConfig={cardFieldConfig}
+        onUpdateCardFieldConfig={handleUpdateCardFieldConfig}
         onUpdate={board.updateCard}
         onDuplicate={board.duplicateCard}
         onArchive={board.archiveCard}
@@ -653,4 +762,3 @@ export default function KanbanBoard({ kanban }: KanbanBoardProps) {
     </div>
   );
 }
-
