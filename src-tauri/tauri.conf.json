@@ -26,6 +26,7 @@
           "**/covers/*",
           "**/canvas-assets/*",
           "**/feed-assets/*",
+          "**/card-files/**",
           "$HOME/**"
         ]
       }

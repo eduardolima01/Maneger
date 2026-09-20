@@ -1,7 +1,7 @@
 import { getDb } from '@/lib/db/client';
 import { generateId } from '@/lib/utils/uuid';
 import { toLocalISO } from '@/lib/utils/date';
-import { defaultViewPrefs, defaultCardFieldConfig } from '@/types/kanban.types';
+import { defaultViewPrefs, defaultCardFieldConfig, defaultCardVisualConfig } from '@/types/kanban.types';
 import type { Kanban, CreateKanbanInput, UpdateKanbanInput, KanbanWithProject } from '@/types/kanban.types';
 import { loadKanbanData, saveKanbanData } from '@/Kanban/api/kanbanDataStore';
 
@@ -38,6 +38,7 @@ export async function createKanban(input: CreateKanbanInput): Promise<string> {
     backgroundColor: input.backgroundColor ?? null,
     backgroundImagePath: input.backgroundImagePath ?? null,
     cardFieldConfig: input.cardFieldConfig ?? defaultCardFieldConfig(),
+    cardVisualConfig: input.cardVisualConfig ?? defaultCardVisualConfig(),
     isDefault: isFirstKanban,
     archived: false,
     position: nextPosition,
@@ -78,6 +79,7 @@ export async function updateKanban(id: string, input: UpdateKanbanInput): Promis
   if (input.backgroundColor !== undefined) { kanban.backgroundColor = input.backgroundColor; changed = true; }
   if (input.backgroundImagePath !== undefined) { kanban.backgroundImagePath = input.backgroundImagePath; changed = true; }
   if (input.cardFieldConfig !== undefined) { kanban.cardFieldConfig = input.cardFieldConfig; changed = true; }
+  if (input.cardVisualConfig !== undefined) { kanban.cardVisualConfig = input.cardVisualConfig; changed = true; }
   if (input.archived !== undefined) { kanban.archived = input.archived; changed = true; }
   if (input.viewPrefs !== undefined) { kanban.viewPrefs = input.viewPrefs; changed = true; }
   if (!changed) return;
@@ -148,6 +150,7 @@ export async function duplicateKanban(id: string): Promise<string> {
     backgroundColor: original.backgroundColor,
     backgroundImagePath: original.backgroundImagePath,
     cardFieldConfig: original.cardFieldConfig,
+    cardVisualConfig: original.cardVisualConfig,
   });
 
   const originalColumns = data.columns

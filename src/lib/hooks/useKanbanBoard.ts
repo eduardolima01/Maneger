@@ -7,6 +7,7 @@ import { emptyFilters, hasActiveFilters } from '@/types/kanban.types';
 import * as groupsApi from '@/lib/api/kanban/kanbanCardGroups';
 import { getProgressByCardIds } from '../api/kanban/kanbanChecklist';
 import * as checklistApi from '../api/kanban/kanbanChecklist';
+import * as cardAssetsApi from '@/Kanban/api/kanbanCardAssets';
 import { parseLabel, serializeLabel } from '@/Kanban/utils/kanbanLabels';
 import { generateDailyDates, generateNumberedTitles } from '@/Kanban/utils/kanbanGenerators';
 
@@ -16,6 +17,7 @@ export function useKanbanBoard(kanban: Kanban) {
   const [cards, setCards] = useState<KanbanCard[]>([]);
   const [groups, setGroups] = useState<KanbanCardGroup[]>([]);
   const [cardsWithSubKanban, setCardsWithSubKanban] = useState<Set<string>>(new Set());
+  const [cardsWithFiles, setCardsWithFiles] = useState<Set<string>>(new Set());
   const [checklistProgress, setChecklistProgress] = useState<Record<string, ChecklistProgress>>({});
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
@@ -38,6 +40,8 @@ export function useKanbanBoard(kanban: Kanban) {
     setGroups(groupList);
     const subKanbanIds = await kanbansApi.getCardIdsWithSubKanban(cardList.map((c) => c.id));
     setCardsWithSubKanban(subKanbanIds);
+    const allFileIds = new Set(await cardAssetsApi.listCardIdsWithFiles());
+    setCardsWithFiles(new Set(cardList.filter((c) => allFileIds.has(c.id)).map((c) => c.id)));
     const progress = await getProgressByCardIds(cardList.map((c) => c.id));
     setChecklistProgress(progress);
     setLoading(false);
@@ -116,6 +120,12 @@ export function useKanbanBoard(kanban: Kanban) {
     await groupsApi.deleteGroupAndUngroupCards(id, kanbanId, columnId);
     await reload();
   }, [kanbanId, reload]);
+
+  /** Diferente de deleteGroup: apaga o grupo (e subgrupos) JUNTO com todos os cards de dentro. */
+  const deleteGroupWithCards = useCallback(async (id: string) => {
+    await groupsApi.deleteGroupAndCards(id);
+    await reload();
+  }, [reload]);
 
   const moveCardIntoGroup = useCallback(async (cardId: string, groupId: string, orderedIds: string[]) => {
     await cardsApi.moveCardIntoGroup(cardId, groupId, orderedIds);
@@ -223,6 +233,34 @@ export function useKanbanBoard(kanban: Kanban) {
     await reload();
   }, [cards, kanbanId, reload]);
 
+  /**
+   * Menu rápido "Mover para…" do card: manda os cards pro FIM de uma coluna (soltos) ou de um
+   * grupo/subgrupo. Reaproveita bulkMoveCards (que já sabe sair de grupo / entrar em grupo).
+   * A lista de irmãos vem de `cards` (não de ungroupedCardsByColumn, que respeita busca/filtros).
+   */
+  const moveCardsTo = useCallback(async (
+    cardIds: string[],
+    target: { kind: 'column'; columnId: string } | { kind: 'group'; groupId: string }
+  ) => {
+    const movingSet = new Set(cardIds);
+    const moving = cards
+      .filter((c) => movingSet.has(c.id))
+      .sort((a, b) => a.position - b.position)
+      .map((c) => c.id);
+    if (moving.length === 0) return;
+
+    const existing = cards
+      .filter((c) => !movingSet.has(c.id) && (
+        target.kind === 'group'
+          ? c.cardGroupId === target.groupId
+          : !c.cardGroupId && c.columnId === target.columnId
+      ))
+      .sort((a, b) => a.position - b.position)
+      .map((c) => c.id);
+
+    await bulkMoveCards(moving, target, [...existing, ...moving]); // bulkMoveCards já faz reload()
+  }, [cards, bulkMoveCards]);
+
   const bulkDeleteCards = useCallback(async (cardIds: string[]) => {
     await Promise.all(cardIds.map((id) => cardsApi.deleteCard(id)));
     await reload();
@@ -230,6 +268,11 @@ export function useKanbanBoard(kanban: Kanban) {
 
   const bulkSetColor = useCallback(async (cardIds: string[], color: string | null) => {
     await Promise.all(cardIds.map((id) => cardsApi.updateCard(id, { color })));
+    await reload();
+  }, [reload]);
+
+  const bulkSetStatus = useCallback(async (cardIds: string[], status: import('@/types/kanban.types').TaskStatus | null) => {
+    await Promise.all(cardIds.map((id) => cardsApi.updateCard(id, { status })));
     await reload();
   }, [reload]);
 
@@ -281,6 +324,26 @@ export function useKanbanBoard(kanban: Kanban) {
     );
     await reload();
   }, [cards, reload]);
+  const createPlanCard = useCallback(async (
+    columnId: string, targetColumnId: string | null, targetGroupId: string | null,
+    title: string, startDate: string, endDate: string, weekdays: number[], timesPerDay: number
+  ) => {
+    await cardsApi.createPlanCard(kanbanId, columnId, targetColumnId, targetGroupId, title, startDate, endDate, weekdays, timesPerDay);
+    await reload();
+  }, [kanbanId, reload]);
+
+  /**
+   * Materializa uma ocorrência de um plano num card real (só quando o usuário clica pra
+   * editar) — a checklist do modelo é copiada junto, mesmo padrão de duplicateCard.
+   * Retorna o id do card real.
+   */
+  const materializePlanOccurrence = useCallback(async (planId: string, date: string, occurrenceIndex: number) => {
+    const id = await cardsApi.materializePlanOccurrence(planId, date, occurrenceIndex);
+    await checklistApi.duplicateChecklist(planId, id);
+    await reload();
+    return id;
+  }, [reload]);
+
   const createColumn = useCallback(async (name: string) => {
     await columnsApi.createColumn({ kanbanId, name });
     await reload();
@@ -358,15 +421,16 @@ export function useKanbanBoard(kanban: Kanban) {
   }, [cards, reload]);
 
   return {
-    columns, ungroupedCardsByColumn, cardsByGroup, groupsByColumn, cards, groups, cardsWithSubKanban, checklistProgress, loading, reload,
+    columns, ungroupedCardsByColumn, cardsByGroup, groupsByColumn, cards, groups, cardsWithSubKanban, cardsWithFiles, checklistProgress, loading, reload,
     search, setSearch, filters, setFilters, filtersActive: hasActiveFilters(filters),
     moveCard, createCard, updateCard, duplicateCard, archiveCard, removeCard,
     createCardInGroup,
     renameLabel, deleteLabel,
     fixInconsistentGroupLabels,
-    createGroup, createSubgroup, renameGroup, deleteGroup, updateGroupAppearance, moveCardIntoGroup, moveCardOutOfGroup, moveGroupToColumn,
+    createGroup, createSubgroup, renameGroup, deleteGroup, deleteGroupWithCards, updateGroupAppearance, moveCardIntoGroup, moveCardOutOfGroup, moveGroupToColumn,
+    createPlanCard, materializePlanOccurrence,
     createColumn, updateColumn, removeColumn, duplicateColumn, reorderColumns,
-    bulkMoveCards, bulkDeleteCards, bulkSetColor, bulkToggleLabel,
+    bulkMoveCards, moveCardsTo, bulkDeleteCards, bulkSetColor, bulkSetStatus, bulkToggleLabel,
     duplicateCardMultiple, createCardsBatch,
     viewPrefs, saveViewPrefs,
     reorderCardsInGroup,

@@ -11,6 +11,15 @@ interface KanbanCalendarViewProps {
   groups: KanbanCardGroup[];
   checklistProgress?: Record<string, ChecklistProgress>;
   onCardClick: (cardId: string) => void;
+
+  /** Liga/desliga a geração de ocorrências virtuais de um plano (ocorrências já materializadas não somem). */
+  onTogglePlanActive: (planId: string, active: boolean) => void;
+  /**
+   * Clique numa ocorrência VIRTUAL (dia/repetição do plano ainda não editada): materializa
+   * ela num card real e então abre pra edição — é o único momento em que um card nasce a
+   * partir de um plano.
+   */
+  onVirtualOccurrenceClick: (planId: string, date: string, occurrenceIndex: number) => void;
 }
 
 type Granularity = 'month' | 'week' | 'day';
@@ -28,6 +37,28 @@ const MONTH_LABELS = [
   'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro',
 ];
 
+const VIRTUAL_ID_PREFIX = 'virtual:';
+
+function makeVirtualId(planId: string, date: string, occurrenceIndex: number): string {
+  return `${VIRTUAL_ID_PREFIX}${planId}:${date}:${occurrenceIndex}`;
+}
+
+/** Desmonta um id virtual de volta em (planId, date, occurrenceIndex). Assume que já passou por isVirtualCard. */
+function parseVirtualId(id: string): { planId: string; date: string; occurrenceIndex: number } {
+  const rest = id.slice(VIRTUAL_ID_PREFIX.length);
+  const lastColon = rest.lastIndexOf(':');
+  const occurrenceIndex = Number(rest.slice(lastColon + 1));
+  const rest2 = rest.slice(0, lastColon);
+  const secondLastColon = rest2.lastIndexOf(':');
+  const date = rest2.slice(secondLastColon + 1);
+  const planId = rest2.slice(0, secondLastColon);
+  return { planId, date, occurrenceIndex };
+}
+
+function isVirtualCard(card: KanbanCard): boolean {
+  return card.id.startsWith(VIRTUAL_ID_PREFIX);
+}
+
 /** 'YYYY-MM-DD' a partir de componentes locais — evita o shift de fuso horário de `new Date(isoString)`. */
 function dateKey(year: number, month: number, day: number): string {
   return `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
@@ -35,6 +66,19 @@ function dateKey(year: number, month: number, day: number): string {
 
 function dateKeyFromDate(d: Date): string {
   return dateKey(d.getFullYear(), d.getMonth(), d.getDate());
+}
+
+/** Todas as datas ('YYYY-MM-DD') entre start e end, inclusive, em ordem. */
+function enumerateDates(start: string, end: string): string[] {
+  const result: string[] = [];
+  let cursor = new Date(`${start}T00:00:00`);
+  const endDate = new Date(`${end}T00:00:00`);
+  if (cursor > endDate) return result; // intervalo invertido — não gera nada
+  while (cursor <= endDate) {
+    result.push(dateKeyFromDate(cursor));
+    cursor = new Date(cursor.getFullYear(), cursor.getMonth(), cursor.getDate() + 1);
+  }
+  return result;
 }
 
 /**
@@ -98,24 +142,29 @@ function buildWeekDays(cursor: Date): Date[] {
 
 /** Linha de detalhe usada nas visões de semana e dia — bem mais informação que o chip compacto do mês. */
 function CardDetailCard({
-  card, column, checklistProgress, onCardClick,
+  card, column, checklistProgress, isVirtual, onClick,
 }: {
   card: KanbanCard;
   column: KanbanColumn | undefined;
   checklistProgress?: ChecklistProgress;
-  onCardClick: (cardId: string) => void;
+  isVirtual: boolean;
+  onClick: () => void;
 }) {
   return (
     <div
-      onClick={() => onCardClick(card.id)}
+      onClick={onClick}
+      title={isVirtual ? 'Ocorrência de plano ainda não editada — clique pra criar e editar' : undefined}
       style={{
         display: 'flex', flexDirection: 'column', gap: 4,
         padding: '8px 10px', borderRadius: 6, cursor: 'pointer',
-        backgroundColor: card.color ?? '#f7f7f7',
-        borderLeft: `4px solid ${column?.color ?? '#999'}`,
+        backgroundColor: isVirtual ? 'transparent' : (card.color ?? '#f7f7f7'),
+        border: isVirtual ? '1.5px dashed #b3b3b3' : 'none',
+        borderLeft: isVirtual ? '1.5px dashed #b3b3b3' : `4px solid ${column?.color ?? '#999'}`,
+        opacity: isVirtual ? 0.65 : 1,
       }}
     >
       <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+        {isVirtual && <span title="Ocorrência de plano ainda não criada" style={{ fontSize: 12 }}>📋</span>}
         {column?.coverPath && (
           <img
             src={convertFileSrc(column.coverPath)}
@@ -126,6 +175,9 @@ function CardDetailCard({
         <span style={{ fontSize: 13, fontWeight: 600, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
           {card.title}
         </span>
+        {!isVirtual && card.planParentId && (
+          <span title="Nasceu de um plano" style={{ fontSize: 11 }}>📋</span>
+        )}
         {card.status && (
           <span
             style={{
@@ -183,19 +235,77 @@ function CardDetailCard({
   );
 }
 
-export default function KanbanCalendarView({ cards, columns, groups, checklistProgress, onCardClick }: KanbanCalendarViewProps) {
+export default function KanbanCalendarView({
+  cards, columns, groups, checklistProgress, onCardClick,
+  onTogglePlanActive, onVirtualOccurrenceClick,
+}: KanbanCalendarViewProps) {
   const today = new Date();
   const [cursor, setCursor] = useState(() => new Date(today.getFullYear(), today.getMonth(), today.getDate()));
   const [granularity, setGranularity] = useState<Granularity>('month');
+  const [plansPanelOpen, setPlansPanelOpen] = useState(false);
 
   const year = cursor.getFullYear();
   const month = cursor.getMonth();
 
   const columnById = useMemo(() => new Map(columns.map((c) => [c.id, c])), [columns]);
 
+  // Card-modelo de plano é só config — mora numa coluna do board, mas não entra na grade
+  // do calendário como "um card nesse dia" (quem entra são as ocorrências, virtuais ou reais).
+  const planTemplates = useMemo(() => cards.filter((c) => c.isPlanTemplate), [cards]);
+  const nonTemplateCards = useMemo(() => cards.filter((c) => !c.isPlanTemplate), [cards]);
+
+  // planId -> chaves 'YYYY-MM-DD:índice' já materializadas (cards reais nascidos daquele plano).
+  const materializedKeysByPlan = useMemo(() => {
+    const map = new Map<string, Set<string>>();
+    for (const c of nonTemplateCards) {
+      if (!c.planParentId) continue;
+      const dateStr = cardDateKey(c);
+      if (!dateStr) continue;
+      const idx = c.planOccurrenceIndex ?? 0;
+      const set = map.get(c.planParentId) ?? new Set<string>();
+      set.add(`${dateStr}:${idx}`);
+      map.set(c.planParentId, set);
+    }
+    return map;
+  }, [nonTemplateCards]);
+
+  // Ocorrências virtuais: uma repetição (dia + índice) do intervalo de um plano ATIVO, no dia
+  // da semana certo, que ainda não foi materializada. Nunca salvas — recalculadas a cada
+  // render a partir do card-modelo.
+  const virtualOccurrences = useMemo(() => {
+    const list: KanbanCard[] = [];
+    for (const plan of planTemplates) {
+      if (!plan.planActive || !plan.startDate || !plan.dueDate) continue;
+      const weekdays = plan.planWeekdays.length > 0 ? plan.planWeekdays : [0, 1, 2, 3, 4, 5, 6];
+      const timesPerDay = Math.max(1, plan.planTimesPerDay);
+      const materializedKeys = materializedKeysByPlan.get(plan.id) ?? new Set<string>();
+
+      for (const dateStr of enumerateDates(plan.startDate.slice(0, 10), plan.dueDate.slice(0, 10))) {
+        const weekday = new Date(`${dateStr}T00:00:00`).getDay();
+        if (!weekdays.includes(weekday)) continue;
+
+        for (let idx = 0; idx < timesPerDay; idx++) {
+          if (materializedKeys.has(`${dateStr}:${idx}`)) continue;
+          list.push({
+            ...plan,
+            id: makeVirtualId(plan.id, dateStr, idx),
+            isPlanTemplate: false,
+            planActive: false,
+            planParentId: plan.id,
+            planOccurrenceIndex: idx,
+            startDate: dateStr,
+            dueDate: dateStr,
+            title: timesPerDay > 1 ? `${plan.title} (${idx + 1}/${timesPerDay})` : plan.title,
+          });
+        }
+      }
+    }
+    return list;
+  }, [planTemplates, materializedKeysByPlan]);
+
   const cardsByDate = useMemo(() => {
     const map = new Map<string, KanbanCard[]>();
-    for (const card of cards) {
+    for (const card of [...nonTemplateCards, ...virtualOccurrences]) {
       if (card.archived) continue;
       const key = cardDateKey(card);
       if (!key) continue;
@@ -205,7 +315,7 @@ export default function KanbanCalendarView({ cards, columns, groups, checklistPr
     }
     for (const list of map.values()) list.sort((a, b) => a.position - b.position);
     return map;
-  }, [cards]);
+  }, [nonTemplateCards, virtualOccurrences]);
 
   const weeks = useMemo(() => buildWeeks(year, month), [year, month]);
   const weekDays = useMemo(() => buildWeekDays(cursor), [cursor]);
@@ -223,6 +333,15 @@ export default function KanbanCalendarView({ cards, columns, groups, checklistPr
     }
     return columns.filter((c) => idsInUse.has(c.id));
   }, [cardsByDate, groups, columns]);
+
+  function handleCardClick(card: KanbanCard) {
+    if (isVirtualCard(card)) {
+      const { planId, date, occurrenceIndex } = parseVirtualId(card.id);
+      onVirtualOccurrenceClick(planId, date, occurrenceIndex);
+    } else {
+      onCardClick(card.id);
+    }
+  }
 
   function goPrev() {
     if (granularity === 'month') setCursor(new Date(year, month - 1, 1));
@@ -279,8 +398,41 @@ export default function KanbanCalendarView({ cards, columns, groups, checklistPr
             ))}
           </div>
           <Button variant="secondary" onClick={goToday}>Hoje</Button>
+          {planTemplates.length > 0 && (
+            <Button variant="secondary" onClick={() => setPlansPanelOpen((v) => !v)}>
+              📋 Planos ({planTemplates.length})
+            </Button>
+          )}
         </div>
       </div>
+
+      {plansPanelOpen && planTemplates.length > 0 && (
+        <div style={{ backgroundColor: '#fff', borderRadius: 8, padding: 10, marginBottom: 12, display: 'flex', flexDirection: 'column', gap: 6 }}>
+          {planTemplates.map((plan) => (
+            <div key={plan.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 8px', border: '1px solid #eee', borderRadius: 6 }}>
+              <span
+                onClick={() => onCardClick(plan.id)}
+                style={{ flex: 1, fontSize: 12, fontWeight: 600, cursor: 'pointer' }}
+                title="Editar plano (o card-modelo está na coluna do board)"
+              >
+                {plan.title}
+              </span>
+              <span style={{ fontSize: 11, color: '#999' }}>
+                {plan.startDate?.slice(8, 10)}/{plan.startDate?.slice(5, 7)} → {plan.dueDate?.slice(8, 10)}/{plan.dueDate?.slice(5, 7)}
+                {plan.planTimesPerDay > 1 ? ` · ${plan.planTimesPerDay}x/dia` : ''}
+              </span>
+              <label style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 11, cursor: 'pointer', whiteSpace: 'nowrap' }}>
+                <input
+                  type="checkbox"
+                  checked={plan.planActive}
+                  onChange={(e) => onTogglePlanActive(plan.id, e.target.checked)}
+                />
+                Ativo
+              </label>
+            </div>
+          ))}
+        </div>
+      )}
 
       {columnsInUse.length > 0 && (
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, marginBottom: 10, padding: '6px 8px', backgroundColor: '#fafafa', borderRadius: 6 }}>
@@ -344,14 +496,17 @@ export default function KanbanCalendarView({ cards, columns, groups, checklistPr
                     {dayCards.map((card) => {
                       const columnId = resolveColumnId(card, groups);
                       const column = columnId ? columnById.get(columnId) : undefined;
+                      const virtual = isVirtualCard(card);
                       return (
                         <div
                           key={card.id}
-                          onClick={() => onCardClick(card.id)}
+                          onClick={() => handleCardClick(card)}
                           title={
-                            [card.title, column?.name, card.status ? STATUS_LABELS[card.status] : null]
-                              .filter(Boolean)
-                              .join(' — ')
+                            virtual
+                              ? `${card.title} — ocorrência de plano ainda não editada (clique pra criar)`
+                              : [card.title, column?.name, card.status ? STATUS_LABELS[card.status] : null]
+                                .filter(Boolean)
+                                .join(' — ')
                           }
                           style={{
                             display: 'flex',
@@ -361,11 +516,14 @@ export default function KanbanCalendarView({ cards, columns, groups, checklistPr
                             padding: '3px 5px',
                             borderRadius: 3,
                             cursor: 'pointer',
-                            backgroundColor: card.color ?? '#f0f0f0',
-                            borderLeft: `3px solid ${column?.color ?? '#999'}`,
+                            backgroundColor: virtual ? 'transparent' : (card.color ?? '#f0f0f0'),
+                            border: virtual ? '1px dashed #bbb' : 'none',
+                            borderLeft: virtual ? '1px dashed #bbb' : `3px solid ${column?.color ?? '#999'}`,
+                            opacity: virtual ? 0.6 : 1,
                             overflow: 'hidden',
                           }}
                         >
+                          {virtual && <span style={{ fontSize: 9, flexShrink: 0 }}>📋</span>}
                           {column?.coverPath && (
                             <img
                               src={convertFileSrc(column.coverPath)}
@@ -434,7 +592,8 @@ export default function KanbanCalendarView({ cards, columns, groups, checklistPr
                         card={card}
                         column={column}
                         checklistProgress={checklistProgress?.[card.id]}
-                        onCardClick={onCardClick}
+                        isVirtual={isVirtualCard(card)}
+                        onClick={() => handleCardClick(card)}
                       />
                     );
                   })}
@@ -464,7 +623,8 @@ export default function KanbanCalendarView({ cards, columns, groups, checklistPr
                     card={card}
                     column={column}
                     checklistProgress={checklistProgress?.[card.id]}
-                    onCardClick={onCardClick}
+                    isVirtual={isVirtualCard(card)}
+                    onClick={() => handleCardClick(card)}
                   />
                 );
               })
@@ -475,7 +635,7 @@ export default function KanbanCalendarView({ cards, columns, groups, checklistPr
 
       {!hasAnyDatedCard && (
         <p style={{ color: '#999', fontSize: 13, textAlign: 'center', padding: 24 }}>
-          Nenhum card com data neste kanban ainda. Adicione uma data de início ou prazo a um card pra vê-lo aqui.
+          Nenhum card com data neste kanban ainda. Adicione uma data de início ou prazo a um card, ou crie um card de plano numa coluna, pra vê-lo aqui.
         </p>
       )}
     </div>

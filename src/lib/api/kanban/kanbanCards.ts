@@ -2,6 +2,7 @@ import { generateId } from '@/lib/utils/uuid';
 import { toLocalISO } from '@/lib/utils/date';
 import type { KanbanCard, CreateKanbanCardInput, UpdateKanbanCardInput } from '@/types/kanban.types';
 import { loadKanbanData, saveKanbanData } from '@/Kanban/api/kanbanDataStore';
+import { deleteCardFilesDir } from '@/Kanban/api/kanbanCardAssets';
 
 function applyPositions(cards: KanbanCard[], orderedIds: string[]): void {
   orderedIds.forEach((id, index) => {
@@ -51,12 +52,88 @@ export async function createCard(input: CreateKanbanCardInput): Promise<string> 
     dueDate: input.dueDate ?? null,
     position: nextPosition,
     archived: false,
+    isPlanTemplate: input.isPlanTemplate ?? false,
+    planActive: input.planActive ?? false,
+    planWeekdays: input.planWeekdays ?? [0, 1, 2, 3, 4, 5, 6],
+    planTimesPerDay: input.planTimesPerDay ?? 1,
+    planTargetColumnId: input.planTargetColumnId ?? null,
+    planTargetGroupId: input.planTargetGroupId ?? null,
+    planParentId: input.planParentId ?? null,
+    planOccurrenceIndex: input.planOccurrenceIndex ?? null,
     createdAt: now,
     updatedAt: now,
   });
 
   await saveKanbanData(data);
   return id;
+}
+
+export async function createPlanCard(
+  kanbanId: string,
+  columnId: string,
+  targetColumnId: string | null,
+  targetGroupId: string | null,
+  title: string,
+  startDate: string,
+  endDate: string,
+  weekdays: number[],
+  timesPerDay: number
+): Promise<string> {
+  return createCard({
+    kanbanId,
+    columnId,
+    title,
+    startDate,
+    dueDate: endDate,
+    isPlanTemplate: true,
+    planActive: true,
+    planWeekdays: weekdays,
+    planTimesPerDay: timesPerDay,
+    planTargetColumnId: targetColumnId,
+    planTargetGroupId: targetGroupId,
+  });
+}
+
+/**
+ * Materializa a ocorrência `occurrenceIndex` (0-based, relevante quando planTimesPerDay > 1)
+ * do dia `date` ('YYYY-MM-DD') de um plano (`planId`) num card real — chamado só quando o
+ * usuário clica pra editar aquela ocorrência no calendário (nunca antes disso). Se o modelo
+ * tiver `planTargetGroupId` configurado, o card nasce direto naquele grupo/subgrupo (mesmo
+ * padrão de `moveCardIntoGroup`: kanbanId/columnId ficam null, o vínculo é só via
+ * cardGroupId); senão nasce solto em `planTargetColumnId` (ou fica só no calendário, se nenhum
+ * dos dois estiver configurado). Protege contra duplo-clique/corrida: se já existir um card
+ * materializado dessa data+índice pra esse plano, retorna o id dele em vez de duplicar.
+ */
+export async function materializePlanOccurrence(planId: string, date: string, occurrenceIndex: number): Promise<string> {
+  const data = await loadKanbanData();
+  const existing = data.cards.find((c) =>
+    c.planParentId === planId &&
+    c.planOccurrenceIndex === occurrenceIndex &&
+    (c.dueDate === date || c.startDate === date)
+  );
+  if (existing) return existing.id;
+
+  const plan = data.cards.find((c) => c.id === planId);
+  if (!plan) throw new Error('Card de plano não encontrado para materializar ocorrência');
+
+  const title = plan.planTimesPerDay > 1 ? `${plan.title} (${occurrenceIndex + 1}/${plan.planTimesPerDay})` : plan.title;
+  const shared = {
+    title,
+    description: plan.description,
+    color: plan.color,
+    priority: plan.priority,
+    status: plan.status,
+    labels: plan.labels,
+    startDate: date,
+    dueDate: date,
+    planParentId: planId,
+    planOccurrenceIndex: occurrenceIndex,
+  };
+
+  if (plan.planTargetGroupId) {
+    return createCard({ ...shared, cardGroupId: plan.planTargetGroupId });
+  }
+  return createCard({ ...shared, kanbanId: plan.kanbanId, columnId: plan.planTargetColumnId });
 }
 
 export async function updateCard(id: string, input: UpdateKanbanCardInput): Promise<void> {
@@ -77,18 +154,26 @@ export async function updateCard(id: string, input: UpdateKanbanCardInput): Prom
   if (input.dueDate !== undefined) { card.dueDate = input.dueDate; changed = true; }
   if (input.columnId !== undefined) { card.columnId = input.columnId; changed = true; }
   if (input.archived !== undefined) { card.archived = input.archived; changed = true; }
+  if (input.isPlanTemplate !== undefined) { card.isPlanTemplate = input.isPlanTemplate; changed = true; }
+  if (input.planActive !== undefined) { card.planActive = input.planActive; changed = true; }
+  if (input.planWeekdays !== undefined) { card.planWeekdays = input.planWeekdays; changed = true; }
+  if (input.planTimesPerDay !== undefined) { card.planTimesPerDay = input.planTimesPerDay; changed = true; }
+  if (input.planTargetColumnId !== undefined) { card.planTargetColumnId = input.planTargetColumnId; changed = true; }
+  if (input.planTargetGroupId !== undefined) { card.planTargetGroupId = input.planTargetGroupId; changed = true; }
   if (!changed) return;
 
   card.updatedAt = toLocalISO(new Date());
   await saveKanbanData(data);
 }
 
-/** Cascade manual: apaga também os checklist items do card (antes era ON DELETE CASCADE). */
+/** Cascade manual: apaga também os checklist items e a pasta de arquivos do card (antes era ON DELETE CASCADE). */
 export async function deleteCard(id: string): Promise<void> {
   const data = await loadKanbanData();
   data.checklistItems = data.checklistItems.filter((item) => item.cardId !== id);
   data.cards = data.cards.filter((c) => c.id !== id);
   await saveKanbanData(data);
+  // pasta pode nunca ter existido (card sem arquivo) — não bloqueia a exclusão do card se falhar
+  await deleteCardFilesDir(id).catch(() => { });
 }
 
 export async function duplicateCard(id: string): Promise<string> {

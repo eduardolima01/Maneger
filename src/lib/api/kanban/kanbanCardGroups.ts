@@ -1,4 +1,5 @@
 import { loadKanbanData, saveKanbanData } from '@/Kanban/api/kanbanDataStore';
+import { deleteCard } from './kanbanCards';
 import { generateId } from '@/lib/utils/uuid';
 import type { KanbanCardGroup, ParentCardGroup, UpdateKanbanCardGroupInput } from '@/types/kanban.types';
 
@@ -129,6 +130,35 @@ export async function deleteGroupAndUngroupCards(id: string, kanbanId: string, c
   data.cardGroups = data.cardGroups.filter((g) => !groupIdSet.has(g.id));
 
   await saveKanbanData(data);
+}
+
+/**
+ * Exclui o grupo E todos os cards dentro dele — recursivo: subgrupos (qualquer
+ * profundidade) e os cards de cada um também são apagados.
+ *
+ * Cada card é apagado via `deleteCard` de kanbanCards.ts, pra herdar o cascade
+ * que já existe lá (checklist, pasta de arquivos etc.) em vez de duplicar lógica.
+ * As exclusões são SEQUENCIAIS de propósito: `deleteCard` faz load/save do mesmo
+ * blob JSON, então rodar em paralelo daria condição de corrida (última escrita vence).
+ * Os grupos só são removidos no fim, relendo o blob, porque `deleteCard` já salvou
+ * mudanças no meio do caminho e o `data` original estaria desatualizado.
+ */
+export async function deleteGroupAndCards(id: string): Promise<void> {
+  const data = await loadKanbanData();
+  if (!data.cardGroups.some((g) => g.id === id)) return;
+
+  const groupIdSet = new Set([id, ...collectDescendantGroupIds(id, data.cardGroups)]);
+  const cardIds = data.cards
+    .filter((c) => c.cardGroupId && groupIdSet.has(c.cardGroupId))
+    .map((c) => c.id);
+
+  for (const cardId of cardIds) {
+    await deleteCard(cardId);
+  }
+
+  const fresh = await loadKanbanData();
+  fresh.cardGroups = fresh.cardGroups.filter((g) => !groupIdSet.has(g.id));
+  await saveKanbanData(fresh);
 }
 
 // ---------------------------------------------------------------------------

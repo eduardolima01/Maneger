@@ -1,14 +1,16 @@
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { convertFileSrc } from '@tauri-apps/api/core';
-import { PRIORITY_LABELS, PRIORITY_COLORS } from '@/types/kanban.types';
-import type { KanbanCard as CardType, ChecklistProgress, KanbanDensity } from '@/types/kanban.types';
+import { PRIORITY_LABELS, PRIORITY_COLORS, STATUS_LABELS, STATUS_COLORS } from '@/types/kanban.types';
+import type { KanbanCard as CardType, ChecklistProgress, KanbanDensity, TaskStatus, CardVisualFieldConfig, CardVisualFieldKey } from '@/types/kanban.types';
 import ContextMenu from '@/components/ui/ContextMenu';
 import CardLabelMenu from './CardLabelMenu';
 import { useEffect, useRef, useState } from 'react';
 import { ParsedLabel, parseLabel, serializeLabel } from '@/Kanban/utils/kanbanLabels';
 import DueDateMenu from '@/Kanban/components/DueDateMenu';
 import CardColorMenu from '@/Kanban/components/CardColorMenu';
+import CardStatusMenu from '@/Kanban/components/CardStatusMenu';
+import CardMoveMenu from '@/Kanban/components/CardMoveMenu';
 import DuplicateMenu, { DuplicateMultipleMode } from '@/Kanban/components/DuplicateMenu';
 import { extensionFromMime } from '@/Canvas/hooks/useCanvasClipboard';
 import ImagePasteConfirmModal from '@/components/ui/ImagePasteConfirmModal';
@@ -19,20 +21,29 @@ import CardTimerPopup from '@/Kanban/Timer/CardTimerPopup';
 import { useGlobalCardTimer } from '@/Kanban/Timer/store/cardTimerStore';
 import { getCardTimerSessions } from '@/Kanban/Timer/cardTimer';
 import InlineChecklist from '@/Kanban/components/Inlinechecklist';
+import { getCardFilesDir } from '@/Kanban/api/kanbanCardAssets';
+import { openPath } from '@tauri-apps/plugin-opener';
+import CardFilesSection from '@/Kanban/components/Cardfilessection';
+import { useCardMove } from '@/lib/utils/CardMoveContext';
 
 interface KanbanCardProps {
   card: CardType;
   density: KanbanDensity;
+  visualConfig: CardVisualFieldConfig[];
   hasSubKanban: boolean;
+  hasFiles: boolean;
   checklistProgress?: ChecklistProgress;
   allLabels: ParsedLabel[];
   onClick: () => void;
   onDuplicate: () => void;
   onRequestDelete: () => void;
   onUpdateLabels: (cardId: string, labels: string[]) => void;
-  onUpdateCardDueDate: (cardId: string, title: string) => void;
+  onUpdateCardDueDate: (cardId: string, dueDate: string | null) => void;
+  onUpdateStartDate: (cardId: string, startDate: string | null) => void;
+  onUpdateDescription: (cardId: string, description: string | null) => void;
   onUpdateTitle: (cardId: string, title: string) => void;
   onUpdateColor: (cardId: string, color: string | null) => void;
+  onUpdateStatus: (cardId: string, status: TaskStatus | null) => void;
   onDuplicateMultiple: (cardId: string, mode: DuplicateMultipleMode) => void;
   onUpdateCoverPath: (cardId: string, path: string) => void;
   projectId: string;
@@ -41,6 +52,7 @@ interface KanbanCardProps {
   onCardSelectToggle: (cardId: string) => void;
   onBulkDelete: (cardIds: string[]) => void;
   onBulkSetColor: (cardIds: string[], color: string | null) => void;
+  onBulkSetStatus: (cardIds: string[], status: TaskStatus | null) => void;
   onBulkToggleLabel: (cardIds: string[], name: string, color: string, isGroup: boolean) => void;
 }
 
@@ -63,15 +75,20 @@ function getDueDateInfo(dueDate: string): { label: string; color: string } {
 }
 
 export default function KanbanCard({
-  card, density, hasSubKanban, onClick, onDuplicate, onRequestDelete, checklistProgress,
+  card, density, visualConfig, hasSubKanban, hasFiles, onClick, onDuplicate, onRequestDelete, checklistProgress,
   allLabels,
   onUpdateLabels,
+  onUpdateCardDueDate,
+  onUpdateStartDate,
+  onUpdateDescription,
   onUpdateTitle,
   onUpdateColor,
+  onUpdateStatus,
   selectedCardIds,
   onCardSelectToggle,
   onBulkDelete,
   onBulkSetColor,
+  onBulkSetStatus,
   onBulkToggleLabel,
   onDuplicateMultiple,
   onUpdateCoverPath,
@@ -106,11 +123,24 @@ export default function KanbanCard({
 
   const compact = density === 'compact';
 
+  function isVisualVisible(key: CardVisualFieldKey): boolean {
+    return visualConfig.find((c) => c.key === key)?.visible ?? true;
+  }
+
+  async function handleOpenFilesFolder(e: React.MouseEvent) {
+    e.stopPropagation();
+    const dir = await getCardFilesDir(card.id);
+    await openPath(dir);
+  }
+
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null);
   const [labelMenu, setLabelMenu] = useState<{ x: number; y: number } | null>(null);
   const [hovering, setHovering] = useState(false);
   const [dueDateMenu, setDueDateMenu] = useState<{ x: number; y: number } | null>(null);
   const [colorMenu, setColorMenu] = useState<{ x: number; y: number } | null>(null);
+  const [statusMenu, setStatusMenu] = useState<{ x: number; y: number } | null>(null);
+  const [moveMenu, setMoveMenu] = useState<{ x: number; y: number } | null>(null);
+  const cardMove = useCardMove(); // null fora do KanbanBoard — o item de menu fica desabilitado
 
   const [duplicateMenu, setDuplicateMenu] = useState<{ x: number; y: number } | null>(null);
   const [pasteConfirm, setPasteConfirm] = useState<{ blob: Blob; ext: string; previewUrl: string } | null>(null);
@@ -122,6 +152,7 @@ export default function KanbanCard({
   const [titleDraft, setTitleDraft] = useState(card.title);
   const [titleHover, setTitleHover] = useState(false);
   const [checklistOpen, setChecklistOpen] = useState(false);
+  const [expanded, setExpanded] = useState(false);
   const [liveChecklistProgress, setLiveChecklistProgress] = useState<ChecklistProgress | null>(null);
   const displayedChecklistProgress = liveChecklistProgress ?? checklistProgress;
 
@@ -143,19 +174,23 @@ export default function KanbanCard({
   function scheduleClose() {
     if (closeTimerRef.current) clearTimeout(closeTimerRef.current);
     closeTimerRef.current = setTimeout(() => {
+      setMoveMenu(null);
       setContextMenu(null);
       setLabelMenu(null);
       setDueDateMenu(null);
       setColorMenu(null);
+      setStatusMenu(null);
       setTimerMenu(null);
       setDuplicateMenu(null);
     }, CLOSE_DELAY);
   }
 
   function openTimerMenu(pos: { x: number; y: number }) {
+    setMoveMenu(null);
     setLabelMenu(null);
     setDueDateMenu(null);
     setColorMenu(null);
+    setStatusMenu(null);
     setDuplicateMenu(null);
     setTimerMenu(null);
     setTimerMenu(pos);
@@ -190,11 +225,15 @@ export default function KanbanCard({
     function handleKeyUp(e: KeyboardEvent) {
       if (e.key !== 'Control' || !ctrlOnlyRef.current || ctrlUsedForClickRef.current) return;
       // não abre por cima de nenhum popup já aberto, nem enquanto o título está sendo editado
-      if (contextMenu || labelMenu || dueDateMenu || colorMenu || duplicateMenu || timerMenu || pasteConfirm || editingTitle) return;
+      if (contextMenu || labelMenu || dueDateMenu || colorMenu || statusMenu || moveMenu || duplicateMenu || timerMenu || pasteConfirm || editingTitle) return;
       onClick();
     }
     function handlePaste(e: ClipboardEvent) {
-      if (contextMenu || labelMenu || dueDateMenu || colorMenu || duplicateMenu || pasteConfirm) return;
+      if (contextMenu || labelMenu || dueDateMenu || colorMenu || statusMenu || moveMenu || duplicateMenu || pasteConfirm) return;
+      const target = e.target as HTMLElement | null;
+      if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable)) {
+        return; // colando dentro de um campo de texto (título, descrição, datas) — deixa o paste nativo acontecer, não é "colar capa"
+      }
       const items = e.clipboardData?.items;
       if (!items) return;
       const imageItem = Array.from(items).find((i) => i.type.startsWith('image/'));
@@ -206,7 +245,7 @@ export default function KanbanCard({
         setPasteConfirm({ blob, ext: extensionFromMime(imageItem.type), previewUrl });
         return;
       }
-      // colou algo, mas não é imagem (texto, arquivo não-imagem, etc.)
+      // colou algo, mas não é imagem (texto, arquivo não-imagem, etc.) — e não foi num campo de texto, então é paste "solto" em cima do card
       if (items.length > 0) {
         e.preventDefault();
         setPasteError('Isso não é uma imagem.');
@@ -222,7 +261,7 @@ export default function KanbanCard({
       if (cornerHoverTimer.current) clearTimeout(cornerHoverTimer.current);
       if (closeTimerRef.current) clearTimeout(closeTimerRef.current);
     };
-  }, [hovering, contextMenu, labelMenu, dueDateMenu, colorMenu, duplicateMenu, timerMenu, pasteConfirm, editingTitle, onRequestDelete, onClick]);
+  }, [hovering, contextMenu, labelMenu, dueDateMenu, colorMenu, statusMenu, moveMenu, duplicateMenu, timerMenu, pasteConfirm, editingTitle, onRequestDelete, onClick]);
 
   async function confirmPasteImage() {
     if (!pasteConfirm) return;
@@ -239,15 +278,19 @@ export default function KanbanCard({
     setPasteConfirm(null);
   }
   function openLabelMenu(pos: { x: number; y: number }) {
+    setMoveMenu(null);
     setDueDateMenu(null);
     setColorMenu(null);
+    setStatusMenu(null);
     setLabelMenu(pos);
 
   }
 
   function openDueDateMenu(pos: { x: number; y: number }) {
+    setMoveMenu(null);
     setLabelMenu(null);
     setColorMenu(null);
+    setStatusMenu(null);
     setDueDateMenu(pos);
   }
   function handleContextMenu(e: React.MouseEvent) {
@@ -257,16 +300,39 @@ export default function KanbanCard({
   }
 
   function openColorMenu(pos: { x: number; y: number }) {
+    setMoveMenu(null);
     setLabelMenu(null);
     setDueDateMenu(null);
+    setStatusMenu(null);
     setColorMenu(pos);
   }
 
-
-  function openDuplicateMenu(pos: { x: number; y: number }) {
+  function openStatusMenu(pos: { x: number; y: number }) {
+    setMoveMenu(null);
     setLabelMenu(null);
     setDueDateMenu(null);
     setColorMenu(null);
+    setStatusMenu(pos);
+  }
+
+
+  function openMoveMenu(pos: { x: number; y: number }) {
+    if (!cardMove) return;
+    setLabelMenu(null);
+    setDueDateMenu(null);
+    setColorMenu(null);
+    setStatusMenu(null);
+    setDuplicateMenu(null);
+    setTimerMenu(null);
+    setMoveMenu(pos);
+  }
+
+  function openDuplicateMenu(pos: { x: number; y: number }) {
+    setMoveMenu(null);
+    setLabelMenu(null);
+    setDueDateMenu(null);
+    setColorMenu(null);
+    setStatusMenu(null);
     setDuplicateMenu(pos);
   }
   function handleToggleLabel(name: string, color: string, isGroup: boolean) {
@@ -351,7 +417,7 @@ export default function KanbanCard({
           {hovering && <span style={{ fontSize: 11, color: '#bbb' }}>⋮</span>}
         </div>
 
-        {!compact && card.coverPath
+        {!compact && isVisualVisible('cover') && card.coverPath
           // && (card.labels.length > 0 || card.dueDate || displayedTimerSeconds > 0) 
           && (
             <div
@@ -408,10 +474,39 @@ export default function KanbanCard({
               {card.title}
             </span>
           )}
-          {hasSubKanban && (
+          {isVisualVisible('subKanbanBadge') && hasSubKanban && (
             <span title="Tem sub-kanban" style={{ fontSize: 11 }}>📋</span>
           )}
-          {hasOpenTimer && (
+          {isVisualVisible('filesButton') && hasFiles && (
+            <span
+              onClick={handleOpenFilesFolder}
+              onPointerDown={(e) => e.stopPropagation()}
+              title="Abrir pasta de arquivos"
+              style={{ fontSize: 11, cursor: 'pointer' }}
+            >
+              📂
+            </span>
+          )}
+          {isVisualVisible('planBadge') && card.isPlanTemplate && (
+            <span
+              title={card.planActive ? 'Plano ativo' : 'Plano inativo'}
+              style={{
+                fontSize: 10,
+                fontWeight: 600,
+                padding: '1px 5px',
+                borderRadius: 3,
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 2,
+                backgroundColor: card.planActive ? '#ede7f6' : '#f0f0f0',
+                color: card.planActive ? '#5e35b1' : '#888',
+                flexShrink: 0,
+              }}
+            >
+              🔁 {card.planActive ? 'Ativo' : 'Inativo'}
+            </span>
+          )}
+          {isVisualVisible('timer') && hasOpenTimer && (
             <span
               title={globalTimer.running ? 'Cronômetro rodando' : 'Cronômetro pausado, sessão em aberto'}
               style={{ fontSize: 11, color: globalTimer.running ? '#2e7d32' : '#e65100' }}
@@ -419,7 +514,7 @@ export default function KanbanCard({
               {globalTimer.running ? '⏱' : '⏸'}
             </span>
           )}
-          {card.priority && (
+          {isVisualVisible('priority') && card.priority && (
             <span
               title={PRIORITY_LABELS[card.priority]}
               style={{ width: 8, height: 8, borderRadius: '50%', backgroundColor: PRIORITY_COLORS[card.priority], flexShrink: 0 }}
@@ -427,37 +522,48 @@ export default function KanbanCard({
           )}
         </div>
 
-        {!compact && card.description && (
+        {!compact && isVisualVisible('description') && card.description && (
           <p style={{ fontSize: 11, color: '#666', margin: '0 0 6px', overflow: 'hidden', textOverflow: 'ellipsis', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}>
             {card.description}
           </p>
         )}
 
-        {!compact && (card.labels.length > 0 || card.dueDate) && (
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, fontSize: 10 }}>
-            {card.labels.map((raw) => {
-              const { name, color } = parseLabel(raw);
-              return (
-                <span key={raw} style={{ backgroundColor: color, color: '#fff', borderRadius: 3, padding: '1px 5px' }}>
-                  {name}
+        {!compact && (
+          (isVisualVisible('labels') && card.labels.length > 0) ||
+          (isVisualVisible('dueDate') && card.dueDate) ||
+          (isVisualVisible('status') && card.status) ||
+          (isVisualVisible('timer') && displayedTimerSeconds > 0)
+        ) && (
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, fontSize: 10, alignItems: 'center' }}>
+              {isVisualVisible('status') && card.status && (
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3, color: '#666', fontWeight: 500 }}>
+                  <span style={{ width: 6, height: 6, borderRadius: '50%', backgroundColor: STATUS_COLORS[card.status], flexShrink: 0 }} />
+                  {STATUS_LABELS[card.status]}
                 </span>
-              );
-            })}
+              )}
+              {isVisualVisible('labels') && card.labels.map((raw) => {
+                const { name, color } = parseLabel(raw);
+                return (
+                  <span key={raw} style={{ backgroundColor: color, color: '#fff', borderRadius: 3, padding: '1px 5px' }}>
+                    {name}
+                  </span>
+                );
+              })}
 
-            {card.dueDate && (() => {
-              const info = getDueDateInfo(card.dueDate);
-              return <span style={{ color: info.color, fontWeight: info.color === '#666' ? 400 : 600 }}>📅 {info.label}</span>;
-            })()}
+              {isVisualVisible('dueDate') && card.dueDate && (() => {
+                const info = getDueDateInfo(card.dueDate);
+                return <span style={{ color: info.color, fontWeight: info.color === '#666' ? 400 : 600 }}>📅 {info.label}</span>;
+              })()}
 
-            {displayedTimerSeconds > 0 && (
-              <span style={{ color: hasOpenTimer && globalTimer.running ? '#2e7d32' : '#666' }}>
-                ⏱ {formatCardTimerTotal(displayedTimerSeconds)}
-              </span>
-            )}
-          </div>
-        )}
+              {isVisualVisible('timer') && displayedTimerSeconds > 0 && (
+                <span style={{ color: hasOpenTimer && globalTimer.running ? '#2e7d32' : '#666' }}>
+                  ⏱ {formatCardTimerTotal(displayedTimerSeconds)}
+                </span>
+              )}
+            </div>
+          )}
 
-        {!compact && (checklistOpen || (displayedChecklistProgress && displayedChecklistProgress.total > 0)) && (
+        {!compact && isVisualVisible('checklist') && (checklistOpen || (displayedChecklistProgress && displayedChecklistProgress.total > 0)) && (
           <div onClick={(e) => e.stopPropagation()} onPointerDown={(e) => e.stopPropagation()}>
             <button
               onClick={() => setChecklistOpen((v) => {
@@ -480,7 +586,70 @@ export default function KanbanCard({
           </div>
         )}
 
-        {displayedTimerSeconds > 0 && (
+        {!compact && isVisualVisible('expandToggle') && (
+          <button
+            onClick={(e) => { e.stopPropagation(); setExpanded((v) => !v); }}
+            onPointerDown={(e) => e.stopPropagation()}
+            style={{
+              width: '100%', textAlign: 'center', fontSize: 10, color: '#bbb',
+              border: 'none', background: 'none', cursor: 'pointer', padding: '4px 0 0', marginTop: 4,
+            }}
+          >
+            {expanded ? '▴ Menos detalhes' : '▾ Mais detalhes'}
+          </button>
+        )}
+
+        {expanded && (
+          <div
+            onClick={(e) => e.stopPropagation()}
+            onPointerDown={(e) => e.stopPropagation()}
+            style={{ marginTop: 8, paddingTop: 8, borderTop: '1px dashed #ddd', display: 'flex', flexDirection: 'column', gap: 10 }}
+          >
+            <div>
+              <label style={{ fontSize: 10, fontWeight: 600, color: '#999', display: 'block', marginBottom: 2 }}>Descrição</label>
+              <textarea
+                defaultValue={card.description ?? ''}
+                onBlur={(e) => {
+                  const trimmed = e.target.value.trim();
+                  if (trimmed !== (card.description ?? '')) onUpdateDescription(card.id, trimmed || null);
+                }}
+                rows={3}
+                placeholder="Sem descrição..."
+                style={{ width: '100%', fontSize: 11, padding: 4, fontFamily: 'inherit', resize: 'vertical', boxSizing: 'border-box' }}
+              />
+            </div>
+
+            <div style={{ display: 'flex', gap: 8 }}>
+              <div style={{ flex: 1 }}>
+                <label style={{ fontSize: 10, fontWeight: 600, color: '#999', display: 'block', marginBottom: 2 }}>Início</label>
+                <input
+                  type="date"
+                  value={card.startDate ?? ''}
+                  onChange={(e) => onUpdateStartDate(card.id, e.target.value || null)}
+                  style={{ width: '100%', fontSize: 11, padding: 4, boxSizing: 'border-box' }}
+                />
+              </div>
+              <div style={{ flex: 1 }}>
+                <label style={{ fontSize: 10, fontWeight: 600, color: '#999', display: 'block', marginBottom: 2 }}>Prazo</label>
+                <input
+                  type="date"
+                  value={card.dueDate ?? ''}
+                  onChange={(e) => onUpdateCardDueDate(card.id, e.target.value || null)}
+                  style={{ width: '100%', fontSize: 11, padding: 4, boxSizing: 'border-box' }}
+                />
+              </div>
+            </div>
+
+            <div>
+              <label style={{ fontSize: 10, fontWeight: 600, color: '#999', display: 'block', marginBottom: 2 }}>Checklist</label>
+              <InlineChecklist cardId={card.id} onProgressChange={setLiveChecklistProgress} />
+            </div>
+
+            <CardFilesSection cardId={card.id} />
+          </div>
+        )}
+
+        {isVisualVisible('timer') && displayedTimerSeconds > 0 && (
           <span
             title={hasOpenTimer && globalTimer.running ? 'Cronômetro rodando' : 'Tempo total registrado'}
             style={{
@@ -510,6 +679,17 @@ export default function KanbanCard({
                   onHoverStart: (rect) => openColorMenu({ x: rect.right + 4, y: rect.top }),
                 },
                 {
+                  label: '📊 Status (todos)',
+                  onClick: () => openStatusMenu({ x: contextMenu.x, y: contextMenu.y }),
+                  onHoverStart: (rect) => openStatusMenu({ x: rect.right + 4, y: rect.top }),
+                },
+                {
+                  label: '📦 Mover (todos)',
+                  disabled: !cardMove,
+                  onClick: () => openMoveMenu({ x: contextMenu.x, y: contextMenu.y }),
+                  onHoverStart: (rect) => openMoveMenu({ x: rect.right + 4, y: rect.top }),
+                },
+                {
                   label: '🏷 Etiquetas (todos)',
                   onClick: () => openLabelMenu({ x: contextMenu.x, y: contextMenu.y }),
                   onHoverStart: (rect) => openLabelMenu({ x: rect.right + 4, y: rect.top }),
@@ -533,6 +713,17 @@ export default function KanbanCard({
                   label: '🎨 Cor',
                   onClick: () => openColorMenu({ x: contextMenu.x, y: contextMenu.y }),
                   onHoverStart: (rect) => openColorMenu({ x: rect.right + 4, y: rect.top }),
+                },
+                {
+                  label: card.status ? `📊 ${STATUS_LABELS[card.status]}` : '📊 Definir status',
+                  onClick: () => openStatusMenu({ x: contextMenu.x, y: contextMenu.y }),
+                  onHoverStart: (rect) => openStatusMenu({ x: rect.right + 4, y: rect.top }),
+                },
+                {
+                  label: '📦 Mover para…',
+                  disabled: !cardMove,
+                  onClick: () => openMoveMenu({ x: contextMenu.x, y: contextMenu.y }),
+                  onHoverStart: (rect) => openMoveMenu({ x: rect.right + 4, y: rect.top }),
                 },
                 {
                   label: '⧉ Duplicar',
@@ -565,9 +756,10 @@ export default function KanbanCard({
           x={dueDateMenu.x}
           y={dueDateMenu.y}
           value={card.dueDate}
-          onSave={(value) => isBulkTarget
-            ? onBulkSetColor(Array.from(selectedCardIds), value)
-            : onUpdateColor(card.id, value)}
+          onSave={(value) => {
+            if (isBulkTarget) Array.from(selectedCardIds).forEach((id) => onUpdateCardDueDate(id, value));
+            else onUpdateCardDueDate(card.id, value);
+          }}
           onClose={() => setDueDateMenu(null)}
           onMouseEnter={cancelClose} onMouseLeave={scheduleClose}
         />
@@ -580,6 +772,41 @@ export default function KanbanCard({
           value={card.color}
           onSave={(value) => onUpdateColor(card.id, value)}
           onClose={() => setColorMenu(null)}
+          onMouseEnter={cancelClose}
+          onMouseLeave={scheduleClose}
+        />
+      )}
+
+      {statusMenu && (
+        <CardStatusMenu
+          x={statusMenu.x}
+          y={statusMenu.y}
+          value={card.status}
+          onSave={(value) => isBulkTarget
+            ? onBulkSetStatus(Array.from(selectedCardIds), value)
+            : onUpdateStatus(card.id, value)}
+          onClose={() => setStatusMenu(null)}
+          onMouseEnter={cancelClose}
+          onMouseLeave={scheduleClose}
+        />
+      )}
+
+      {moveMenu && cardMove && (
+        <CardMoveMenu
+          x={moveMenu.x}
+          y={moveMenu.y}
+          columns={cardMove.columns}
+          groups={cardMove.groups}
+          currentColumnId={isBulkTarget || card.cardGroupId ? null : card.columnId}
+          currentGroupId={isBulkTarget ? null : card.cardGroupId}
+          cardCount={isBulkTarget ? selectedCardIds.size : 1}
+          onMove={(target) => {
+            const ids = isBulkTarget ? Array.from(selectedCardIds) : [card.id];
+            setMoveMenu(null);
+            setContextMenu(null);
+            void cardMove.moveCards(ids, target);
+          }}
+          onClose={() => setMoveMenu(null)}
           onMouseEnter={cancelClose}
           onMouseLeave={scheduleClose}
         />

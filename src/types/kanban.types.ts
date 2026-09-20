@@ -8,6 +8,7 @@ export interface Kanban {
   backgroundColor: string | null;
   backgroundImagePath: string | null;
   cardFieldConfig: CardFieldConfig[];
+  cardVisualConfig: CardVisualFieldConfig[];
   isDefault: boolean;
   archived: boolean;
   position: number;
@@ -34,6 +35,14 @@ export interface KanbanCard {
   dueDate: string | null;
   position: number;
   archived: boolean;
+  isPlanTemplate: boolean;
+  planActive: boolean;
+  planWeekdays: number[];
+  planTimesPerDay: number;
+  planTargetColumnId: string | null;
+  planTargetGroupId: string | null;
+  planParentId: string | null;
+  planOccurrenceIndex: number | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -51,6 +60,14 @@ export interface CreateKanbanCardInput {
   labels?: string[];
   startDate?: string | null;
   dueDate?: string | null;
+  isPlanTemplate?: boolean;
+  planActive?: boolean;
+  planWeekdays?: number[];
+  planTimesPerDay?: number;
+  planTargetColumnId?: string | null;
+  planTargetGroupId?: string | null;
+  planParentId?: string | null;
+  planOccurrenceIndex?: number | null;
 }
 
 export type UpdateKanbanCardInput = Partial<{
@@ -66,6 +83,12 @@ export type UpdateKanbanCardInput = Partial<{
   dueDate: string | null;
   columnId: string;
   archived: boolean;
+  isPlanTemplate: boolean;
+  planActive: boolean;
+  planWeekdays: number[];
+  planTimesPerDay: number;
+  planTargetColumnId: string | null;
+  planTargetGroupId: string | null;
 }>;
 
 export type KanbanDensity = 'compact' | 'normal' | 'expanded';
@@ -111,6 +134,7 @@ export interface CreateKanbanInput {
   backgroundColor?: string | null;
   backgroundImagePath?: string | null;
   cardFieldConfig?: CardFieldConfig[];
+  cardVisualConfig?: CardVisualFieldConfig[];
 }
 
 export type UpdateKanbanInput = Partial<{
@@ -120,6 +144,7 @@ export type UpdateKanbanInput = Partial<{
   backgroundColor: string | null;
   backgroundImagePath: string | null;
   cardFieldConfig: CardFieldConfig[];
+  cardVisualConfig: CardVisualFieldConfig[];
   archived: boolean;
   viewPrefs: KanbanViewPrefs;
 }>;
@@ -183,7 +208,7 @@ export const STATUS_COLORS: Record<TaskStatus, string> = {
  */
 export type CardFieldKey =
   | 'description' | 'subKanban' | 'checklist' | 'startDate' | 'dueDate'
-  | 'cover' | 'priority' | 'status' | 'color' | 'labels';
+  | 'cover' | 'priority' | 'status' | 'color' | 'labels' | 'convertToPlan' | 'files';
 
 export type CardFieldTab = 'details' | 'properties';
 
@@ -204,6 +229,8 @@ export const CARD_FIELD_LABELS: Record<CardFieldKey, string> = {
   status: 'Status',
   color: 'Cor',
   labels: 'Etiquetas',
+  convertToPlan: 'Transformar em plano',
+  files: 'Arquivos',
 };
 
 export function defaultCardFieldConfig(): CardFieldConfig[] {
@@ -218,6 +245,8 @@ export function defaultCardFieldConfig(): CardFieldConfig[] {
     { key: 'status', tab: 'properties', visible: true },
     { key: 'color', tab: 'properties', visible: true },
     { key: 'labels', tab: 'properties', visible: true },
+    { key: 'convertToPlan', tab: 'details', visible: true },
+    { key: 'files', tab: 'details', visible: true },
   ];
 }
 
@@ -228,6 +257,59 @@ export function defaultCardFieldConfig(): CardFieldConfig[] {
  */
 export function mergeCardFieldConfig(config: CardFieldConfig[] | undefined): CardFieldConfig[] {
   const base = defaultCardFieldConfig();
+  if (!config) return base;
+  return base.map((def) => config.find((c) => c.key === def.key) ?? def);
+}
+
+/**
+ * O que aparece no CORPO do card dentro do quadro (não confundir com CardFieldKey, que é
+ * sobre o modal de detalhes) — capa, descrição, etiquetas, prazo, status, prioridade,
+ * checklist, cronômetro e os dois selos (sub-kanban, plano). Sem aba: é só visível/oculto.
+ */
+export type CardVisualFieldKey =
+  | 'cover' | 'description' | 'labels' | 'dueDate' | 'status' | 'priority'
+  | 'checklist' | 'timer' | 'subKanbanBadge' | 'planBadge' | 'filesButton' | 'expandToggle';
+
+export interface CardVisualFieldConfig {
+  key: CardVisualFieldKey;
+  visible: boolean;
+}
+
+export const CARD_VISUAL_FIELD_LABELS: Record<CardVisualFieldKey, string> = {
+  cover: 'Capa',
+  description: 'Descrição',
+  labels: 'Etiquetas',
+  dueDate: 'Prazo',
+  status: 'Status',
+  priority: 'Prioridade',
+  checklist: 'Progresso da checklist',
+  timer: 'Cronômetro',
+  subKanbanBadge: 'Selo de sub-kanban',
+  planBadge: 'Selo de plano',
+  filesButton: 'Botão de abrir arquivos',
+  expandToggle: 'Botão de expandir detalhes no card',
+};
+
+export function defaultCardVisualConfig(): CardVisualFieldConfig[] {
+  return [
+    { key: 'cover', visible: true },
+    { key: 'description', visible: true },
+    { key: 'labels', visible: true },
+    { key: 'dueDate', visible: true },
+    { key: 'status', visible: true },
+    { key: 'priority', visible: true },
+    { key: 'checklist', visible: true },
+    { key: 'timer', visible: true },
+    { key: 'subKanbanBadge', visible: true },
+    { key: 'planBadge', visible: true },
+    { key: 'filesButton', visible: true },
+    { key: 'expandToggle', visible: true },
+  ];
+}
+
+/** Mesmo padrão de mergeCardFieldConfig: preenche com default o que faltar, sem apagar o que o usuário já configurou. */
+export function mergeCardVisualConfig(config: CardVisualFieldConfig[] | undefined): CardVisualFieldConfig[] {
+  const base = defaultCardVisualConfig();
   if (!config) return base;
   return base.map((def) => config.find((c) => c.key === def.key) ?? def);
 }

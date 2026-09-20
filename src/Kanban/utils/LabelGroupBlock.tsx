@@ -1,16 +1,18 @@
 import { useState } from 'react';
-import type { KanbanCard as CardType, ChecklistProgress, KanbanDensity } from '@/types/kanban.types';
+import type { KanbanCard as CardType, ChecklistProgress, KanbanDensity, TaskStatus, CardVisualFieldConfig } from '@/types/kanban.types';
 import { ParsedLabel } from './kanbanLabels';
-import KanbanCard from '@/Projects/Project/modules/kanban/KanbanCard';
 import { useDroppable } from '@dnd-kit/core';
 import { DuplicateMultipleMode } from '../components/DuplicateMenu';
+import KanbanCard from '@/Projects/Project/modules/kanban/KanbanCard';
 
 interface LabelGroupBlockProps {
   name: string;
   color: string;
   cards: CardType[];
   density: KanbanDensity;
+  visualConfig: CardVisualFieldConfig[];
   cardsWithSubKanban: Set<string>;
+  cardsWithFiles: Set<string>;
   checklistProgress: Record<string, ChecklistProgress>;
   allLabels: ParsedLabel[];
   scopeType: 'column' | 'group';
@@ -20,8 +22,11 @@ interface LabelGroupBlockProps {
   onCardRequestDelete: (cardId: string, title: string) => void;
   onUpdateCardLabels: (cardId: string, labels: string[]) => void;
   onUpdateCardDueDate: (cardId: string, dueDate: string | null) => void;
+  onUpdateCardStartDate: (cardId: string, startDate: string | null) => void;
+  onUpdateCardDescription: (cardId: string, description: string | null) => void;
   onUpdateCardTitle: (cardId: string, title: string) => void;
   onUpdateCardColor: (cardId: string, color: string | null) => void;
+  onUpdateCardStatus: (cardId: string, status: TaskStatus | null) => void;
   onDuplicateMultiple: (cardId: string, mode: DuplicateMultipleMode) => void;
   onUpdateCoverPath: (cardId: string, path: string) => void
   projectId: string;
@@ -30,15 +35,16 @@ interface LabelGroupBlockProps {
   onCardSelectToggle: (cardId: string) => void;
   onBulkDelete: (cardIds: string[]) => void;
   onBulkSetColor: (cardIds: string[], color: string | null) => void;
+  onBulkSetStatus: (cardIds: string[], status: TaskStatus | null) => void;
   onBulkToggleLabel: (cardIds: string[], name: string, color: string, isGroup: boolean) => void;
 }
 
 export default function LabelGroupBlock({
-  name, color, cards, density, cardsWithSubKanban, checklistProgress, allLabels,
+  name, color, cards, density, visualConfig, cardsWithSubKanban, cardsWithFiles, checklistProgress, allLabels,
   scopeType, scopeId,
   onCardClick, onCardDuplicate, onCardRequestDelete, onUpdateCardLabels,
-  onUpdateCardDueDate, onUpdateCardTitle, onUpdateCardColor,
-  selectedCardIds, onCardSelectToggle, onBulkDelete, onBulkSetColor, onBulkToggleLabel,
+  onUpdateCardDueDate, onUpdateCardStartDate, onUpdateCardDescription, onUpdateCardTitle, onUpdateCardColor, onUpdateCardStatus,
+  selectedCardIds, onCardSelectToggle, onBulkDelete, onBulkSetColor, onBulkSetStatus, onBulkToggleLabel,
   onDuplicateMultiple, onUpdateCoverPath,
   projectId
 }: LabelGroupBlockProps) {
@@ -72,7 +78,9 @@ export default function LabelGroupBlock({
                 key={c.id}
                 card={c}
                 density={density}
+                visualConfig={visualConfig}
                 hasSubKanban={cardsWithSubKanban.has(c.id)}
+                hasFiles={cardsWithFiles.has(c.id)}
                 checklistProgress={checklistProgress[c.id]}
                 allLabels={allLabels}
                 onClick={() => onCardClick(c.id)}
@@ -80,14 +88,18 @@ export default function LabelGroupBlock({
                 onRequestDelete={() => onCardRequestDelete(c.id, c.title)}
                 onUpdateLabels={onUpdateCardLabels}
                 onUpdateCardDueDate={onUpdateCardDueDate}
+                onUpdateStartDate={onUpdateCardStartDate}
+                onUpdateDescription={onUpdateCardDescription}
                 onUpdateTitle={onUpdateCardTitle}
                 onUpdateColor={onUpdateCardColor}
+                onUpdateStatus={onUpdateCardStatus}
                 onDuplicateMultiple={onDuplicateMultiple}
                 onUpdateCoverPath={onUpdateCoverPath}
                 selectedCardIds={selectedCardIds}
                 onCardSelectToggle={onCardSelectToggle}
                 onBulkDelete={onBulkDelete}
                 onBulkSetColor={onBulkSetColor}
+                onBulkSetStatus={onBulkSetStatus}
                 onBulkToggleLabel={onBulkToggleLabel}
                 projectId={projectId}
               />
