@@ -10,7 +10,7 @@ export async function getGroupsByKanban(kanbanId: string): Promise<KanbanCardGro
     .sort((a, b) => a.position - b.position);
 }
 
-export async function createGroup(kanbanId: string, columnId: string, name: string, parentGroupId: string | null = null): Promise<string> {
+export async function createGroup(kanbanId: string, columnId: string, name: string, parentGroupId: string | null = null,): Promise<string> {
   const data = await loadKanbanData();
   const id = generateId();
 
@@ -20,6 +20,7 @@ export async function createGroup(kanbanId: string, columnId: string, name: stri
   data.cardGroups.push({
     id, kanbanId, columnId, name, position: nextPosition, parentGroupId,
     coverPath: null, emoji: null, description: null, backgroundColor: null,
+    labels: [],
   });
   await saveKanbanData(data);
   return id;

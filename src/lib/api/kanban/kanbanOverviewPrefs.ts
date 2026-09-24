@@ -6,7 +6,7 @@ export interface KanbanOverviewPrefs {
 }
 
 function defaultPrefs(): KanbanOverviewPrefs {
-  return { pinnedKanbanIds: [], hiddenKanbanIds: [] };
+  return { pinnedKanbanIds: [], hiddenKanbanIds: [], };
 }
 
 export async function loadKanbanOverviewPrefs(): Promise<KanbanOverviewPrefs> {

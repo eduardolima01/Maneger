@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react'; import * as columnsApi from '@/lib/api/kanban/kanbanColumns';
 import * as cardsApi from '@/lib/api/kanban/kanbanCards';
 import * as kanbansApi from '@/lib/api/kanban/kanbans.ts';
-import type { KanbanColumn, KanbanFilters, KanbanCard, KanbanCardGroup, Kanban, KanbanViewPrefs, ChecklistProgress } from '@/types/kanban.types';
+import type { KanbanColumn, KanbanFilters, KanbanCard, KanbanCardGroup, Kanban, KanbanViewPrefs, ChecklistProgress, LabelIcon } from '@/types/kanban.types';
 import { emptyFilters, hasActiveFilters } from '@/types/kanban.types';
 
 import * as groupsApi from '@/lib/api/kanban/kanbanCardGroups';
@@ -301,29 +301,88 @@ export function useKanbanBoard(kanban: Kanban) {
     await reload();
   }, [reload]);
 
-  const renameLabel = useCallback(async (oldName: string, newName: string, color: string, isGroup: boolean) => {
-    const affected = cards.filter((c) => c.labels.some((l) => parseLabel(l).name === oldName));
-    await Promise.all(
-      affected.map((c) => {
-        const nextLabels = c.labels.map((l) =>
-          parseLabel(l).name === oldName ? serializeLabel(newName, color, isGroup) : l
-        );
-        return cardsApi.updateCard(c.id, { labels: nextLabels });
-      })
-    );
-    await reload();
-  }, [cards, reload]);
+  /**
+   * Ícones de etiqueta vivem em viewPrefs.labelIcons (nome da etiqueta -> ícone). Sempre pela forma FUNCIONAL do
+   * setState: rename + troca de ícone acontecem em sequência, e uma cópia velha de `viewPrefs` desfaria o rename.
+   */
+  const updateLabelIcons = useCallback((mutate: (icons: Record<string, LabelIcon>) => Record<string, LabelIcon>) => {
+    setViewPrefs((prev) => {
+      const next = { ...prev, labelIcons: mutate({ ...(prev.labelIcons ?? {}) }) };
+      kanbansApi.updateKanban(kanbanId, { viewPrefs: next }).catch(() => {
+      });
+      return next;
+    });
+  }, [kanbanId]);
 
-  const deleteLabel = useCallback(async (name: string) => {
-    const affected = cards.filter((c) => c.labels.some((l) => parseLabel(l).name === name));
-    await Promise.all(
-      affected.map((c) => {
-        const nextLabels = c.labels.filter((l) => parseLabel(l).name !== name);
-        return cardsApi.updateCard(c.id, { labels: nextLabels });
-      })
-    );
+  const setLabelIcon = useCallback((name: string, icon: LabelIcon | null) => {
+    updateLabelIcons((icons) => {
+      if (icon) icons[name] = icon; else delete icons[name];
+      return icons;
+    });
+  }, [updateLabelIcons]);
+
+  /**
+   * Etiquetas "definidas" mas sem uso vivem em viewPrefs.definedLabels (mesmo formato `nome::cor[::group]`
+   * dos labels de card/grupo) — sem isso, uma etiqueta criada e nunca aplicada em nada não tem onde persistir.
+   * Mesmo padrão funcional de updateLabelIcons: sempre lê o `prev` de dentro do setState.
+   */
+  const updateDefinedLabels = useCallback((mutate: (labels: string[]) => string[]) => {
+    setViewPrefs((prev) => {
+      const next = { ...prev, definedLabels: mutate([...(prev.definedLabels ?? [])]) };
+      kanbansApi.updateKanban(kanbanId, { viewPrefs: next }).catch(() => {
+      });
+      return next;
+    });
+  }, [kanbanId]);
+
+  /** Cria uma etiqueta nova sem aplicar em nenhum card/grupo — só fica salva no catálogo (viewPrefs.definedLabels). */
+  const createLabel = useCallback((name: string, color: string, isGroup: boolean) => {
+    updateDefinedLabels((labels) => {
+      if (labels.some((l) => parseLabel(l).name === name)) return labels; // já existe (definida ou em uso), não duplica
+      return [...labels, serializeLabel(name, color, isGroup)];
+    });
+  }, [updateDefinedLabels]);
+
+  /** Renomeia/recolore a etiqueta em TODOS os cards e grupos que a usam, e leva o ícone junto pro nome novo. */
+  const renameLabel = useCallback(async (oldName: string, newName: string, color: string, isGroup: boolean) => {
+    const rewrite = (labels: string[]) =>
+      labels.map((l) => (parseLabel(l).name === oldName ? serializeLabel(newName, color, isGroup) : l));
+
+    const affectedCards = cards.filter((c) => c.labels.some((l) => parseLabel(l).name === oldName));
+    await Promise.all(affectedCards.map((c) => cardsApi.updateCard(c.id, { labels: rewrite(c.labels) })));
+
+    const affectedGroups = groups.filter((g) => (g.labels ?? []).some((l) => parseLabel(l).name === oldName));
+    for (const g of affectedGroups) {
+      await groupsApi.updateGroupAppearance(g.id, { labels: rewrite(g.labels ?? []) });
+    }
+
+    if (oldName !== newName) {
+      updateLabelIcons((icons) => {
+        if (icons[oldName]) { icons[newName] = icons[oldName]; delete icons[oldName]; }
+        return icons;
+      });
+    }
+    updateDefinedLabels((labels) => labels.map((l) => (parseLabel(l).name === oldName ? serializeLabel(newName, color, isGroup) : l)));
     await reload();
-  }, [cards, reload]);
+  }, [cards, groups, reload, updateLabelIcons, updateDefinedLabels]);
+
+  /** Tira a etiqueta de todos os cards e grupos que a usam e apaga o ícone dela. */
+  const deleteLabel = useCallback(async (name: string) => {
+    const without = (labels: string[]) => labels.filter((l) => parseLabel(l).name !== name);
+
+    const affectedCards = cards.filter((c) => c.labels.some((l) => parseLabel(l).name === name));
+    await Promise.all(affectedCards.map((c) => cardsApi.updateCard(c.id, { labels: without(c.labels) })));
+
+    const affectedGroups = groups.filter((g) => (g.labels ?? []).some((l) => parseLabel(l).name === name));
+    for (const g of affectedGroups) {
+      await groupsApi.updateGroupAppearance(g.id, { labels: without(g.labels ?? []) });
+    }
+
+    updateLabelIcons((icons) => { delete icons[name]; return icons; });
+    updateDefinedLabels((labels) => labels.filter((l) => parseLabel(l).name !== name));
+    await reload();
+  }, [cards, groups, reload, updateLabelIcons, updateDefinedLabels]);
+
   const createPlanCard = useCallback(async (
     columnId: string, targetColumnId: string | null, targetGroupId: string | null,
     title: string, startDate: string, endDate: string, weekdays: number[], timesPerDay: number
@@ -425,7 +484,7 @@ export function useKanbanBoard(kanban: Kanban) {
     search, setSearch, filters, setFilters, filtersActive: hasActiveFilters(filters),
     moveCard, createCard, updateCard, duplicateCard, archiveCard, removeCard,
     createCardInGroup,
-    renameLabel, deleteLabel,
+    renameLabel, deleteLabel, setLabelIcon, createLabel,
     fixInconsistentGroupLabels,
     createGroup, createSubgroup, renameGroup, deleteGroup, deleteGroupWithCards, updateGroupAppearance, moveCardIntoGroup, moveCardOutOfGroup, moveGroupToColumn,
     createPlanCard, materializePlanOccurrence,

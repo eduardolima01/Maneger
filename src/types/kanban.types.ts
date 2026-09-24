@@ -99,9 +99,20 @@ export interface KanbanSavedFilter {
   filters: KanbanFilters;
 }
 
+/** Ícone de uma etiqueta: emoji ou imagem enviada. */
+export type LabelIcon =
+  | { kind: 'emoji'; value: string }
+  | { kind: 'image'; path: string };
+
 export interface KanbanViewPrefs {
   density: KanbanDensity;
   columnWidths: Record<string, number>; // columnId -> px
+  columnBackgrounds: Record<string, string>; // columnId -> cor de fundo (hex); ausente = branco padrão
+  labelIcons: Record<string, LabelIcon>; // nome da etiqueta -> ícone (emoji ou imagem)
+  /** Etiquetas criadas mas não necessariamente em uso em nenhum card/grupo (mesmo formato `nome::cor[::group]`
+   *  de KanbanCard.labels) — sem isso, uma etiqueta sem uso não tem onde "existir" e desaparece do catálogo. */
+  definedLabels: string[];
+  horizontalGroupIds: string[]; // grupos/subgrupos (qualquer profundidade) em modo de visualização horizontal
   groupHeights: Record<string, number>; // groupId -> px
   collapsedColumnIds: string[];
   collapsedGroupIds: string[];
@@ -109,7 +120,7 @@ export interface KanbanViewPrefs {
 }
 
 export function defaultViewPrefs(): KanbanViewPrefs {
-  return { density: 'normal', columnWidths: {}, groupHeights: {}, collapsedColumnIds: [], collapsedGroupIds: [], savedFilters: [] };
+  return { density: 'normal', columnWidths: {}, columnBackgrounds: {}, labelIcons: {}, definedLabels: [], horizontalGroupIds: [], groupHeights: {}, collapsedColumnIds: [], collapsedGroupIds: [], savedFilters: [] };
 }
 
 export interface KanbanColumn {
@@ -352,6 +363,8 @@ export interface KanbanCardGroup {
   description: string | null;
   /** Cor de fundo do bloco do grupo/subgrupo, sobrepõe o cinza padrão (#f5f5f5). */
   backgroundColor: string | null;
+  /** Etiquetas do grupo/subgrupo — mesmas strings de `KanbanCard.labels` (`nome::cor[::group]`). Grupos salvos antes deste campo não o têm: ler com `?? []`. */
+  labels: string[];
 }
 
 /** Campos de aparência do grupo/subgrupo editáveis via `updateGroupAppearance`. Nome continua em `renameGroup`. */
@@ -360,6 +373,7 @@ export type UpdateKanbanCardGroupInput = Partial<{
   emoji: string | null;
   description: string | null;
   backgroundColor: string | null;
+  labels: string[];
 }>;
 
 export interface ParentCardGroup {

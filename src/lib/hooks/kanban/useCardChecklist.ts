@@ -49,6 +49,12 @@ export function useCardChecklist(cardId: string) {
     await reload();
   }, [reload]);
 
+  /** Muda o pai do item (null = tarefa principal); `afterItemId` = ficar logo depois desse irmão. */
+  const move = useCallback(async (id: string, newParentId: string | null, afterItemId?: string) => {
+    await api.moveItem(id, newParentId, afterItemId);
+    await reload();
+  }, [reload]);
+
   const reorderLocally = useCallback((orderedIds: string[]) => {
     setItems((prev) => {
       const positionById = new Map(orderedIds.map((id, index) => [id, index]));
@@ -65,6 +71,5 @@ export function useCardChecklist(cardId: string) {
     }
   }, [reorderLocally, reload]);
 
-  return { items, loading, create, createSubItem, toggle, rename, remove, reorder };
+  return { items, loading, create, createSubItem, toggle, rename, remove, reorder, move };
 }
-

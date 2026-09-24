@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import { SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable';
+import { SortableContext, verticalListSortingStrategy, rectSortingStrategy } from '@dnd-kit/sortable';
 import { useDroppable } from '@dnd-kit/core';
 import { convertFileSrc } from '@tauri-apps/api/core';
 import ImageUploadField from '@/components/ImageUploadField';
@@ -68,6 +68,9 @@ interface KanbanColumnProps {
   /** Cor de fundo da coluna (guardada em viewPrefs.columnBackgrounds); null = branco padrão. */
   backgroundColor: string | null;
   onUpdateBackgroundColor: (color: string | null) => void;
+  /** Modo foco: a coluna ocupa a largura toda e os grupos se organizam em grade. */
+  focused: boolean;
+  onToggleFocus: () => void;
 
   selectedCardIds: Set<string>;
   onCardSelectToggle: (cardId: string) => void;
@@ -118,6 +121,8 @@ export default function KanbanColumn({
   onArchive,
   backgroundColor,
   onUpdateBackgroundColor,
+  focused,
+  onToggleFocus,
   onReorderGroupCards,
   projectId
 }: KanbanColumnProps) {
@@ -162,7 +167,7 @@ export default function KanbanColumn({
     transform: CSS.Transform.toString(transform),
     transition,
     opacity: isDragging ? 0.5 : 1,
-    width: liveWidth ?? width,
+    width: focused ? '100%' : (liveWidth ?? width),
     flexShrink: 0,
     position: 'relative',
   };
@@ -230,6 +235,13 @@ export default function KanbanColumn({
               🖼️
             </button>
           )}
+          <button
+            onClick={onToggleFocus}
+            title={focused ? 'Voltar a todas as colunas' : 'Focar só nesta coluna (grupos e subgrupos em tela cheia)'}
+            style={{ border: 'none', background: 'none', cursor: 'pointer', fontSize: 13, color: focused ? tc.accent : tc.secondary }}
+          >
+            {focused ? '↩' : '🔍'}
+          </button>
           <button
             onClick={() => setShowColorEditor((v) => !v)}
             title="Cor de fundo da coluna"
@@ -300,10 +312,20 @@ export default function KanbanColumn({
         </div>
 
         {!collapsed && (
-          <div ref={setDroppableRef} style={{ flex: 1, overflowY: 'auto', minHeight: 40, borderRadius: 6, backgroundColor: isOver ? '#e8f0fe' : 'transparent', padding: 2 }}>
+          <div
+            ref={setDroppableRef}
+            style={{
+              flex: 1, minHeight: 40, borderRadius: 6, backgroundColor: isOver ? '#e8f0fe' : 'transparent', padding: 2,
+              ...(focused
+                // foco: coluna única ocupando a largura toda (cards de cada grupo continuam em lista vertical,
+                // só o bloco do grupo em si passa a ocupar 100% da largura); alignItems 'start' pra cada bloco ter a própria altura
+                ? { display: 'grid', gridTemplateColumns: '1fr', gap: 12, alignItems: 'start' }
+                : { overflowY: 'auto' }),
+            }}
+          >
             <SortableContext
               items={[...groups.map((g) => `group:${g.id}`), ...cards.map((c) => `card:${c.id}`)]}
-              strategy={verticalListSortingStrategy}
+              strategy={focused ? rectSortingStrategy : verticalListSortingStrategy}
             >
               {groups.map((g) => (
                 <GroupBlock
@@ -422,14 +444,16 @@ export default function KanbanColumn({
         )}
       </div>
 
-      <div
-        onMouseDown={handleResizeMouseDown}
-        title="Arrastar pra redimensionar"
-        style={{
-          position: 'absolute', top: 0, right: -3, bottom: 0, width: 6,
-          cursor: 'col-resize', zIndex: 1,
-        }}
-      />
+      {!focused && (
+        <div
+          onMouseDown={handleResizeMouseDown}
+          title="Arrastar pra redimensionar"
+          style={{
+            position: 'absolute', top: 0, right: -3, bottom: 0, width: 6,
+            cursor: 'col-resize', zIndex: 1,
+          }}
+        />
+      )}
     </div>
   );
 }

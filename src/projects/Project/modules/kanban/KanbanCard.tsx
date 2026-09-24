@@ -25,6 +25,8 @@ import { getCardFilesDir } from '@/Kanban/api/kanbanCardAssets';
 import { openPath } from '@tauri-apps/plugin-opener';
 import CardFilesSection from '@/Kanban/components/Cardfilessection';
 import { useCardMove } from '@/lib/utils/CardMoveContext';
+import { useLabelIcons } from '@/Kanban/hooks/Labeliconcontext';
+import LabelIconBadge from '@/Kanban/components/LabelIconBadge';
 
 interface KanbanCardProps {
   card: CardType;
@@ -141,6 +143,7 @@ export default function KanbanCard({
   const [statusMenu, setStatusMenu] = useState<{ x: number; y: number } | null>(null);
   const [moveMenu, setMoveMenu] = useState<{ x: number; y: number } | null>(null);
   const cardMove = useCardMove(); // null fora do KanbanBoard — o item de menu fica desabilitado
+  const { icons: labelIcons } = useLabelIcons();
 
   const [duplicateMenu, setDuplicateMenu] = useState<{ x: number; y: number } | null>(null);
   const [pasteConfirm, setPasteConfirm] = useState<{ blob: Blob; ext: string; previewUrl: string } | null>(null);
@@ -544,7 +547,8 @@ export default function KanbanCard({
               {isVisualVisible('labels') && card.labels.map((raw) => {
                 const { name, color } = parseLabel(raw);
                 return (
-                  <span key={raw} style={{ backgroundColor: color, color: '#fff', borderRadius: 3, padding: '1px 5px' }}>
+                  <span key={raw} style={{ display: 'inline-flex', alignItems: 'center', gap: 3, backgroundColor: color, color: '#fff', borderRadius: 3, padding: '1px 5px' }}>
+                    <LabelIconBadge icon={labelIcons[name]} size={11} />
                     {name}
                   </span>
                 );

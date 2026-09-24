@@ -1,4 +1,5 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import {
   DndContext, PointerSensor, useSensor, useSensors, closestCenter,
   type DragEndEvent,
@@ -8,6 +9,8 @@ import { CSS } from '@dnd-kit/utilities';
 import Button from '@/components/layout/Button';
 import { buildChecklistTree, ChecklistTreeNode } from './utils/checklistTree';
 import { useCardChecklist } from '@/lib/hooks/kanban/useCardChecklist';
+import type { KanbanChecklistItem } from '@/types/kanban.types';
+import ChecklistMoveMenu from './ChecklistMoveMenu';
 
 interface ChecklistSectionProps {
   cardId: string;
@@ -31,18 +34,31 @@ interface ChecklistNodeRowProps {
   onDelete: (id: string) => void;
   onCreateSub: (parentId: string, title: string) => void;
   onReorderSiblings: (parentId: string | null, orderedIds: string[]) => void;
+  /** Muda o pai do item (null = tarefa principal); `afterItemId` = ficar logo depois desse irmão. */
+  onMove: (id: string, newParentId: string | null, afterItemId?: string) => void;
+  /** Lista plana de todos os itens do card — o menu de mover monta a árvore de destinos com ela. */
+  items: KanbanChecklistItem[];
   sensors: ReturnType<typeof useSensors>;
 }
 
-function ChecklistNodeRow({ node, onToggle, onRename, onDelete, onCreateSub, onReorderSiblings, sensors }: ChecklistNodeRowProps) {
+function ChecklistNodeRow({ node, onToggle, onRename, onDelete, onCreateSub, onReorderSiblings, onMove, items, sensors }: ChecklistNodeRowProps) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: node.id });
   const [titleDraft, setTitleDraft] = useState(node.title);
   const [expanded, setExpanded] = useState(node.children.length > 0);
   const [newSubTitle, setNewSubTitle] = useState('');
-  const newSubInputRef = useRef<HTMLInputElement>(null);
+  const subInputRef = useRef<HTMLInputElement>(null);
+  const [moveMenu, setMoveMenu] = useState<{ x: number; y: number } | null>(null);
+  const previousChildCount = useRef(node.children.length);
 
   const style: React.CSSProperties = { transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.5 : 1 };
   const hasChildren = node.children.length > 0;
+
+  // Um item que ganha filho (criado aqui OU movido de outro lugar) abre sozinho — senão o item movido pareceria
+  // ter sumido, já que `expanded` só era decidido na montagem.
+  useEffect(() => {
+    if (node.children.length > previousChildCount.current) setExpanded(true);
+    previousChildCount.current = node.children.length;
+  }, [node.children.length]);
   const { done: subDone, total: subTotal } = hasChildren ? { done: countAllDescendants(node).done - (node.checked ? 1 : 0), total: countAllDescendants(node).total - 1 } : { done: 0, total: 0 };
 
   function handleSubDragEnd(event: DragEndEvent) {
@@ -60,7 +76,33 @@ function ChecklistNodeRow({ node, onToggle, onRename, onDelete, onCreateSub, onR
     onCreateSub(node.id, newSubTitle.trim());
     setNewSubTitle('');
     setExpanded(true);
-    newSubInputRef.current?.focus();
+    subInputRef.current?.focus();
+  }
+
+  /**
+   * Botão ＋ da linha. Antes o campo de sub-item só existia com o item EXPANDIDO, e o único jeito de expandir
+   * um item sem filhos era o botão "·", que é transparente — na prática não dava pra adicionar o primeiro sub-item.
+   * Item sem filhos e campo aberto: o ＋ fecha o campo. Nos outros casos abre (se preciso) e foca o campo.
+   */
+  function handleOutdent() {
+    if (!node.parentItemId) return;
+    const grandParentId = items.find((i) => i.id === node.parentItemId)?.parentItemId ?? null;
+    setMoveMenu(null);
+    onMove(node.id, grandParentId, node.parentItemId); // fica logo depois do antigo pai
+  }
+
+  function handlePickParent(parentId: string | null) {
+    setMoveMenu(null);
+    onMove(node.id, parentId);
+  }
+
+  function handleAddSubClick() {
+    if (expanded && !hasChildren) {
+      setExpanded(false);
+      return;
+    }
+    setExpanded(true);
+    requestAnimationFrame(() => subInputRef.current?.focus()); // o campo só monta depois do render que expande
   }
 
   return (
@@ -75,7 +117,6 @@ function ChecklistNodeRow({ node, onToggle, onRename, onDelete, onCreateSub, onR
         </button>
         <input type="checkbox" checked={node.checked} onChange={(e) => onToggle(node.id, e.target.checked)} />
         <input
-          ref={newSubInputRef}
           value={titleDraft}
           onChange={(e) => setTitleDraft(e.target.value)}
           onBlur={() => titleDraft.trim() && titleDraft !== node.title && onRename(node.id, titleDraft.trim())}
@@ -85,8 +126,35 @@ function ChecklistNodeRow({ node, onToggle, onRename, onDelete, onCreateSub, onR
           }}
         />
         {hasChildren && <span style={{ fontSize: 10, color: '#999' }}>{subDone}/{subTotal}</span>}
+        <button
+          onClick={handleAddSubClick}
+          title="Adicionar sub-item"
+          style={{ border: 'none', background: 'none', cursor: 'pointer', color: expanded ? '#1a73e8' : '#666', fontSize: 14, padding: '0 2px' }}
+        >
+          ＋
+        </button>
+        <button
+          onClick={(e) => { const r = e.currentTarget.getBoundingClientRect(); setMoveMenu({ x: r.left, y: r.bottom + 4 }); }}
+          title="Mover: virar sub-item, subir de nível, mudar de item pai"
+          style={{ border: 'none', background: 'none', cursor: 'pointer', color: moveMenu ? '#1a73e8' : '#666', fontSize: 13, padding: '0 2px' }}
+        >
+          ⇄
+        </button>
         <button onClick={() => onDelete(node.id)} style={{ border: 'none', background: 'none', cursor: 'pointer', color: '#c62828', fontSize: 12 }}>✕</button>
       </div>
+
+      {moveMenu && createPortal(
+        <ChecklistMoveMenu
+          x={moveMenu.x}
+          y={moveMenu.y}
+          items={items}
+          movingId={node.id}
+          onPickParent={handlePickParent}
+          onOutdent={handleOutdent}
+          onClose={() => setMoveMenu(null)}
+        />,
+        document.body
+      )}
 
       {expanded && (
         <div style={{ marginLeft: 24, marginTop: 4 }}>
@@ -101,6 +169,8 @@ function ChecklistNodeRow({ node, onToggle, onRename, onDelete, onCreateSub, onR
                   onDelete={onDelete}
                   onCreateSub={onCreateSub}
                   onReorderSiblings={onReorderSiblings}
+                  onMove={onMove}
+                  items={items}
                   sensors={sensors}
                 />
               ))}
@@ -109,6 +179,7 @@ function ChecklistNodeRow({ node, onToggle, onRename, onDelete, onCreateSub, onR
 
           <div style={{ display: 'flex', gap: 4, marginTop: 2 }}>
             <input
+              ref={subInputRef}
               value={newSubTitle}
               onChange={(e) => setNewSubTitle(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && handleAddSub()}
@@ -130,7 +201,8 @@ function ChecklistNodeRow({ node, onToggle, onRename, onDelete, onCreateSub, onR
 }
 
 export default function ChecklistSection({ cardId }: ChecklistSectionProps) {
-  const { items, loading, create, createSubItem, toggle, rename, remove, reorder } = useCardChecklist(cardId);
+  const { items, loading, create, createSubItem, toggle, rename, remove, reorder,
+    move } = useCardChecklist(cardId);
   const [newTitle, setNewTitle] = useState('');
   const newItemInputRef = useRef<HTMLInputElement>(null);
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 8 } }));
@@ -192,6 +264,8 @@ export default function ChecklistSection({ cardId }: ChecklistSectionProps) {
               onDelete={remove}
               onCreateSub={createSubItem}
               onReorderSiblings={handleReorderSiblings}
+              onMove={move}
+              items={items}
               sensors={sensors}
             />
           ))}
