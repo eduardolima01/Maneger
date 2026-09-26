@@ -17,6 +17,13 @@ export interface Kanban {
   updatedAt: string;
 }
 
+/** Um horário do card: só hora do dia (sem data própria — usa a(s) data(s) do card), com um título curto. */
+export interface CardScheduleEntry {
+  id: string;
+  time: string; // 'HH:MM'
+  title: string;
+}
+
 export interface KanbanCard {
   id: string;
   kanbanId: string | null;
@@ -30,6 +37,8 @@ export interface KanbanCard {
   priority: TaskPriority | null;
   status: TaskStatus | null;
   labels: string[];
+  /** Horários do dia (podem ser vários), cada um com título próprio — não tem data, é sempre relativo ao card. */
+  schedules: CardScheduleEntry[];
   assignedTo: string | null;
   startDate: string | null;
   dueDate: string | null;
@@ -58,6 +67,7 @@ export interface CreateKanbanCardInput {
   priority?: TaskPriority | null;
   status?: TaskStatus | null;
   labels?: string[];
+  schedules?: CardScheduleEntry[];
   startDate?: string | null;
   dueDate?: string | null;
   isPlanTemplate?: boolean;
@@ -78,6 +88,7 @@ export type UpdateKanbanCardInput = Partial<{
   priority: TaskPriority | null;
   status: TaskStatus | null;
   labels: string[];
+  schedules: CardScheduleEntry[];
   assignedTo: string | null;
   startDate: string | null;
   dueDate: string | null;
@@ -219,7 +230,7 @@ export const STATUS_COLORS: Record<TaskStatus, string> = {
  */
 export type CardFieldKey =
   | 'description' | 'subKanban' | 'checklist' | 'startDate' | 'dueDate'
-  | 'cover' | 'priority' | 'status' | 'color' | 'labels' | 'convertToPlan' | 'files';
+  | 'cover' | 'priority' | 'status' | 'color' | 'labels' | 'schedules' | 'convertToPlan' | 'files';
 
 export type CardFieldTab = 'details' | 'properties';
 
@@ -240,6 +251,7 @@ export const CARD_FIELD_LABELS: Record<CardFieldKey, string> = {
   status: 'Status',
   color: 'Cor',
   labels: 'Etiquetas',
+  schedules: 'Horários',
   convertToPlan: 'Transformar em plano',
   files: 'Arquivos',
 };
@@ -256,6 +268,7 @@ export function defaultCardFieldConfig(): CardFieldConfig[] {
     { key: 'status', tab: 'properties', visible: true },
     { key: 'color', tab: 'properties', visible: true },
     { key: 'labels', tab: 'properties', visible: true },
+    { key: 'schedules', tab: 'details', visible: true },
     { key: 'convertToPlan', tab: 'details', visible: true },
     { key: 'files', tab: 'details', visible: true },
   ];
@@ -278,7 +291,7 @@ export function mergeCardFieldConfig(config: CardFieldConfig[] | undefined): Car
  * checklist, cronômetro e os dois selos (sub-kanban, plano). Sem aba: é só visível/oculto.
  */
 export type CardVisualFieldKey =
-  | 'cover' | 'description' | 'labels' | 'dueDate' | 'status' | 'priority'
+  | 'cover' | 'description' | 'labels' | 'dueDate' | 'status' | 'priority' | 'schedules'
   | 'checklist' | 'timer' | 'subKanbanBadge' | 'planBadge' | 'filesButton' | 'expandToggle';
 
 export interface CardVisualFieldConfig {
@@ -293,6 +306,7 @@ export const CARD_VISUAL_FIELD_LABELS: Record<CardVisualFieldKey, string> = {
   dueDate: 'Prazo',
   status: 'Status',
   priority: 'Prioridade',
+  schedules: 'Horários',
   checklist: 'Progresso da checklist',
   timer: 'Cronômetro',
   subKanbanBadge: 'Selo de sub-kanban',
@@ -309,6 +323,7 @@ export function defaultCardVisualConfig(): CardVisualFieldConfig[] {
     { key: 'dueDate', visible: true },
     { key: 'status', visible: true },
     { key: 'priority', visible: true },
+    { key: 'schedules', visible: true },
     { key: 'checklist', visible: true },
     { key: 'timer', visible: true },
     { key: 'subKanbanBadge', visible: true },
@@ -383,12 +398,26 @@ export interface ParentCardGroup {
   position: number;
 }
 
+export type ChecklistItemStatus = 'not_started' | 'in_progress' | 'done';
+
+export const CHECKLIST_STATUS_LABELS: Record<ChecklistItemStatus, string> = {
+  not_started: 'Não iniciado',
+  in_progress: 'Em andamento',
+  done: 'Feito',
+};
+
+export const CHECKLIST_STATUS_COLORS: Record<ChecklistItemStatus, string> = {
+  not_started: '#bbb',
+  in_progress: '#f4a623',
+  done: '#2e7d32',
+};
+
 export interface KanbanChecklistItem {
   id: string;
   cardId: string;
   parentItemId: string | null;
   title: string;
-  checked: boolean;
+  status: ChecklistItemStatus;
   position: number;
 }
 

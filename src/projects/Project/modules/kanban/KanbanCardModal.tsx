@@ -4,8 +4,9 @@ import { open } from '@tauri-apps/plugin-dialog';
 import Modal from '@/components/ui/Modal';
 import Button from '@/components/layout/Button';
 import { createKanban, getKanbanById } from '@/lib/api/kanban/kanbans';
+import { generateId } from '@/lib/utils/uuid';
 import { PRIORITY_LABELS, STATUS_LABELS, STATUS_COLORS, CARD_FIELD_LABELS, mergeCardFieldConfig, CARD_VISUAL_FIELD_LABELS, mergeCardVisualConfig } from '@/types/kanban.types';
-import type { KanbanCard, TaskPriority, TaskStatus, Kanban, KanbanColumn, KanbanCardGroup, CardFieldConfig, CardFieldKey, CardFieldTab, CardVisualFieldConfig, CardVisualFieldKey } from '@/types/kanban.types';
+import type { KanbanCard, TaskPriority, TaskStatus, Kanban, KanbanColumn, KanbanCardGroup, CardFieldConfig, CardFieldKey, CardFieldTab, CardVisualFieldConfig, CardVisualFieldKey, CardScheduleEntry } from '@/types/kanban.types';
 import KanbanBoard from './KanbanBoard';
 import MarkdownField from '@/components/ui/MarkdownField';
 import ChecklistSection from '@/Kanban/ChecklistSection';
@@ -13,6 +14,37 @@ import ImageUploadField from '@/components/ImageUploadField';
 import CardFilesSection from '@/Kanban/components/Cardfilessection';
 
 type Tab = 'details' | 'meta' | 'config';
+
+/** Uma linha de horário editável — mesmo padrão de rascunho local + salvar no blur que o título do card usa (o time picker, por ser seleção atômica, salva direto no onChange, sem rascunho). */
+function ScheduleEntryRow({
+  entry, onUpdateTime, onUpdateTitle, onRemove,
+}: {
+  entry: CardScheduleEntry;
+  onUpdateTime: (time: string) => void;
+  onUpdateTitle: (title: string) => void;
+  onRemove: () => void;
+}) {
+  const [titleDraft, setTitleDraft] = useState(entry.title);
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+      <input
+        type="time"
+        value={entry.time}
+        onChange={(e) => onUpdateTime(e.target.value)}
+        style={{ padding: 5, fontSize: 12, width: 100 }}
+      />
+      <input
+        value={titleDraft}
+        onChange={(e) => setTitleDraft(e.target.value)}
+        onBlur={() => titleDraft.trim() !== entry.title && onUpdateTitle(titleDraft.trim())}
+        onKeyDown={(e) => e.key === 'Enter' && (e.target as HTMLInputElement).blur()}
+        placeholder="Título (opcional)..."
+        style={{ flex: 1, padding: 5, fontSize: 12 }}
+      />
+      <button onClick={onRemove} title="Remover horário" style={{ border: 'none', background: 'none', cursor: 'pointer', color: '#c62828', fontSize: 13 }}>✕</button>
+    </div>
+  );
+}
 
 interface KanbanCardModalProps {
   isOpen: boolean;
@@ -38,6 +70,8 @@ export default function KanbanCardModal({
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [labelInput, setLabelInput] = useState('');
+  const [newScheduleTime, setNewScheduleTime] = useState('');
+  const [newScheduleTitle, setNewScheduleTitle] = useState('');
 
   const [subKanban, setSubKanban] = useState<Kanban | null>(null);
   const [loadingSubKanban, setLoadingSubKanban] = useState(false);
@@ -107,6 +141,9 @@ export default function KanbanCardModal({
 
   if (!card) return null;
 
+  // cards salvos antes deste campo existir não têm a chave no JSON (undefined, não [])
+  const schedules = card.schedules ?? [];
+
   function saveTitle() {
     if (title.trim() && title !== card!.title) onUpdate(card!.id, { title: title.trim() });
   }
@@ -124,6 +161,28 @@ export default function KanbanCardModal({
 
   function removeLabel(label: string) {
     onUpdate(card!.id, { labels: card!.labels.filter((l) => l !== label) });
+  }
+
+  function addSchedule() {
+    const time = newScheduleTime.trim();
+    if (!time) return;
+    const entry: CardScheduleEntry = { id: generateId(), time, title: newScheduleTitle.trim() };
+    onUpdate(card!.id, { schedules: [...schedules, entry].sort((a, b) => a.time.localeCompare(b.time)) });
+    setNewScheduleTime('');
+    setNewScheduleTitle('');
+  }
+
+  function updateScheduleTime(id: string, time: string) {
+    const next = schedules.map((s) => (s.id === id ? { ...s, time } : s)).sort((a, b) => a.time.localeCompare(b.time));
+    onUpdate(card!.id, { schedules: next });
+  }
+
+  function updateScheduleTitle(id: string, title: string) {
+    onUpdate(card!.id, { schedules: schedules.map((s) => (s.id === id ? { ...s, title } : s)) });
+  }
+
+  function removeSchedule(id: string) {
+    onUpdate(card!.id, { schedules: schedules.filter((s) => s.id !== id) });
   }
 
   async function handlePickCover() {
@@ -476,6 +535,43 @@ export default function KanbanCardModal({
     );
   }
 
+  function renderSchedules() {
+    return (
+      <div key="schedules">
+        <label style={{ fontSize: 12, fontWeight: 600, color: '#666', display: 'block', marginBottom: 4 }}>Horários</label>
+        {schedules.length > 0 && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginBottom: 6 }}>
+            {schedules.map((s) => (
+              <ScheduleEntryRow
+                key={s.id}
+                entry={s}
+                onUpdateTime={(time) => updateScheduleTime(s.id, time)}
+                onUpdateTitle={(title) => updateScheduleTitle(s.id, title)}
+                onRemove={() => removeSchedule(s.id)}
+              />
+            ))}
+          </div>
+        )}
+        <div style={{ display: 'flex', gap: 6 }}>
+          <input
+            type="time"
+            value={newScheduleTime}
+            onChange={(e) => setNewScheduleTime(e.target.value)}
+            style={{ padding: 6, fontSize: 12, width: 100 }}
+          />
+          <input
+            value={newScheduleTitle}
+            onChange={(e) => setNewScheduleTitle(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && addSchedule()}
+            placeholder="Título (opcional)..."
+            style={{ flex: 1, padding: 6, fontSize: 12 }}
+          />
+          <Button variant="secondary" onClick={addSchedule}>+ Adicionar</Button>
+        </div>
+      </div>
+    );
+  }
+
   /** Renderiza, pra uma aba, todo campo configurado (visível) pra morar nela — nessa ordem fixa. */
   function renderTabFields(tab: CardFieldTab) {
     return (
@@ -489,6 +585,7 @@ export default function KanbanCardModal({
         {isVisible(tab, 'cover') && renderCover()}
         {renderPriorityStatusColor(tab)}
         {isVisible(tab, 'labels') && renderLabels()}
+        {isVisible(tab, 'schedules') && renderSchedules()}
       </>
     );
   }

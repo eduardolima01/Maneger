@@ -1,5 +1,7 @@
 import { useMemo, useState } from 'react';
 import { convertFileSrc } from '@tauri-apps/api/core';
+import { DndContext, PointerSensor, useDraggable, useDroppable, useSensor, useSensors, type DragEndEvent } from '@dnd-kit/core';
+import { CSS } from '@dnd-kit/utilities';
 import Button from '@/components/layout/Button';
 import { parseLabel } from '@/Kanban/utils/kanbanLabels';
 import { PRIORITY_COLORS, PRIORITY_LABELS, STATUS_COLORS, STATUS_LABELS } from '@/types/kanban.types';
@@ -20,6 +22,14 @@ interface KanbanCalendarViewProps {
    * partir de um plano.
    */
   onVirtualOccurrenceClick: (planId: string, date: string, occurrenceIndex: number) => void;
+
+  /**
+   * Arrastar um card pra outro dia no calendário (visão de mês). Se o card tiver as duas datas
+   * (startDate e dueDate formando um intervalo), as duas são deslocadas pelo mesmo tanto de dias,
+   * pra preservar o tamanho do intervalo — não só "esticar" a data que caiu embaixo do cursor.
+   * Ocorrência virtual de plano não é arrastável (não existe como card de verdade ainda).
+   */
+  onChangeCardDate: (cardId: string, updates: { startDate?: string; dueDate?: string }) => void;
 }
 
 type Granularity = 'month' | 'week' | 'day';
@@ -81,6 +91,20 @@ function enumerateDates(start: string, end: string): string[] {
   return result;
 }
 
+/** Diferença em dias inteiros entre duas chaves 'YYYY-MM-DD' (toKey - fromKey). Usada pra arrastar card entre dias. */
+function daysBetweenKeys(fromKey: string, toKey: string): number {
+  const from = new Date(`${fromKey}T00:00:00`);
+  const to = new Date(`${toKey}T00:00:00`);
+  return Math.round((to.getTime() - from.getTime()) / 86400000);
+}
+
+/** Desloca uma chave 'YYYY-MM-DD' por N dias (pode ser negativo). */
+function shiftDateKey(key: string, deltaDays: number): string {
+  const d = new Date(`${key}T00:00:00`);
+  d.setDate(d.getDate() + deltaDays);
+  return dateKeyFromDate(d);
+}
+
 /**
  * Data "efetiva" do card no calendário: prioriza `dueDate`, cai pra `startDate`
  * se não tiver prazo. Cards sem nenhuma das duas ficam ocultos (decisão do usuário).
@@ -138,6 +162,108 @@ function buildWeekDays(cursor: Date): Date[] {
     d.setDate(start.getDate() + i);
     return d;
   });
+}
+
+/** Célula de dia da visão de mês, como alvo de soltar um card arrastado (id = 'YYYY-MM-DD'). */
+function DroppableDayCell({
+  id, isToday, inCurrentMonth, children,
+}: {
+  id: string;
+  isToday: boolean;
+  inCurrentMonth: boolean;
+  children: React.ReactNode;
+}) {
+  const { setNodeRef, isOver } = useDroppable({ id });
+  return (
+    <div
+      ref={setNodeRef}
+      style={{
+        backgroundColor: isOver ? '#e8f0fe' : '#fff',
+        minHeight: 96,
+        padding: 4,
+        opacity: inCurrentMonth ? 1 : 0.45,
+        outline: isToday ? '2px solid #1a73e8' : (isOver ? '2px dashed #1a73e8' : 'none'),
+        outlineOffset: -2,
+      }}
+    >
+      {children}
+    </div>
+  );
+}
+
+/** Chip compacto de card na visão de mês, arrastável pra outro dia. Ocorrência virtual fica só clicável (disabled). */
+function DraggableMonthChip({
+  card, column, onClick,
+}: {
+  card: KanbanCard;
+  column: KanbanColumn | undefined;
+  onClick: () => void;
+}) {
+  const virtual = isVirtualCard(card);
+  const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({ id: card.id, disabled: virtual });
+
+  return (
+    <div
+      ref={setNodeRef}
+      {...(virtual ? {} : attributes)}
+      {...(virtual ? {} : listeners)}
+      onClick={onClick}
+      title={
+        virtual
+          ? `${card.title} — ocorrência de plano ainda não editada (clique pra criar)`
+          : [card.title, column?.name, card.status ? STATUS_LABELS[card.status] : null].filter(Boolean).join(' — ')
+      }
+      style={{
+        transform: CSS.Translate.toString(transform),
+        position: transform ? 'relative' : undefined,
+        zIndex: isDragging ? 50 : undefined,
+        display: 'flex',
+        alignItems: 'flex-start',
+        gap: 4,
+        fontSize: 11,
+        padding: '3px 5px',
+        borderRadius: 3,
+        cursor: virtual ? 'pointer' : 'grab',
+        backgroundColor: virtual ? 'transparent' : (card.color ?? '#f0f0f0'),
+        border: virtual ? '1px dashed #bbb' : 'none',
+        borderLeft: virtual ? '1px dashed #bbb' : `3px solid ${column?.color ?? '#999'}`,
+        opacity: isDragging ? 0.35 : (virtual ? 0.6 : 1),
+        overflow: 'hidden',
+      }}
+    >
+      {virtual && <span style={{ fontSize: 9, flexShrink: 0 }}>📋</span>}
+      {column?.coverPath && (
+        <img
+          src={convertFileSrc(column.coverPath)}
+          alt=""
+          style={{ width: 14, height: 14, borderRadius: 2, objectFit: 'cover', flexShrink: 0, marginTop: 1 }}
+        />
+      )}
+      <span
+        title={card.status ? STATUS_LABELS[card.status] : undefined}
+        style={{
+          width: 7, height: 7, borderRadius: '50%', flexShrink: 0, marginTop: 3,
+          backgroundColor: card.status ? STATUS_COLORS[card.status] : 'transparent',
+          border: card.status ? 'none' : '1px solid #bbb',
+        }}
+      />
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 0, minWidth: 0, flex: 1 }}>
+        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontWeight: 500 }}>
+          {card.title}
+        </span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+          {column && (
+            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: 9, color: '#666' }}>
+              {column.name}
+            </span>
+          )}
+          {card.priority && (
+            <span style={{ width: 5, height: 5, borderRadius: '50%', flexShrink: 0, backgroundColor: PRIORITY_COLORS[card.priority] }} />
+          )}
+        </div>
+      </div>
+    </div>
+  );
 }
 
 /** Linha de detalhe usada nas visões de semana e dia — bem mais informação que o chip compacto do mês. */
@@ -237,12 +363,13 @@ function CardDetailCard({
 
 export default function KanbanCalendarView({
   cards, columns, groups, checklistProgress, onCardClick,
-  onTogglePlanActive, onVirtualOccurrenceClick,
+  onTogglePlanActive, onVirtualOccurrenceClick, onChangeCardDate,
 }: KanbanCalendarViewProps) {
   const today = new Date();
   const [cursor, setCursor] = useState(() => new Date(today.getFullYear(), today.getMonth(), today.getDate()));
   const [granularity, setGranularity] = useState<Granularity>('month');
   const [plansPanelOpen, setPlansPanelOpen] = useState(false);
+  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 8 } }));
 
   const year = cursor.getFullYear();
   const month = cursor.getMonth();
@@ -341,6 +468,25 @@ export default function KanbanCalendarView({
     } else {
       onCardClick(card.id);
     }
+  }
+
+  /** Soltou um card em cima de outro dia na visão de mês — desloca startDate/dueDate (as que existirem) pelo mesmo delta. */
+  function handleCalendarDragEnd(event: DragEndEvent) {
+    const { active, over } = event;
+    if (!over) return;
+    const cardId = active.id as string;
+    const newDateKey = over.id as string;
+    const card = nonTemplateCards.find((c) => c.id === cardId);
+    if (!card) return; // defesa: virtual não deveria nem estar arrastável (disabled), mas por garantia
+
+    const effectiveKey = cardDateKey(card);
+    if (!effectiveKey || effectiveKey === newDateKey) return;
+
+    const deltaDays = daysBetweenKeys(effectiveKey, newDateKey);
+    const updates: { startDate?: string; dueDate?: string } = {};
+    if (card.startDate) updates.startDate = shiftDateKey(card.startDate.slice(0, 10), deltaDays);
+    if (card.dueDate) updates.dueDate = shiftDateKey(card.dueDate.slice(0, 10), deltaDays);
+    onChangeCardDate(cardId, updates);
   }
 
   function goPrev() {
@@ -454,115 +600,50 @@ export default function KanbanCalendarView({
       )}
 
       {granularity === 'month' && (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 1, backgroundColor: '#eee', border: '1px solid #eee' }}>
-          {WEEKDAY_LABELS.map((label) => (
-            <div
-              key={label}
-              style={{ backgroundColor: '#fafafa', padding: '6px 4px', fontSize: 11, fontWeight: 600, color: '#666', textAlign: 'center' }}
-            >
-              {label}
-            </div>
-          ))}
+        <DndContext sensors={sensors} onDragEnd={handleCalendarDragEnd}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 1, backgroundColor: '#eee', border: '1px solid #eee' }}>
+            {WEEKDAY_LABELS.map((label) => (
+              <div
+                key={label}
+                style={{ backgroundColor: '#fafafa', padding: '6px 4px', fontSize: 11, fontWeight: 600, color: '#666', textAlign: 'center' }}
+              >
+                {label}
+              </div>
+            ))}
 
-          {weeks.flatMap((week, wi) =>
-            week.map((cell, di) => {
-              const key = dateKey(cell.year, cell.month, cell.day);
-              const dayCards = cardsByDate.get(key) ?? [];
-              const isToday = key === todayKey;
-              return (
-                <div
-                  key={`${wi}-${di}`}
-                  style={{
-                    backgroundColor: '#fff',
-                    minHeight: 96,
-                    padding: 4,
-                    opacity: cell.inCurrentMonth ? 1 : 0.45,
-                    outline: isToday ? '2px solid #1a73e8' : 'none',
-                    outlineOffset: -2,
-                  }}
-                >
-                  <div
-                    style={{
-                      fontSize: 11,
-                      color: isToday ? '#1a73e8' : '#999',
-                      fontWeight: isToday ? 700 : 400,
-                      marginBottom: 4,
-                    }}
-                  >
-                    {cell.day}
-                  </div>
+            {weeks.flatMap((week, wi) =>
+              week.map((cell, di) => {
+                const key = dateKey(cell.year, cell.month, cell.day);
+                const dayCards = cardsByDate.get(key) ?? [];
+                const isToday = key === todayKey;
+                return (
+                  <DroppableDayCell key={`${wi}-${di}`} id={key} isToday={isToday} inCurrentMonth={cell.inCurrentMonth}>
+                    <div
+                      style={{
+                        fontSize: 11,
+                        color: isToday ? '#1a73e8' : '#999',
+                        fontWeight: isToday ? 700 : 400,
+                        marginBottom: 4,
+                      }}
+                    >
+                      {cell.day}
+                    </div>
 
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-                    {dayCards.map((card) => {
-                      const columnId = resolveColumnId(card, groups);
-                      const column = columnId ? columnById.get(columnId) : undefined;
-                      const virtual = isVirtualCard(card);
-                      return (
-                        <div
-                          key={card.id}
-                          onClick={() => handleCardClick(card)}
-                          title={
-                            virtual
-                              ? `${card.title} — ocorrência de plano ainda não editada (clique pra criar)`
-                              : [card.title, column?.name, card.status ? STATUS_LABELS[card.status] : null]
-                                .filter(Boolean)
-                                .join(' — ')
-                          }
-                          style={{
-                            display: 'flex',
-                            alignItems: 'flex-start',
-                            gap: 4,
-                            fontSize: 11,
-                            padding: '3px 5px',
-                            borderRadius: 3,
-                            cursor: 'pointer',
-                            backgroundColor: virtual ? 'transparent' : (card.color ?? '#f0f0f0'),
-                            border: virtual ? '1px dashed #bbb' : 'none',
-                            borderLeft: virtual ? '1px dashed #bbb' : `3px solid ${column?.color ?? '#999'}`,
-                            opacity: virtual ? 0.6 : 1,
-                            overflow: 'hidden',
-                          }}
-                        >
-                          {virtual && <span style={{ fontSize: 9, flexShrink: 0 }}>📋</span>}
-                          {column?.coverPath && (
-                            <img
-                              src={convertFileSrc(column.coverPath)}
-                              alt=""
-                              style={{ width: 14, height: 14, borderRadius: 2, objectFit: 'cover', flexShrink: 0, marginTop: 1 }}
-                            />
-                          )}
-                          <span
-                            title={card.status ? STATUS_LABELS[card.status] : undefined}
-                            style={{
-                              width: 7, height: 7, borderRadius: '50%', flexShrink: 0, marginTop: 3,
-                              backgroundColor: card.status ? STATUS_COLORS[card.status] : 'transparent',
-                              border: card.status ? 'none' : '1px solid #bbb',
-                            }}
-                          />
-                          <div style={{ display: 'flex', flexDirection: 'column', gap: 0, minWidth: 0, flex: 1 }}>
-                            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontWeight: 500 }}>
-                              {card.title}
-                            </span>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                              {column && (
-                                <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: 9, color: '#666' }}>
-                                  {column.name}
-                                </span>
-                              )}
-                              {card.priority && (
-                                <span style={{ width: 5, height: 5, borderRadius: '50%', flexShrink: 0, backgroundColor: PRIORITY_COLORS[card.priority] }} />
-                              )}
-                            </div>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              );
-            })
-          )}
-        </div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                      {dayCards.map((card) => {
+                        const columnId = resolveColumnId(card, groups);
+                        const column = columnId ? columnById.get(columnId) : undefined;
+                        return (
+                          <DraggableMonthChip key={card.id} card={card} column={column} onClick={() => handleCardClick(card)} />
+                        );
+                      })}
+                    </div>
+                  </DroppableDayCell>
+                );
+              })
+            )}
+          </div>
+        </DndContext>
       )}
 
       {granularity === 'week' && (

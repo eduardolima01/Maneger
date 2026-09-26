@@ -24,6 +24,7 @@ import ColumnOutline from '@/Kanban/components/ColumnOutline';
 import { CardMoveContext } from '@/lib/utils/CardMoveContext';
 import { LabelIconContext } from '@/Kanban/hooks/Labeliconcontext';
 import { GroupLayoutContext } from '@/Kanban/components/GroupLayoutContext';
+import UpcomingCardsPanel from '@/Kanban/components/UpcomingCardsPanel';
 
 interface KanbanBoardProps {
   kanban: Kanban;
@@ -37,6 +38,7 @@ export default function KanbanBoard({ kanban }: KanbanBoardProps) {
   const [columnSettingsOpen, setColumnSettingsOpen] = useState(false);
   const [generateModalOpen, setGenerateModalOpen] = useState(false);
   const [labelManagerOpen, setLabelManagerOpen] = useState(false);
+  const [upcomingPanelOpen, setUpcomingPanelOpen] = useState(false);
   const [selectedCardId, setSelectedCardId] = useState<string | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<{ id: string; title: string } | null>(null);
   const [deleteGroupTarget, setDeleteGroupTarget] = useState<string | null>(null);
@@ -587,6 +589,9 @@ export default function KanbanBoard({ kanban }: KanbanBoardProps) {
                   onOpenLabelManager={() => setLabelManagerOpen(true)}
                 />
               </div>
+              <Button variant="secondary" onClick={() => setUpcomingPanelOpen((v) => !v)}>
+                {upcomingPanelOpen ? '🕐 Ocultar próximos' : '🕐 Mais próximos'}
+              </Button>
               <Button variant="secondary" onClick={() => setCalendarCollapsed((v) => !v)}>
                 {calendarCollapsed ? '📅 Mostrar calendário' : '📅 Recolher calendário'}
               </Button>
@@ -597,311 +602,326 @@ export default function KanbanBoard({ kanban }: KanbanBoardProps) {
               <Button variant="secondary" onClick={() => setGenerateModalOpen(true)}>+ Gerar cards</Button>
             </div>
 
-            <>
-              <DndContext sensors={sensors} collisionDetection={closestCorners} onDragEnd={handleDragEnd}>
-                <SortableContext items={columnsToRender.map((c) => c.id)} strategy={horizontalListSortingStrategy}>
-                  <div
-                    ref={boardContainerRef}
-                    onMouseDown={handleContainerMouseDown}
-                    style={{ display: 'flex', gap: 12, overflowX: 'auto', paddingBottom: 8, alignItems: 'stretch', minHeight: 400 }}
-                  >
-                    {focusedColumn && (
-                      <ColumnOutline
-                        column={focusedColumn}
-                        groups={board.groups.filter((g) => g.columnId === focusedColumn.id)}
-                        cardsByGroup={board.cardsByGroup}
-                        looseCardCount={(board.ungroupedCardsByColumn.get(focusedColumn.id) ?? []).length}
-                        collapsedGroupIds={collapsedGroupIds}
-                        onChangeCollapsed={(ids) => board.saveViewPrefs({ collapsedGroupIds: ids })}
-                        onExit={() => setFocusedColumnId(null)}
-                      />
-                    )}
-                    {columnsToRender.map((col) => (
-                      <div key={col.id} style={{ display: 'flex', flexDirection: 'column', ...(focusedColumn ? { flex: 1, minWidth: 0 } : {}) }}>
-                        {(() => {
-                          const columnCards = board.ungroupedCardsByColumn.get(col.id) ?? [];
-                          // filtro defensivo: groupsByColumn (calculado no hook) ainda não sabe distinguir
-                          // subgrupo de grupo top-level — sem isso, um subgrupo apareceria duplicado
-                          // (uma vez solto na coluna, outra vez aninhado dentro do grupo-pai).
-                          const columnGroups = (board.groupsByColumn.get(col.id) ?? []).filter((g) => !g.parentGroupId);
-                          const isEmpty = columnCards.length === 0 && columnGroups.length === 0;
-                          const customWidth = board.viewPrefs.columnWidths[col.id];
-                          const resolvedWidth = customWidth ?? (isEmpty ? EMPTY_COLUMN_WIDTH : DEFAULT_COLUMN_WIDTH);
-                          return (
-                            <KanbanColumn
-                              column={col}
-                              cards={columnCards}
-                              groups={columnGroups}
-                              cardsByGroup={board.cardsByGroup}
-                              collapsedGroupIds={collapsedGroupIds}
-                              onToggleGroupCollapsed={toggleGroupCollapsed}
-                              density={board.viewPrefs.density}
-                              visualConfig={cardVisualConfig}
-                              width={resolvedWidth}
-                              collapsed={collapsedIds.has(col.id)}
-                              onToggleCollapsed={() => toggleColumnCollapsed(col.id)}
-                              onRename={(name) => board.updateColumn(col.id, { name })}
-                              onColumnMenu={() => setColumnSettingsOpen(true)}
-                              cardsWithSubKanban={board.cardsWithSubKanban}
-                              cardsWithFiles={board.cardsWithFiles}
-                              onCardDuplicate={board.duplicateCard}
-                              checklistProgress={board.checklistProgress}
-                              onCardRequestDelete={(id, title) => setDeleteTarget({ id, title })}
-                              onRenameGroup={board.renameGroup}
-                              onRequestDeleteGroup={(groupId) => setDeleteGroupTarget(groupId)}
-                              onAddCardToGroup={board.createCardInGroup}
-                              onCreateSubgroup={board.createSubgroup}
-                              onUpdateGroupAppearance={board.updateGroupAppearance}
-                              groupsByParent={groupsByParent}
-                              groupHeights={board.viewPrefs.groupHeights ?? {}}
-                              onResizeGroupHeight={(groupId, h) => board.saveViewPrefs({ groupHeights: { ...(board.viewPrefs.groupHeights ?? {}), [groupId]: h } })}
-                              onReorderGroupCards={board.reorderCardsInGroup}
-                              allLabels={allParsedLabels}
-                              onUpdateCardLabels={(id, labels) => board.updateCard(id, { labels })}
-                              onUpdateCardDueDate={(id, dueDate) => board.updateCard(id, { dueDate })}
-                              onUpdateCardStartDate={(id, startDate) => board.updateCard(id, { startDate })}
-                              onUpdateCardDescription={(id, description) => board.updateCard(id, { description })}
-                              onUpdateCardTitle={(id, title) => board.updateCard(id, { title })}
-                              onUpdateCardColor={(id, color) => board.updateCard(id, { color })}
-                              onUpdateCardStatus={(id, status) => board.updateCard(id, { status })}
-                              onDuplicateMultiple={board.duplicateCardMultiple}
-                              onUpdateCoverPath={(id, path) => board.updateCard(id, { coverPath: path })}
-                              onUpdateColumnCover={(path) => board.updateColumn(col.id, { coverPath: path })}
-                              onResizeColumnWidth={(newWidth) => board.saveViewPrefs({ columnWidths: { ...board.viewPrefs.columnWidths, [col.id]: newWidth } })}
-                              onArchive={() => board.updateColumn(col.id, { visible: !col.visible })}
-                              backgroundColor={board.viewPrefs.columnBackgrounds?.[col.id] ?? null}
-                              onUpdateBackgroundColor={(color) => {
-                                const next = { ...(board.viewPrefs.columnBackgrounds ?? {}) };
-                                if (color) next[col.id] = color; else delete next[col.id];
-                                board.saveViewPrefs({ columnBackgrounds: next });
-                              }}
-                              focused={!!focusedColumn}
-                              onToggleFocus={() => setFocusedColumnId(focusedColumn ? null : col.id)}
-
-                              onCardClick={handleCardClick}
-                              selectedCardIds={selectedCardIds}
-                              onCardSelectToggle={toggleCardSelection}
-                              onBulkDelete={() => setBulkDeleteConfirm(true)}
-                              onBulkSetColor={board.bulkSetColor}
-                              onBulkSetStatus={board.bulkSetStatus}
-                              onBulkToggleLabel={board.bulkToggleLabel}
-                              projectId={kanban.projectId}
-                            />
-                          );
-                        })()}
-                        {!collapsedIds.has(col.id) && (
-                          newCardColumnId === col.id ? (
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginTop: 4, backgroundColor: '#fff', padding: 6, borderRadius: 4 }}>
-                              <label style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11, color: '#666', cursor: 'pointer' }}>
-                                <input type="checkbox" checked={planMode} onChange={(e) => setPlanMode(e.target.checked)} />
-                                🗓 Criar como plano (gera cards diários no calendário)
-                              </label>
-                              <div style={{ display: 'flex', gap: 4 }}>
-                                <textarea
-                                  ref={newCardInputRef}
-                                  autoFocus
-                                  value={newCardTitle}
-                                  onChange={(e) => setNewCardTitle(e.target.value)}
-                                  onKeyDown={(e) => {
-                                    if (e.key === 'Enter' && !e.shiftKey && !planMode) {
-                                      e.preventDefault();
-                                      handleCreateCard();
-                                    }
+            <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <>
+                  <DndContext sensors={sensors} collisionDetection={closestCorners} onDragEnd={handleDragEnd}>
+                    <SortableContext items={columnsToRender.map((c) => c.id)} strategy={horizontalListSortingStrategy}>
+                      <div
+                        ref={boardContainerRef}
+                        onMouseDown={handleContainerMouseDown}
+                        style={{ display: 'flex', gap: 12, overflowX: 'auto', paddingBottom: 8, alignItems: 'stretch', minHeight: 400 }}
+                      >
+                        {focusedColumn && (
+                          <ColumnOutline
+                            column={focusedColumn}
+                            groups={board.groups.filter((g) => g.columnId === focusedColumn.id)}
+                            cardsByGroup={board.cardsByGroup}
+                            looseCardCount={(board.ungroupedCardsByColumn.get(focusedColumn.id) ?? []).length}
+                            collapsedGroupIds={collapsedGroupIds}
+                            onChangeCollapsed={(ids) => board.saveViewPrefs({ collapsedGroupIds: ids })}
+                            onExit={() => setFocusedColumnId(null)}
+                          />
+                        )}
+                        {columnsToRender.map((col) => (
+                          <div key={col.id} style={{ display: 'flex', flexDirection: 'column', ...(focusedColumn ? { flex: 1, minWidth: 0 } : {}) }}>
+                            {(() => {
+                              const columnCards = board.ungroupedCardsByColumn.get(col.id) ?? [];
+                              // filtro defensivo: groupsByColumn (calculado no hook) ainda não sabe distinguir
+                              // subgrupo de grupo top-level — sem isso, um subgrupo apareceria duplicado
+                              // (uma vez solto na coluna, outra vez aninhado dentro do grupo-pai).
+                              const columnGroups = (board.groupsByColumn.get(col.id) ?? []).filter((g) => !g.parentGroupId);
+                              const isEmpty = columnCards.length === 0 && columnGroups.length === 0;
+                              const customWidth = board.viewPrefs.columnWidths[col.id];
+                              const resolvedWidth = customWidth ?? (isEmpty ? EMPTY_COLUMN_WIDTH : DEFAULT_COLUMN_WIDTH);
+                              return (
+                                <KanbanColumn
+                                  column={col}
+                                  cards={columnCards}
+                                  groups={columnGroups}
+                                  cardsByGroup={board.cardsByGroup}
+                                  collapsedGroupIds={collapsedGroupIds}
+                                  onToggleGroupCollapsed={toggleGroupCollapsed}
+                                  density={board.viewPrefs.density}
+                                  visualConfig={cardVisualConfig}
+                                  width={resolvedWidth}
+                                  collapsed={collapsedIds.has(col.id)}
+                                  onToggleCollapsed={() => toggleColumnCollapsed(col.id)}
+                                  onRename={(name) => board.updateColumn(col.id, { name })}
+                                  onColumnMenu={() => setColumnSettingsOpen(true)}
+                                  cardsWithSubKanban={board.cardsWithSubKanban}
+                                  cardsWithFiles={board.cardsWithFiles}
+                                  onCardDuplicate={board.duplicateCard}
+                                  checklistProgress={board.checklistProgress}
+                                  onCardRequestDelete={(id, title) => setDeleteTarget({ id, title })}
+                                  onRenameGroup={board.renameGroup}
+                                  onRequestDeleteGroup={(groupId) => setDeleteGroupTarget(groupId)}
+                                  onAddCardToGroup={board.createCardInGroup}
+                                  onCreateSubgroup={board.createSubgroup}
+                                  onUpdateGroupAppearance={board.updateGroupAppearance}
+                                  groupsByParent={groupsByParent}
+                                  groupHeights={board.viewPrefs.groupHeights ?? {}}
+                                  onResizeGroupHeight={(groupId, h) => board.saveViewPrefs({ groupHeights: { ...(board.viewPrefs.groupHeights ?? {}), [groupId]: h } })}
+                                  onReorderGroupCards={board.reorderCardsInGroup}
+                                  allLabels={allParsedLabels}
+                                  onUpdateCardLabels={(id, labels) => board.updateCard(id, { labels })}
+                                  onUpdateCardDueDate={(id, dueDate) => board.updateCard(id, { dueDate })}
+                                  onUpdateCardStartDate={(id, startDate) => board.updateCard(id, { startDate })}
+                                  onUpdateCardDescription={(id, description) => board.updateCard(id, { description })}
+                                  onUpdateCardTitle={(id, title) => board.updateCard(id, { title })}
+                                  onUpdateCardColor={(id, color) => board.updateCard(id, { color })}
+                                  onUpdateCardStatus={(id, status) => board.updateCard(id, { status })}
+                                  onDuplicateMultiple={board.duplicateCardMultiple}
+                                  onUpdateCoverPath={(id, path) => board.updateCard(id, { coverPath: path })}
+                                  onUpdateColumnCover={(path) => board.updateColumn(col.id, { coverPath: path })}
+                                  onResizeColumnWidth={(newWidth) => board.saveViewPrefs({ columnWidths: { ...board.viewPrefs.columnWidths, [col.id]: newWidth } })}
+                                  onArchive={() => board.updateColumn(col.id, { visible: !col.visible })}
+                                  backgroundColor={board.viewPrefs.columnBackgrounds?.[col.id] ?? null}
+                                  onUpdateBackgroundColor={(color) => {
+                                    const next = { ...(board.viewPrefs.columnBackgrounds ?? {}) };
+                                    if (color) next[col.id] = color; else delete next[col.id];
+                                    board.saveViewPrefs({ columnBackgrounds: next });
                                   }}
-                                  onBlur={() => !newCardTitle.trim() && !planMode && setNewCardColumnId(null)}
-                                  placeholder={planMode ? 'Título do plano...' : 'Título do card... (Shift+Enter = várias linhas viram vários cards)'}
-                                  rows={planMode ? 1 : 2}
-                                  style={{ flex: 1, padding: 6, fontSize: 12, resize: 'vertical', fontFamily: 'inherit' }}
-                                />
-                                {!planMode && (
-                                  <button
-                                    onClick={handleCreateCard}
-                                    disabled={!newCardTitle.trim()}
-                                    title="Adicionar card"
-                                    style={{
-                                      padding: '6px 10px', fontSize: 12, border: 'none', borderRadius: 4,
-                                      backgroundColor: newCardTitle.trim() ? '#1a73e8' : '#ccc',
-                                      color: '#fff', cursor: newCardTitle.trim() ? 'pointer' : 'default',
-                                    }}
-                                  >
-                                    +
-                                  </button>
-                                )}
-                              </div>
+                                  focused={!!focusedColumn}
+                                  onToggleFocus={() => setFocusedColumnId(focusedColumn ? null : col.id)}
 
-                              {planMode && (
-                                <>
-                                  <div style={{ display: 'flex', gap: 6 }}>
-                                    <div style={{ flex: 1 }}>
-                                      <label style={{ fontSize: 10, color: '#999', display: 'block', marginBottom: 2 }}>Início</label>
-                                      <input type="date" value={planStartDate} onChange={(e) => setPlanStartDate(e.target.value)} style={{ width: '100%', padding: 5, fontSize: 11, boxSizing: 'border-box' }} />
-                                    </div>
-                                    <div style={{ flex: 1 }}>
-                                      <label style={{ fontSize: 10, color: '#999', display: 'block', marginBottom: 2 }}>Fim</label>
-                                      <input type="date" value={planEndDate} onChange={(e) => setPlanEndDate(e.target.value)} style={{ width: '100%', padding: 5, fontSize: 11, boxSizing: 'border-box' }} />
-                                    </div>
-                                    <div style={{ width: 70 }}>
-                                      <label style={{ fontSize: 10, color: '#999', display: 'block', marginBottom: 2 }}>×/dia</label>
-                                      <input
-                                        type="number"
-                                        min={1}
-                                        max={20}
-                                        value={planTimesPerDay}
-                                        onChange={(e) => setPlanTimesPerDay(Math.max(1, Number(e.target.value) || 1))}
-                                        style={{ width: '100%', padding: 5, fontSize: 11, boxSizing: 'border-box' }}
-                                      />
-                                    </div>
-                                  </div>
-                                  <div>
-                                    <label style={{ fontSize: 10, color: '#999', display: 'block', marginBottom: 2 }}>Dias da semana ativos</label>
-                                    <div style={{ display: 'flex', gap: 3 }}>
-                                      {['D', 'S', 'T', 'Q', 'Q', 'S', 'S'].map((label, day) => (
-                                        <button
-                                          key={day}
-                                          onClick={() => togglePlanWeekday(day)}
-                                          title={['Domingo', 'Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado'][day]}
-                                          style={{
-                                            width: 22, height: 22, fontSize: 10, borderRadius: '50%', cursor: 'pointer',
-                                            border: '1px solid #ccc',
-                                            backgroundColor: planWeekdays.includes(day) ? '#1a73e8' : '#fff',
-                                            color: planWeekdays.includes(day) ? '#fff' : '#666',
-                                          }}
-                                        >
-                                          {label}
-                                        </button>
-                                      ))}
-                                    </div>
-                                  </div>
-                                  <div>
-                                    <label style={{ fontSize: 10, color: '#999', display: 'block', marginBottom: 2 }}>
-                                      Coluna onde o card nasce ao clicar no calendário
-                                    </label>
-                                    <select
-                                      value={planTargetColumnId}
-                                      onChange={(e) => { setPlanTargetColumnId(e.target.value); setPlanTargetGroupId(''); }}
-                                      style={{ width: '100%', padding: 5, fontSize: 11, boxSizing: 'border-box' }}
-                                    >
-                                      <option value="">Nenhuma — fica só no calendário</option>
-                                      {visibleColumns.map((c) => (
-                                        <option key={c.id} value={c.id}>{c.name}</option>
-                                      ))}
-                                    </select>
-                                  </div>
-                                  {planTargetColumnId && flattenGroupsForColumn(planTargetColumnId).length > 0 && (
-                                    <div>
-                                      <label style={{ fontSize: 10, color: '#999', display: 'block', marginBottom: 2 }}>
-                                        Grupo/subgrupo (opcional)
-                                      </label>
-                                      <select
-                                        value={planTargetGroupId}
-                                        onChange={(e) => setPlanTargetGroupId(e.target.value)}
-                                        style={{ width: '100%', padding: 5, fontSize: 11, boxSizing: 'border-box' }}
+                                  onCardClick={handleCardClick}
+                                  selectedCardIds={selectedCardIds}
+                                  onCardSelectToggle={toggleCardSelection}
+                                  onBulkDelete={() => setBulkDeleteConfirm(true)}
+                                  onBulkSetColor={board.bulkSetColor}
+                                  onBulkSetStatus={board.bulkSetStatus}
+                                  onBulkToggleLabel={board.bulkToggleLabel}
+                                  projectId={kanban.projectId}
+                                />
+                              );
+                            })()}
+                            {!collapsedIds.has(col.id) && (
+                              newCardColumnId === col.id ? (
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginTop: 4, backgroundColor: '#fff', padding: 6, borderRadius: 4 }}>
+                                  <label style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11, color: '#666', cursor: 'pointer' }}>
+                                    <input type="checkbox" checked={planMode} onChange={(e) => setPlanMode(e.target.checked)} />
+                                    🗓 Criar como plano (gera cards diários no calendário)
+                                  </label>
+                                  <div style={{ display: 'flex', gap: 4 }}>
+                                    <textarea
+                                      ref={newCardInputRef}
+                                      autoFocus
+                                      value={newCardTitle}
+                                      onChange={(e) => setNewCardTitle(e.target.value)}
+                                      onKeyDown={(e) => {
+                                        if (e.key === 'Enter' && !e.shiftKey && !planMode) {
+                                          e.preventDefault();
+                                          handleCreateCard();
+                                        }
+                                      }}
+                                      onBlur={() => !newCardTitle.trim() && !planMode && setNewCardColumnId(null)}
+                                      placeholder={planMode ? 'Título do plano...' : 'Título do card... (Shift+Enter = várias linhas viram vários cards)'}
+                                      rows={planMode ? 1 : 2}
+                                      style={{ flex: 1, padding: 6, fontSize: 12, resize: 'vertical', fontFamily: 'inherit' }}
+                                    />
+                                    {!planMode && (
+                                      <button
+                                        onClick={handleCreateCard}
+                                        disabled={!newCardTitle.trim()}
+                                        title="Adicionar card"
+                                        style={{
+                                          padding: '6px 10px', fontSize: 12, border: 'none', borderRadius: 4,
+                                          backgroundColor: newCardTitle.trim() ? '#1a73e8' : '#ccc',
+                                          color: '#fff', cursor: newCardTitle.trim() ? 'pointer' : 'default',
+                                        }}
                                       >
-                                        <option value="">Nenhum — direto na coluna</option>
-                                        {flattenGroupsForColumn(planTargetColumnId).map((g) => (
-                                          <option key={g.id} value={g.id}>{g.label}</option>
-                                        ))}
-                                      </select>
-                                    </div>
+                                        +
+                                      </button>
+                                    )}
+                                  </div>
+
+                                  {planMode && (
+                                    <>
+                                      <div style={{ display: 'flex', gap: 6 }}>
+                                        <div style={{ flex: 1 }}>
+                                          <label style={{ fontSize: 10, color: '#999', display: 'block', marginBottom: 2 }}>Início</label>
+                                          <input type="date" value={planStartDate} onChange={(e) => setPlanStartDate(e.target.value)} style={{ width: '100%', padding: 5, fontSize: 11, boxSizing: 'border-box' }} />
+                                        </div>
+                                        <div style={{ flex: 1 }}>
+                                          <label style={{ fontSize: 10, color: '#999', display: 'block', marginBottom: 2 }}>Fim</label>
+                                          <input type="date" value={planEndDate} onChange={(e) => setPlanEndDate(e.target.value)} style={{ width: '100%', padding: 5, fontSize: 11, boxSizing: 'border-box' }} />
+                                        </div>
+                                        <div style={{ width: 70 }}>
+                                          <label style={{ fontSize: 10, color: '#999', display: 'block', marginBottom: 2 }}>×/dia</label>
+                                          <input
+                                            type="number"
+                                            min={1}
+                                            max={20}
+                                            value={planTimesPerDay}
+                                            onChange={(e) => setPlanTimesPerDay(Math.max(1, Number(e.target.value) || 1))}
+                                            style={{ width: '100%', padding: 5, fontSize: 11, boxSizing: 'border-box' }}
+                                          />
+                                        </div>
+                                      </div>
+                                      <div>
+                                        <label style={{ fontSize: 10, color: '#999', display: 'block', marginBottom: 2 }}>Dias da semana ativos</label>
+                                        <div style={{ display: 'flex', gap: 3 }}>
+                                          {['D', 'S', 'T', 'Q', 'Q', 'S', 'S'].map((label, day) => (
+                                            <button
+                                              key={day}
+                                              onClick={() => togglePlanWeekday(day)}
+                                              title={['Domingo', 'Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado'][day]}
+                                              style={{
+                                                width: 22, height: 22, fontSize: 10, borderRadius: '50%', cursor: 'pointer',
+                                                border: '1px solid #ccc',
+                                                backgroundColor: planWeekdays.includes(day) ? '#1a73e8' : '#fff',
+                                                color: planWeekdays.includes(day) ? '#fff' : '#666',
+                                              }}
+                                            >
+                                              {label}
+                                            </button>
+                                          ))}
+                                        </div>
+                                      </div>
+                                      <div>
+                                        <label style={{ fontSize: 10, color: '#999', display: 'block', marginBottom: 2 }}>
+                                          Coluna onde o card nasce ao clicar no calendário
+                                        </label>
+                                        <select
+                                          value={planTargetColumnId}
+                                          onChange={(e) => { setPlanTargetColumnId(e.target.value); setPlanTargetGroupId(''); }}
+                                          style={{ width: '100%', padding: 5, fontSize: 11, boxSizing: 'border-box' }}
+                                        >
+                                          <option value="">Nenhuma — fica só no calendário</option>
+                                          {visibleColumns.map((c) => (
+                                            <option key={c.id} value={c.id}>{c.name}</option>
+                                          ))}
+                                        </select>
+                                      </div>
+                                      {planTargetColumnId && flattenGroupsForColumn(planTargetColumnId).length > 0 && (
+                                        <div>
+                                          <label style={{ fontSize: 10, color: '#999', display: 'block', marginBottom: 2 }}>
+                                            Grupo/subgrupo (opcional)
+                                          </label>
+                                          <select
+                                            value={planTargetGroupId}
+                                            onChange={(e) => setPlanTargetGroupId(e.target.value)}
+                                            style={{ width: '100%', padding: 5, fontSize: 11, boxSizing: 'border-box' }}
+                                          >
+                                            <option value="">Nenhum — direto na coluna</option>
+                                            {flattenGroupsForColumn(planTargetColumnId).map((g) => (
+                                              <option key={g.id} value={g.id}>{g.label}</option>
+                                            ))}
+                                          </select>
+                                        </div>
+                                      )}
+                                      <button
+                                        onClick={handleCreateCard}
+                                        disabled={!newCardTitle.trim() || !planStartDate || !planEndDate || planWeekdays.length === 0}
+                                        style={{
+                                          padding: '6px 10px', fontSize: 12, border: 'none', borderRadius: 4, marginTop: 2,
+                                          backgroundColor: (newCardTitle.trim() && planStartDate && planEndDate && planWeekdays.length > 0) ? '#1a73e8' : '#ccc',
+                                          color: '#fff', cursor: 'pointer',
+                                        }}
+                                      >
+                                        + Criar plano
+                                      </button>
+                                    </>
                                   )}
+
                                   <button
-                                    onClick={handleCreateCard}
-                                    disabled={!newCardTitle.trim() || !planStartDate || !planEndDate || planWeekdays.length === 0}
-                                    style={{
-                                      padding: '6px 10px', fontSize: 12, border: 'none', borderRadius: 4, marginTop: 2,
-                                      backgroundColor: (newCardTitle.trim() && planStartDate && planEndDate && planWeekdays.length > 0) ? '#1a73e8' : '#ccc',
-                                      color: '#fff', cursor: 'pointer',
-                                    }}
+                                    onClick={() => { setNewCardColumnId(null); setNewCardTitle(''); resetPlanForm(); }}
+                                    style={{ fontSize: 11, color: '#666', background: 'none', border: 'none', cursor: 'pointer', textAlign: 'left', padding: 0 }}
                                   >
-                                    + Criar plano
+                                    ✕ Cancelar
                                   </button>
-                                </>
-                              )}
+                                </div>
 
-                              <button
-                                onClick={() => { setNewCardColumnId(null); setNewCardTitle(''); resetPlanForm(); }}
-                                style={{ fontSize: 11, color: '#666', background: 'none', border: 'none', cursor: 'pointer', textAlign: 'left', padding: 0 }}
-                              >
-                                ✕ Cancelar
-                              </button>
-                            </div>
-
-                          ) : (
-                            <button
-                              onClick={() => setNewCardColumnId(col.id)}
-                              style={{ marginTop: 4, padding: '6px', fontSize: 12, color: '#666', backgroundColor: '#fff', border: '1px dashed #ccc', borderRadius: 4, cursor: 'pointer' }}
-                            >
-                              + Novo card
-                            </button>
-
-                          )
-                        )}
-
-                        {!collapsedIds.has(col.id) && !newCardColumnId && (
-                          newGroupColumnId === col.id ? (
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginTop: 4, backgroundColor: '#fff', padding: 6, borderRadius: 4 }}>
-                              <div style={{ display: 'flex', gap: 4 }}>
-                                <input
-                                  ref={newGroupInputRef}
-                                  autoFocus
-                                  value={newGroupName}
-                                  onChange={(e) => setNewGroupName(e.target.value)}
-                                  onKeyDown={(e) => e.key === 'Enter' && handleCreateGroup()}
-                                  placeholder="Nome do grupo..."
-                                  style={{ flex: 1, padding: 6, fontSize: 12 }}
-                                />
+                              ) : (
                                 <button
-                                  onClick={handleCreateGroup}
-                                  disabled={!newGroupName.trim()}
-                                  title="Adicionar grupo"
-                                  style={{
-                                    padding: '6px 10px', fontSize: 12, border: 'none', borderRadius: 4,
-                                    backgroundColor: newGroupName.trim() ? '#666' : '#ccc',
-                                    color: '#fff', cursor: newGroupName.trim() ? 'pointer' : 'default',
-                                  }}
+                                  onClick={() => setNewCardColumnId(col.id)}
+                                  style={{ marginTop: 4, padding: '6px', fontSize: 12, color: '#666', backgroundColor: '#fff', border: '1px dashed #ccc', borderRadius: 4, cursor: 'pointer' }}
                                 >
-                                  +
+                                  + Novo card
                                 </button>
-                              </div>
-                              <button
-                                onClick={() => { setNewGroupColumnId(null); setNewGroupName(''); }}
-                                style={{ fontSize: 11, color: '#666', background: 'none', border: 'none', cursor: 'pointer', textAlign: 'left', padding: 0 }}
-                              >
-                                ✕ Cancelar
-                              </button>
-                            </div>
-                          ) : (
-                            <button
-                              onClick={() => setNewGroupColumnId(col.id)}
-                              style={{ marginTop: 4, padding: '4px', fontSize: 11, color: '#999', backgroundColor: '#fff', border: 'none', cursor: 'pointer' }}
-                            >
-                              + Novo grupo
-                            </button>
-                          )
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                </SortableContext>
-              </DndContext>
 
-              {selectionBox && (
-                <div
-                  style={{
-                    position: 'fixed', left: selectionBox.x, top: selectionBox.y,
-                    width: selectionBox.width, height: selectionBox.height,
-                    backgroundColor: 'rgba(26, 115, 232, 0.15)', border: '1px solid #1a73e8',
-                    zIndex: 999, pointerEvents: 'none',
-                  }}
+                              )
+                            )}
+
+                            {!collapsedIds.has(col.id) && !newCardColumnId && (
+                              newGroupColumnId === col.id ? (
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginTop: 4, backgroundColor: '#fff', padding: 6, borderRadius: 4 }}>
+                                  <div style={{ display: 'flex', gap: 4 }}>
+                                    <input
+                                      ref={newGroupInputRef}
+                                      autoFocus
+                                      value={newGroupName}
+                                      onChange={(e) => setNewGroupName(e.target.value)}
+                                      onKeyDown={(e) => e.key === 'Enter' && handleCreateGroup()}
+                                      placeholder="Nome do grupo..."
+                                      style={{ flex: 1, padding: 6, fontSize: 12 }}
+                                    />
+                                    <button
+                                      onClick={handleCreateGroup}
+                                      disabled={!newGroupName.trim()}
+                                      title="Adicionar grupo"
+                                      style={{
+                                        padding: '6px 10px', fontSize: 12, border: 'none', borderRadius: 4,
+                                        backgroundColor: newGroupName.trim() ? '#666' : '#ccc',
+                                        color: '#fff', cursor: newGroupName.trim() ? 'pointer' : 'default',
+                                      }}
+                                    >
+                                      +
+                                    </button>
+                                  </div>
+                                  <button
+                                    onClick={() => { setNewGroupColumnId(null); setNewGroupName(''); }}
+                                    style={{ fontSize: 11, color: '#666', background: 'none', border: 'none', cursor: 'pointer', textAlign: 'left', padding: 0 }}
+                                  >
+                                    ✕ Cancelar
+                                  </button>
+                                </div>
+                              ) : (
+                                <button
+                                  onClick={() => setNewGroupColumnId(col.id)}
+                                  style={{ marginTop: 4, padding: '4px', fontSize: 11, color: '#999', backgroundColor: '#fff', border: 'none', cursor: 'pointer' }}
+                                >
+                                  + Novo grupo
+                                </button>
+                              )
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    </SortableContext>
+                  </DndContext>
+
+                  {selectionBox && (
+                    <div
+                      style={{
+                        position: 'fixed', left: selectionBox.x, top: selectionBox.y,
+                        width: selectionBox.width, height: selectionBox.height,
+                        backgroundColor: 'rgba(26, 115, 232, 0.15)', border: '1px solid #1a73e8',
+                        zIndex: 999, pointerEvents: 'none',
+                      }}
+                    />
+                  )}
+
+                  {visibleColumns.length === 0 && !board.loading && (
+                    <p style={{ color: '#999', fontSize: 13, textAlign: 'center', padding: 24 }}>
+                      Nenhuma coluna visível. Abra "⚙ Colunas" pra criar ou mostrar alguma.
+                    </p>
+                  )}
+                </>
+              </div>
+
+              {upcomingPanelOpen && (
+                <UpcomingCardsPanel
+                  cards={board.cards}
+                  columns={visibleColumns}
+                  groups={board.groups}
+                  onCardClick={handleCardClick}
+                  onVirtualOccurrenceClick={handleVirtualOccurrenceClick}
+                  onClose={() => setUpcomingPanelOpen(false)}
                 />
               )}
-
-              {visibleColumns.length === 0 && !board.loading && (
-                <p style={{ color: '#999', fontSize: 13, textAlign: 'center', padding: 24 }}>
-                  Nenhuma coluna visível. Abra "⚙ Colunas" pra criar ou mostrar alguma.
-                </p>
-              )}
-            </>
+            </div>
 
             {!calendarCollapsed && (
               <div style={{ marginTop: 16, borderTop: '1px solid #eee', paddingTop: 16 }}>
@@ -913,6 +933,7 @@ export default function KanbanBoard({ kanban }: KanbanBoardProps) {
                   onCardClick={handleCardClick}
                   onTogglePlanActive={(planId, active) => board.updateCard(planId, { planActive: active })}
                   onVirtualOccurrenceClick={handleVirtualOccurrenceClick}
+                  onChangeCardDate={(cardId, updates) => board.updateCard(cardId, updates)}
                 />
               </div>
             )}

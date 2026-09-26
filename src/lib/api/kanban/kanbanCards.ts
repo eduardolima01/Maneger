@@ -11,18 +11,25 @@ function applyPositions(cards: KanbanCard[], orderedIds: string[]): void {
   });
 }
 
+/** Cards salvos antes do campo `schedules` existir não têm essa chave no JSON — undefined, não []. Aplicar em toda leitura que sai da API (mesmo motivo de mergeCardFieldConfig em kanban.types.ts). */
+function normalizeCard(card: KanbanCard): KanbanCard {
+  return card.schedules ? card : { ...card, schedules: [] };
+}
+
 export async function getCardsByKanban(kanbanId: string, includeArchived = false): Promise<KanbanCard[]> {
   const data = await loadKanbanData();
   const groupIdsInKanban = new Set(data.cardGroups.filter((g) => g.kanbanId === kanbanId).map((g) => g.id));
   return data.cards
     .filter((c) => c.kanbanId === kanbanId || (c.cardGroupId && groupIdsInKanban.has(c.cardGroupId)))
     .filter((c) => includeArchived || !c.archived)
-    .sort((a, b) => a.position - b.position);
+    .sort((a, b) => a.position - b.position)
+    .map(normalizeCard);
 }
 
 export async function getCardById(id: string): Promise<KanbanCard | null> {
   const data = await loadKanbanData();
-  return data.cards.find((c) => c.id === id) ?? null;
+  const found = data.cards.find((c) => c.id === id);
+  return found ? normalizeCard(found) : null;
 }
 
 export async function createCard(input: CreateKanbanCardInput): Promise<string> {
@@ -47,6 +54,7 @@ export async function createCard(input: CreateKanbanCardInput): Promise<string> 
     priority: input.priority ?? null,
     status: input.status ?? 'pendente',
     labels: input.labels ?? [],
+    schedules: input.schedules ?? [],
     assignedTo: null,
     startDate: input.startDate ?? null,
     dueDate: input.dueDate ?? null,
@@ -113,8 +121,9 @@ export async function materializePlanOccurrence(planId: string, date: string, oc
   );
   if (existing) return existing.id;
 
-  const plan = data.cards.find((c) => c.id === planId);
-  if (!plan) throw new Error('Card de plano não encontrado para materializar ocorrência');
+  const foundPlan = data.cards.find((c) => c.id === planId);
+  if (!foundPlan) throw new Error('Card de plano não encontrado para materializar ocorrência');
+  const plan = normalizeCard(foundPlan);
 
   const title = plan.planTimesPerDay > 1 ? `${plan.title} (${occurrenceIndex + 1}/${plan.planTimesPerDay})` : plan.title;
   const shared = {
@@ -124,6 +133,7 @@ export async function materializePlanOccurrence(planId: string, date: string, oc
     priority: plan.priority,
     status: plan.status,
     labels: plan.labels,
+    schedules: plan.schedules,
     startDate: date,
     dueDate: date,
     planParentId: planId,
@@ -149,6 +159,7 @@ export async function updateCard(id: string, input: UpdateKanbanCardInput): Prom
   if (input.priority !== undefined) { card.priority = input.priority; changed = true; }
   if (input.status !== undefined) { card.status = input.status; changed = true; }
   if (input.labels !== undefined) { card.labels = input.labels; changed = true; }
+  if (input.schedules !== undefined) { card.schedules = input.schedules; changed = true; }
   if (input.assignedTo !== undefined) { card.assignedTo = input.assignedTo; changed = true; }
   if (input.startDate !== undefined) { card.startDate = input.startDate; changed = true; }
   if (input.dueDate !== undefined) { card.dueDate = input.dueDate; changed = true; }
@@ -178,8 +189,9 @@ export async function deleteCard(id: string): Promise<void> {
 
 export async function duplicateCard(id: string): Promise<string> {
   const data = await loadKanbanData();
-  const original = data.cards.find((c) => c.id === id);
-  if (!original) throw new Error('Card não encontrado para duplicar');
+  const foundOriginal = data.cards.find((c) => c.id === id);
+  if (!foundOriginal) throw new Error('Card não encontrado para duplicar');
+  const original = normalizeCard(foundOriginal);
   return createCard({
     kanbanId: original.kanbanId,
     columnId: original.columnId,
@@ -190,6 +202,7 @@ export async function duplicateCard(id: string): Promise<string> {
     priority: original.priority,
     status: original.status,
     labels: original.labels,
+    schedules: original.schedules.map((s) => ({ ...s, id: generateId() })),
     startDate: original.startDate,
     dueDate: original.dueDate,
   });
@@ -264,7 +277,8 @@ export async function getCardsByGroup(groupId: string): Promise<KanbanCard[]> {
   const data = await loadKanbanData();
   return data.cards
     .filter((c) => c.cardGroupId === groupId && !c.archived)
-    .sort((a, b) => a.position - b.position);
+    .sort((a, b) => a.position - b.position)
+    .map(normalizeCard);
 }
 
 export async function moveCardIntoGroup(cardId: string, groupId: string, orderedCardIdsInGroup: string[]): Promise<void> {
@@ -300,5 +314,6 @@ export async function getUngroupedCardsByParentCard(parentCardId: string): Promi
   const data = await loadKanbanData();
   return data.cards
     .filter((c) => c.parentCardId === parentCardId && !c.cardGroupId && !c.archived)
-    .sort((a, b) => a.position - b.position);
+    .sort((a, b) => a.position - b.position)
+    .map(normalizeCard);
 }

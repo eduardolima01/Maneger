@@ -1,13 +1,33 @@
 import { loadKanbanData, saveKanbanData } from '@/Kanban/api/kanbanDataStore';
 import { generateId } from '@/lib/utils/uuid';
-import type { KanbanChecklistItem, ChecklistProgress } from '@/types/kanban.types';
+import type { KanbanChecklistItem, ChecklistProgress, ChecklistItemStatus } from '@/types/kanban.types';
 
 /**
- * Mantém o pai coerente com os filhos: sobe a cadeia a partir de `fromParentId` e deixa cada ancestral marcado
- * se, e somente se, TODOS os filhos diretos dele estão marcados. Ancestral sem filhos não é mexido (fica com o que
- * o usuário marcou). Opera em memória, sobre o `data` que o chamador vai salvar — não faz load/save próprio.
+ * Item salvo antes do campo `status` existir tinha `checked: boolean` — sem essa migração na leitura,
+ * `status` vem `undefined` pra todo item antigo (dropdown em branco, sync de pai comparando com 'done'/
+ * 'not_started' sempre falso). TODA leitura de checklistItems neste arquivo passa por aqui (`loadNormalized`
+ * em vez de `loadKanbanData` direto), pra nunca operar em cima do formato antigo sem querer.
  */
-function syncAncestorsChecked(items: KanbanChecklistItem[], fromParentId: string | null): void {
+function normalizeItem(item: KanbanChecklistItem): KanbanChecklistItem {
+  if (item.status) return item;
+  const legacy = item as unknown as { checked?: boolean };
+  return { ...item, status: legacy.checked ? 'done' : 'not_started' };
+}
+
+async function loadNormalized() {
+  const data = await loadKanbanData();
+  data.checklistItems = data.checklistItems.map(normalizeItem);
+  return data;
+}
+
+/**
+ * Mantém o pai coerente com os filhos: sobe a cadeia a partir de `fromParentId` e deriva o status de cada
+ * ancestral a partir dos filhos DIRETOS dele — todos 'done' → 'done'; todos 'not_started' → 'not_started';
+ * qualquer mistura (inclusive algum 'in_progress') → 'in_progress'. Ancestral sem filhos não é mexido (fica
+ * com o que o usuário marcou nele). Opera em memória, sobre o `data` que o chamador vai salvar — não faz
+ * load/save próprio.
+ */
+function syncAncestorsStatus(items: KanbanChecklistItem[], fromParentId: string | null): void {
   const visited = new Set<string>(); // defesa contra ciclo nos dados
   let parentId = fromParentId;
   while (parentId && !visited.has(parentId)) {
@@ -17,13 +37,15 @@ function syncAncestorsChecked(items: KanbanChecklistItem[], fromParentId: string
     if (!parent) return;
     const children = items.filter((i) => i.parentItemId === currentId);
     if (children.length === 0) return;
-    parent.checked = children.every((c) => c.checked);
+    if (children.every((c) => c.status === 'done')) parent.status = 'done';
+    else if (children.every((c) => c.status === 'not_started')) parent.status = 'not_started';
+    else parent.status = 'in_progress';
     parentId = parent.parentItemId ?? null;
   }
 }
 
 export async function getItemsByCard(cardId: string): Promise<KanbanChecklistItem[]> {
-  const data = await loadKanbanData();
+  const data = await loadNormalized();
   return data.checklistItems
     .filter((item) => item.cardId === cardId)
     .sort((a, b) => a.position - b.position);
@@ -34,7 +56,7 @@ export async function createItem(cardId: string, title: string): Promise<string>
 }
 
 async function createItemInternal(cardId: string, parentItemId: string | null, title: string): Promise<string> {
-  const data = await loadKanbanData();
+  const data = await loadNormalized();
   const id = generateId();
 
   const siblings = parentItemId
@@ -42,8 +64,8 @@ async function createItemInternal(cardId: string, parentItemId: string | null, t
     : data.checklistItems.filter((item) => item.cardId === cardId && !item.parentItemId);
   const nextPosition = siblings.length > 0 ? Math.max(...siblings.map((item) => item.position)) + 1 : 0;
 
-  data.checklistItems.push({ id, cardId, parentItemId, title, checked: false, position: nextPosition });
-  syncAncestorsChecked(data.checklistItems, parentItemId); // sub-item novo nasce desmarcado: o pai (e os acima dele) deixa de estar 'completo'
+  data.checklistItems.push({ id, cardId, parentItemId, title, status: 'not_started', position: nextPosition });
+  syncAncestorsStatus(data.checklistItems, parentItemId); // sub-item novo nasce 'not_started': o pai (e os acima dele) deixa de estar 'done'
   await saveKanbanData(data);
   return id;
 }
@@ -52,17 +74,17 @@ export async function createSubItem(cardId: string, parentItemId: string, title:
   return createItemInternal(cardId, parentItemId, title);
 }
 
-export async function updateItem(id: string, input: Partial<{ title: string; checked: boolean }>): Promise<void> {
-  const data = await loadKanbanData();
+export async function updateItem(id: string, input: Partial<{ title: string; status: ChecklistItemStatus }>): Promise<void> {
+  const data = await loadNormalized();
   const item = data.checklistItems.find((i) => i.id === id);
   if (!item) return;
 
   let changed = false;
   if (input.title !== undefined) { item.title = input.title; changed = true; }
-  if (input.checked !== undefined) { item.checked = input.checked; changed = true; }
+  if (input.status !== undefined) { item.status = input.status; changed = true; }
   if (!changed) return;
 
-  if (input.checked !== undefined) syncAncestorsChecked(data.checklistItems, item.parentItemId ?? null);
+  if (input.status !== undefined) syncAncestorsStatus(data.checklistItems, item.parentItemId ?? null);
   await saveKanbanData(data);
 }
 
@@ -73,7 +95,7 @@ export async function updateItem(id: string, input: Partial<{ title: string; che
  * migração em que a versão JSON precisa de MAIS cuidado que a SQL, não menos.
  */
 export async function deleteItem(id: string): Promise<void> {
-  const data = await loadKanbanData();
+  const data = await loadNormalized();
 
   const removedParentId = data.checklistItems.find((i) => i.id === id)?.parentItemId ?? null;
   const idsToRemove = new Set([id]);
@@ -89,12 +111,12 @@ export async function deleteItem(id: string): Promise<void> {
   }
 
   data.checklistItems = data.checklistItems.filter((item) => !idsToRemove.has(item.id));
-  syncAncestorsChecked(data.checklistItems, removedParentId); // apagou o último sub-item pendente? o pai passa a estar completo
+  syncAncestorsStatus(data.checklistItems, removedParentId); // apagou o último sub-item pendente? o pai passa a estar 'done'
   await saveKanbanData(data);
 }
 
 export async function reorderItems(orderedIds: string[]): Promise<void> {
-  const data = await loadKanbanData();
+  const data = await loadNormalized();
   orderedIds.forEach((id, index) => {
     const item = data.checklistItems.find((i) => i.id === id);
     if (item) item.position = index;
@@ -107,13 +129,13 @@ export async function getProgressByCardIds(cardIds: string[]): Promise<Record<st
   for (const id of cardIds) result[id] = { done: 0, total: 0 };
   if (cardIds.length === 0) return result;
 
-  const data = await loadKanbanData();
+  const data = await loadNormalized();
   const cardIdSet = new Set(cardIds);
   for (const item of data.checklistItems) {
     if (!cardIdSet.has(item.cardId)) continue;
     const progress = result[item.cardId];
     progress.total++;
-    if (item.checked) progress.done++;
+    if (item.status === 'done') progress.done++;
   }
   return result;
 }
@@ -139,7 +161,7 @@ export async function duplicateChecklist(sourceCardId: string, targetCardId: str
       const newId = targetParentId
         ? await createSubItem(targetCardId, targetParentId, item.title)
         : await createItem(targetCardId, item.title);
-      if (item.checked) await updateItem(newId, { checked: true });
+      if (item.status !== 'not_started') await updateItem(newId, { status: item.status });
       await copyLevel(item.id, newId);
     }
   }
@@ -154,7 +176,7 @@ export async function duplicateChecklist(sourceCardId: string, targetCardId: str
  * Recusa mover pra dentro de si mesmo ou de um descendente: criaria um ciclo e a árvore sumiria da tela.
  */
 export async function moveItem(id: string, newParentId: string | null, afterItemId?: string): Promise<void> {
-  const data = await loadKanbanData();
+  const data = await loadNormalized();
   const item = data.checklistItems.find((i) => i.id === id);
   if (!item) return;
   if ((item.parentItemId ?? null) === newParentId && !afterItemId) return;
@@ -190,8 +212,71 @@ export async function moveItem(id: string, newParentId: string | null, afterItem
   siblings.splice(insertAt, 0, item);
   siblings.forEach((s, index) => { s.position = index; });
 
-  syncAncestorsChecked(data.checklistItems, oldParentId); // o pai de onde saiu pode ter ficado completo
-  syncAncestorsChecked(data.checklistItems, newParentId); // e o de onde entrou pode ter deixado de estar
+  syncAncestorsStatus(data.checklistItems, oldParentId); // o pai de onde saiu pode ter ficado 'done'
+  syncAncestorsStatus(data.checklistItems, newParentId); // e o de onde entrou pode ter deixado de estar
 
   await saveKanbanData(data);
+}
+
+export interface ParsedChecklistLine { title: string; status: ChecklistItemStatus; depth: number }
+
+/**
+ * Aceita `- [ ] Texto` (não iniciado) / `- [~] Texto` ou `- [-] Texto` (em andamento) / `- [x] Texto`
+ * (`x` case-insensitive, feito), marcador `-`/`*` opcional, e até uma linha "pelada" (só o texto, vira item
+ * não iniciado) — não obriga a sintaxe toda pra não travar quem só quer colar uma lista rápida. Indentação:
+ * 2 espaços = 1 nível; um `\t` conta como 2 espaços pro cálculo. Linha em branco é ignorada (não vira item
+ * vazio nem quebra a contagem de profundidade das linhas ao redor).
+ */
+export function parseChecklistText(text: string): ParsedChecklistLine[] {
+  const result: ParsedChecklistLine[] = [];
+  for (const rawLine of text.split('\n')) {
+    if (!rawLine.trim()) continue;
+    const leading = rawLine.match(/^[ \t]*/)?.[0] ?? '';
+    const spaceUnits = leading.replace(/\t/g, '  ').length;
+    const depth = Math.floor(spaceUnits / 2);
+    const rest = rawLine.trim().replace(/^[-*]\s*/, '');
+    const checkboxMatch = rest.match(/^\[( |x|X|~|-)\]\s*(.*)$/);
+    if (checkboxMatch) {
+      const mark = checkboxMatch[1].toLowerCase();
+      const status: ChecklistItemStatus = mark === 'x' ? 'done' : (mark === '~' || mark === '-') ? 'in_progress' : 'not_started';
+      result.push({ title: checkboxMatch[2].trim(), status, depth });
+    } else {
+      result.push({ title: rest, status: 'not_started', depth });
+    }
+  }
+  return result;
+}
+
+/**
+ * Substitui A CHECKLIST INTEIRA do card pelo que está em `text` (formato de parseChecklistText). Mais simples
+ * e confiável do que tentar casar cada linha do texto editado com um item existente por id — o preço é que os
+ * ids antigos se perdem (não tem nada de fora do card referenciando item de checklist por id, então tudo bem).
+ * `status` de uma linha COM filhos é ignorado de propósito: igual ao resto do app, o estado do pai é sempre
+ * DERIVADO dos filhos (syncAncestorsStatus), nunca lido diretamente do que o usuário marcou na linha do pai.
+ */
+export async function replaceAllFromText(cardId: string, text: string): Promise<void> {
+  const parsed = parseChecklistText(text);
+
+  const data = await loadNormalized();
+  data.checklistItems = data.checklistItems.filter((i) => i.cardId !== cardId);
+  await saveKanbanData(data);
+
+  const hasChildAt = parsed.map((line, idx) => {
+    const next = parsed[idx + 1];
+    return !!next && next.depth > line.depth;
+  });
+
+  const stack: (string | null)[] = [null]; // índice = depth, valor = id do item pai naquele nível
+  const leafStatuses: { id: string; status: ChecklistItemStatus }[] = []; // itens SEM filhos com status != not_started — setados por último, sync sobe sozinho
+
+  for (let i = 0; i < parsed.length; i++) {
+    const { title, status, depth } = parsed[i];
+    const parentId = depth === 0 ? null : stack[depth - 1] ?? null;
+    const id = parentId ? await createSubItem(cardId, parentId, title) : await createItem(cardId, title);
+    stack[depth] = id;
+    stack.length = depth + 1; // sair de um nível invalida qualquer ancestral mais fundo que já não é mais "o atual"
+    if (status !== 'not_started' && !hasChildAt[i]) leafStatuses.push({ id, status });
+  }
+
+  for (const { id, status } of leafStatuses) await updateItem(id, { status });
 }

@@ -216,7 +216,9 @@ export default function KanbanCard({
   useEffect(() => {
     if (!hovering) return;
     function handleKeyDown(e: KeyboardEvent) {
-      if ((e.key === 'q' || e.key === 'Q') && !contextMenu && !labelMenu) {
+      const target = e.target as HTMLElement | null;
+      const typingInField = !!target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable);
+      if ((e.key === 'q' || e.key === 'Q') && !typingInField && !contextMenu && !labelMenu) {
         e.preventDefault();
         onRequestDelete();
         return;
@@ -535,6 +537,7 @@ export default function KanbanCard({
           (isVisualVisible('labels') && card.labels.length > 0) ||
           (isVisualVisible('dueDate') && card.dueDate) ||
           (isVisualVisible('status') && card.status) ||
+          (isVisualVisible('schedules') && (card.schedules ?? []).length > 0) ||
           (isVisualVisible('timer') && displayedTimerSeconds > 0)
         ) && (
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, fontSize: 10, alignItems: 'center' }}>
@@ -558,6 +561,15 @@ export default function KanbanCard({
                 const info = getDueDateInfo(card.dueDate);
                 return <span style={{ color: info.color, fontWeight: info.color === '#666' ? 400 : 600 }}>📅 {info.label}</span>;
               })()}
+
+              {isVisualVisible('schedules') && (card.schedules ?? []).length > 0 && (
+                <span
+                  title={card.schedules.map((s) => (s.title ? `${s.time} ${s.title}` : s.time)).join('\n')}
+                  style={{ color: '#666' }}
+                >
+                  🕐 {card.schedules.map((s) => s.time).join(', ')}
+                </span>
+              )}
 
               {isVisualVisible('timer') && displayedTimerSeconds > 0 && (
                 <span style={{ color: hasOpenTimer && globalTimer.running ? '#2e7d32' : '#666' }}>

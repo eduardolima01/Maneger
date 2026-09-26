@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import * as api from '@/lib/api/kanban/kanbanChecklist';
-import type { KanbanChecklistItem } from '@/types/kanban.types';
+import type { KanbanChecklistItem, ChecklistItemStatus } from '@/types/kanban.types';
 
 export function useCardChecklist(cardId: string) {
   const [items, setItems] = useState<KanbanChecklistItem[]>([]);
@@ -33,8 +33,8 @@ export function useCardChecklist(cardId: string) {
     await reload();
   }, [cardId, reload]);
 
-  const toggle = useCallback(async (id: string, checked: boolean) => {
-    await api.updateItem(id, { checked });
+  const setStatus = useCallback(async (id: string, status: ChecklistItemStatus) => {
+    await api.updateItem(id, { status });
     await reload();
   }, [reload]);
 
@@ -71,5 +71,11 @@ export function useCardChecklist(cardId: string) {
     }
   }, [reorderLocally, reload]);
 
-  return { items, loading, create, createSubItem, toggle, rename, remove, reorder, move };
+  /** Reconstrói a checklist inteira a partir de texto (modo texto ↔ visual). Ver aviso em kanbanChecklist.ts sobre ids. */
+  const replaceAllFromText = useCallback(async (text: string) => {
+    await api.replaceAllFromText(cardId, text);
+    await reload();
+  }, [cardId, reload]);
+
+  return { items, loading, create, createSubItem, setStatus, rename, remove, reorder, move, replaceAllFromText };
 }
