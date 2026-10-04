@@ -57,18 +57,26 @@ export default function LabelGroupBlock({
 
   return (
     <div style={{ marginBottom: 8 }}>
-      <div ref={setNodeRef} style={{ border: '2px dashed #c7c7c7', borderRadius: 6, padding: 6, backgroundColor: isOver ? '#e8f0fe' : '#f5f5f5' }}>
+      <div
+        ref={setNodeRef}
+        className={[
+          'border-2 border-dashed border-neutral-300 dark:border-neutral-600 text-neutral-900 dark:text-neutral-100',
+          isOver ? 'bg-blue-50 dark:bg-blue-950' : 'bg-neutral-100 dark:bg-neutral-900',
+        ].join(' ')}
+        style={{ borderRadius: 6, padding: 6 }}
+      >
         <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginBottom: 6 }}>
           <button
             onClick={() => setCollapsed((v) => !v)}
-            style={{ border: 'none', background: 'none', cursor: 'pointer', fontSize: 10, color: '#666', padding: 0 }}
+            className="text-neutral-500 dark:text-neutral-400"
+            style={{ border: 'none', background: 'none', cursor: 'pointer', fontSize: 10, padding: 0 }}
           >
             {collapsed ? '▶' : '▼'}
           </button>
-          <span title="Subgrupo por etiqueta" style={{ color: '#999', fontSize: 11 }}>🏷</span>
+          <span title="Subgrupo por etiqueta" className="text-neutral-400 dark:text-neutral-500" style={{ fontSize: 11 }}>🏷</span>
           <span style={{ width: 8, height: 8, borderRadius: '50%', backgroundColor: color, flexShrink: 0 }} />
           <span style={{ flex: 1, fontSize: 12, fontWeight: 600 }}>{name}</span>
-          <span style={{ fontSize: 10, color: '#999' }}>({cards.length})</span>
+          <span className="text-neutral-400 dark:text-neutral-500" style={{ fontSize: 10 }}>({cards.length})</span>
         </div>
 
         {!collapsed && (

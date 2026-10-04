@@ -27,6 +27,8 @@ import CardFilesSection from '@/Kanban/components/Cardfilessection';
 import { useCardMove } from '@/lib/utils/CardMoveContext';
 import { useLabelIcons } from '@/Kanban/hooks/Labeliconcontext';
 import LabelIconBadge from '@/Kanban/components/LabelIconBadge';
+import CopyTitleButton from '@/Kanban/components/CopyTitleButton';
+import { getRelativeDue } from '@/Kanban/utils/relativeDate';
 
 interface KanbanCardProps {
   card: CardType;
@@ -58,22 +60,11 @@ interface KanbanCardProps {
   onBulkToggleLabel: (cardIds: string[], name: string, color: string, isGroup: boolean) => void;
 }
 
-function getDueDateInfo(dueDate: string): { label: string; color: string } {
-  // dueDate vem de <input type="date"> como "YYYY-MM-DD". Parsear com T00:00:00
-  // força horário local — sem isso, new Date('2026-08-25') é interpretado como
-  // UTC meia-noite e pode virar o dia anterior/seguinte dependendo do fuso.
-  const due = new Date(`${dueDate}T00:00:00`);
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  const diffDays = Math.round((due.getTime() - today.getTime()) / 86400000);
-
-  if (diffDays < 0) {
-    const days = Math.abs(diffDays);
-    return { label: `${days} dia${days !== 1 ? 's' : ''} atrás`, color: '#e65100' };
-  }
-  if (diffDays === 0) return { label: 'hoje', color: '#e65100' };
-  if (diffDays <= 3) return { label: `${diffDays} dia${diffDays !== 1 ? 's' : ''}`, color: '#e65100' };
-  return { label: `${diffDays} dias`, color: '#666' };
+function getDueDateInfo(dueDate: string): { label: string; color: string; title: string } {
+  // Texto ("hoje", "falta 1 dia", "faltam 3 dias", "há 2 dias") vem do utilitário compartilhado (também usado na árvore e no modal).
+  const { label, diffDays, title } = getRelativeDue(dueDate);
+  // vencido, hoje ou nos próximos 3 dias = laranja de urgência; o resto = neutro
+  return { label, title, color: diffDays <= 3 ? '#e65100' : '#666' };
 }
 
 export default function KanbanCard({
@@ -376,6 +367,7 @@ export default function KanbanCard({
         {...attributes}
         {...listeners}
         data-kanban-card={card.id}
+        className={`bg-white dark:bg-neutral-800 text-neutral-900 dark:text-neutral-100 ${card.color ? '' : 'border-neutral-200 dark:border-neutral-700'}`}
         onClickCapture={(e) => { if (e.ctrlKey || e.metaKey) ctrlUsedForClickRef.current = true; }}
         onClick={(e) => {
           if (e.ctrlKey || e.metaKey) { e.stopPropagation(); onCardSelectToggle(card.id); return; }
@@ -389,17 +381,31 @@ export default function KanbanCard({
           transform: CSS.Transform.toString(transform),
           transition,
           opacity: isDragging ? 0.4 : 1,
-          border: card.color ? `1px solid ${card.color}` : '1px solid #e5e7eb',
+          borderWidth: 1, borderStyle: 'solid', borderColor: card.color ?? undefined,
           borderLeft: card.labels.length > 0 ? `4px solid ${parseLabel(card.labels[0]).color}` : (card.color ? `4px solid ${card.color}` : undefined),
           outline: selected ? '2px solid #1a73e8' : 'none',
           outlineOffset: selected ? -2 : 0,
           borderRadius: 6,
           padding: compact ? 6 : 10,
           marginBottom: 8,
-          backgroundColor: '#fff',
           cursor: 'grab',
         }}
       >
+        {isVisualVisible('notes') && card.notes && (
+          <div
+            onPointerDown={(e) => e.stopPropagation()}
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              position: 'absolute', top: 2, right: 22, maxWidth: 'calc(100% - 30px)', width: 'fit-content',
+              backgroundColor: card.notesColor ?? '#fff9c4', border: '1px solid rgba(0,0,0,0.15)', borderRadius: 3,
+              padding: '2px 5px', fontSize: 10, color: '#4a3f00', whiteSpace: 'pre-wrap', wordBreak: 'break-word',
+              zIndex: 1,
+            }}
+          >
+            {card.notes}
+          </div>
+        )}
+
         <div
           onMouseEnter={(e) => {
             cancelClose();
@@ -419,7 +425,7 @@ export default function KanbanCard({
             display: 'flex', alignItems: 'center', justifyContent: 'center',
           }}
         >
-          {hovering && <span style={{ fontSize: 11, color: '#bbb' }}>⋮</span>}
+          {hovering && <span className="text-neutral-400 dark:text-neutral-500" style={{ fontSize: 11 }}>⋮</span>}
         </div>
 
         {!compact && isVisualVisible('cover') && card.coverPath
@@ -428,9 +434,10 @@ export default function KanbanCard({
             <div
               onClick={(e) => { e.stopPropagation(); setCoverZoomOpen(true); }}
               onPointerDown={(e) => e.stopPropagation()}
+              className="bg-neutral-100 dark:bg-neutral-700"
               style={{
                 width: '100%', height: 80, borderRadius: 4, marginBottom: 6,
-                backgroundColor: '#f0f0f0', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
                 overflow: 'hidden', cursor: 'zoom-in',
               }}
             >
@@ -457,26 +464,31 @@ export default function KanbanCard({
               }}
               onClick={(e) => e.stopPropagation()}
               onPointerDown={(e) => e.stopPropagation()}
+              className="bg-white dark:bg-neutral-900 text-neutral-900 dark:text-neutral-100"
               style={{
                 fontSize: compact ? 12 : 13, fontWeight: 500, flex: 1,
                 border: 'none', outline: '1px solid #1a73e8', borderRadius: 3, padding: '0 2px',
-                background: '#fff', fontFamily: 'inherit',
+                fontFamily: 'inherit',
               }}
             />
           ) : (
-            <span
-              onClick={(e) => { e.stopPropagation(); setTitleDraft(card.title); setEditingTitle(true); }}
-              onPointerDown={(e) => e.stopPropagation()}
-              onMouseEnter={() => setTitleHover(true)}
-              onMouseLeave={() => setTitleHover(false)}
-              className="w-fit"
-              style={{
-                fontSize: compact ? 12 : 13, fontWeight: 500, flex: 1,
-                textDecoration: titleHover ? 'underline' : 'none',
-                cursor: 'text',
-              }}
-            >
-              {card.title}
+            // título + botão de copiar: o botão só aparece com o mouse sobre este bloco (group/title)
+            <span className="group/title" style={{ display: 'inline-flex', alignItems: 'center', gap: 4, flex: 1 }}>
+              <span
+                onClick={(e) => { e.stopPropagation(); setTitleDraft(card.title); setEditingTitle(true); }}
+                onPointerDown={(e) => e.stopPropagation()}
+                onMouseEnter={() => setTitleHover(true)}
+                onMouseLeave={() => setTitleHover(false)}
+                className="w-fit text-neutral-900 dark:text-neutral-100"
+                style={{
+                  fontSize: compact ? 12 : 13, fontWeight: 500, flex: 1,
+                  textDecoration: titleHover ? 'underline' : 'none',
+                  cursor: 'text',
+                }}
+              >
+                {card.title}
+              </span>
+              <CopyTitleButton text={card.title} size={compact ? 11 : 12} />
             </span>
           )}
           {isVisualVisible('subKanbanBadge') && hasSubKanban && (
@@ -495,6 +507,9 @@ export default function KanbanCard({
           {isVisualVisible('planBadge') && card.isPlanTemplate && (
             <span
               title={card.planActive ? 'Plano ativo' : 'Plano inativo'}
+              className={card.planActive
+                ? 'bg-violet-100 text-violet-700 dark:bg-violet-900/40 dark:text-violet-300'
+                : 'bg-neutral-100 text-neutral-500 dark:bg-neutral-700 dark:text-neutral-400'}
               style={{
                 fontSize: 10,
                 fontWeight: 600,
@@ -503,8 +518,6 @@ export default function KanbanCard({
                 display: 'inline-flex',
                 alignItems: 'center',
                 gap: 2,
-                backgroundColor: card.planActive ? '#ede7f6' : '#f0f0f0',
-                color: card.planActive ? '#5e35b1' : '#888',
                 flexShrink: 0,
               }}
             >
@@ -514,7 +527,8 @@ export default function KanbanCard({
           {isVisualVisible('timer') && hasOpenTimer && (
             <span
               title={globalTimer.running ? 'Cronômetro rodando' : 'Cronômetro pausado, sessão em aberto'}
-              style={{ fontSize: 11, color: globalTimer.running ? '#2e7d32' : '#e65100' }}
+              className={globalTimer.running ? 'text-green-700 dark:text-green-400' : 'text-orange-700 dark:text-orange-400'}
+              style={{ fontSize: 11 }}
             >
               {globalTimer.running ? '⏱' : '⏸'}
             </span>
@@ -528,7 +542,7 @@ export default function KanbanCard({
         </div>
 
         {!compact && isVisualVisible('description') && card.description && (
-          <p style={{ fontSize: 11, color: '#666', margin: '0 0 6px', overflow: 'hidden', textOverflow: 'ellipsis', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}>
+          <p className="text-neutral-500 dark:text-neutral-400" style={{ fontSize: 11, margin: '0 0 6px', overflow: 'hidden', textOverflow: 'ellipsis', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}>
             {card.description}
           </p>
         )}
@@ -542,7 +556,7 @@ export default function KanbanCard({
         ) && (
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, fontSize: 10, alignItems: 'center' }}>
               {isVisualVisible('status') && card.status && (
-                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3, color: '#666', fontWeight: 500 }}>
+                <span className="text-neutral-500 dark:text-neutral-400" style={{ display: 'inline-flex', alignItems: 'center', gap: 3, fontWeight: 500 }}>
                   <span style={{ width: 6, height: 6, borderRadius: '50%', backgroundColor: STATUS_COLORS[card.status], flexShrink: 0 }} />
                   {STATUS_LABELS[card.status]}
                 </span>
@@ -559,27 +573,36 @@ export default function KanbanCard({
 
               {isVisualVisible('dueDate') && card.dueDate && (() => {
                 const info = getDueDateInfo(card.dueDate);
-                return <span style={{ color: info.color, fontWeight: info.color === '#666' ? 400 : 600 }}>📅 {info.label}</span>;
+                const neutral = info.color === '#666'; // "sem urgência" — cor neutra do tema; as urgentes (laranja) ficam fixas
+                return (
+                  <span
+                    title={info.title}
+                    className={neutral ? 'text-neutral-500 dark:text-neutral-400' : 'dark:brightness-125'}
+                    style={{ color: neutral ? undefined : info.color, fontWeight: neutral ? 400 : 600 }}
+                  >
+                    📅 {info.label}
+                  </span>
+                );
               })()}
 
               {isVisualVisible('schedules') && (card.schedules ?? []).length > 0 && (
                 <span
                   title={card.schedules.map((s) => (s.title ? `${s.time} ${s.title}` : s.time)).join('\n')}
-                  style={{ color: '#666' }}
+                  className="text-neutral-500 dark:text-neutral-400"
                 >
                   🕐 {card.schedules.map((s) => s.time).join(', ')}
                 </span>
               )}
 
               {isVisualVisible('timer') && displayedTimerSeconds > 0 && (
-                <span style={{ color: hasOpenTimer && globalTimer.running ? '#2e7d32' : '#666' }}>
+                <span className={hasOpenTimer && globalTimer.running ? 'text-green-700 dark:text-green-400' : 'text-neutral-500 dark:text-neutral-400'}>
                   ⏱ {formatCardTimerTotal(displayedTimerSeconds)}
                 </span>
               )}
             </div>
           )}
 
-        {!compact && isVisualVisible('checklist') && (checklistOpen || (displayedChecklistProgress && displayedChecklistProgress.total > 0)) && (
+        {!compact && isVisualVisible('checklist') && (checklistOpen || (displayedChecklistProgress && (displayedChecklistProgress.total > 0 || (displayedChecklistProgress.simpleCount ?? 0) > 0))) && (
           <div onClick={(e) => e.stopPropagation()} onPointerDown={(e) => e.stopPropagation()}>
             <button
               onClick={() => setChecklistOpen((v) => {
@@ -587,16 +610,25 @@ export default function KanbanCard({
                 if (!next) setLiveChecklistProgress(null); // ao fechar, volta a confiar no prop (mais fresco na próxima recarga do board)
                 return next;
               })}
+              className={displayedChecklistProgress && displayedChecklistProgress.total > 0
+                ? (displayedChecklistProgress.done === displayedChecklistProgress.total
+                  ? 'text-emerald-600 dark:text-emerald-400'
+                  : 'text-neutral-500 dark:text-neutral-400')
+                : 'text-neutral-400 dark:text-neutral-500'}
               style={{
                 display: 'flex', alignItems: 'center', gap: 4, fontSize: 10, marginTop: 4,
-                color: displayedChecklistProgress && displayedChecklistProgress.total > 0
-                  ? (displayedChecklistProgress.done === displayedChecklistProgress.total ? '#33b679' : '#666')
-                  : '#999',
                 background: 'none', border: 'none', cursor: 'pointer', padding: '2px 0',
               }}
             >
               <span>{checklistOpen ? '▾' : '▸'}</span>
-              <span>☑ {displayedChecklistProgress && displayedChecklistProgress.total > 0 ? `${displayedChecklistProgress.done}/${displayedChecklistProgress.total}` : 'Checklist'}</span>
+              <span>
+                {displayedChecklistProgress && displayedChecklistProgress.total > 0
+                  ? `☑ ${displayedChecklistProgress.done}/${displayedChecklistProgress.total}`
+                  : (displayedChecklistProgress?.simpleCount ?? 0) > 0
+                    // só tem itens de lista simples: não há "feito/total" (eles não contam), mostra quantos itens existem
+                    ? `☰ ${displayedChecklistProgress!.simpleCount} item${displayedChecklistProgress!.simpleCount !== 1 ? 's' : ''}`
+                    : '☑ Checklist'}
+              </span>
             </button>
             {checklistOpen && <InlineChecklist cardId={card.id} onProgressChange={setLiveChecklistProgress} />}
           </div>
@@ -606,8 +638,9 @@ export default function KanbanCard({
           <button
             onClick={(e) => { e.stopPropagation(); setExpanded((v) => !v); }}
             onPointerDown={(e) => e.stopPropagation()}
+            className="text-neutral-400 dark:text-neutral-500"
             style={{
-              width: '100%', textAlign: 'center', fontSize: 10, color: '#bbb',
+              width: '100%', textAlign: 'center', fontSize: 10,
               border: 'none', background: 'none', cursor: 'pointer', padding: '4px 0 0', marginTop: 4,
             }}
           >
@@ -619,10 +652,11 @@ export default function KanbanCard({
           <div
             onClick={(e) => e.stopPropagation()}
             onPointerDown={(e) => e.stopPropagation()}
-            style={{ marginTop: 8, paddingTop: 8, borderTop: '1px dashed #ddd', display: 'flex', flexDirection: 'column', gap: 10 }}
+            className="border-t border-dashed border-neutral-300 dark:border-neutral-600"
+            style={{ marginTop: 8, paddingTop: 8, display: 'flex', flexDirection: 'column', gap: 10 }}
           >
             <div>
-              <label style={{ fontSize: 10, fontWeight: 600, color: '#999', display: 'block', marginBottom: 2 }}>Descrição</label>
+              <label className="text-neutral-400 dark:text-neutral-500" style={{ fontSize: 10, fontWeight: 600, display: 'block', marginBottom: 2 }}>Descrição</label>
               <textarea
                 defaultValue={card.description ?? ''}
                 onBlur={(e) => {
@@ -631,47 +665,50 @@ export default function KanbanCard({
                 }}
                 rows={3}
                 placeholder="Sem descrição..."
+                className="bg-white dark:bg-neutral-900 text-neutral-900 dark:text-neutral-100 border border-neutral-300 dark:border-neutral-600"
                 style={{ width: '100%', fontSize: 11, padding: 4, fontFamily: 'inherit', resize: 'vertical', boxSizing: 'border-box' }}
               />
             </div>
 
             <div style={{ display: 'flex', gap: 8 }}>
               <div style={{ flex: 1 }}>
-                <label style={{ fontSize: 10, fontWeight: 600, color: '#999', display: 'block', marginBottom: 2 }}>Início</label>
+                <label className="text-neutral-400 dark:text-neutral-500" style={{ fontSize: 10, fontWeight: 600, display: 'block', marginBottom: 2 }}>Início</label>
                 <input
                   type="date"
                   value={card.startDate ?? ''}
                   onChange={(e) => onUpdateStartDate(card.id, e.target.value || null)}
+                  className="bg-white dark:bg-neutral-900 text-neutral-900 dark:text-neutral-100 border border-neutral-300 dark:border-neutral-600 dark:[color-scheme:dark]"
                   style={{ width: '100%', fontSize: 11, padding: 4, boxSizing: 'border-box' }}
                 />
               </div>
               <div style={{ flex: 1 }}>
-                <label style={{ fontSize: 10, fontWeight: 600, color: '#999', display: 'block', marginBottom: 2 }}>Prazo</label>
+                <label className="text-neutral-400 dark:text-neutral-500" style={{ fontSize: 10, fontWeight: 600, display: 'block', marginBottom: 2 }}>Prazo</label>
                 <input
                   type="date"
                   value={card.dueDate ?? ''}
                   onChange={(e) => onUpdateCardDueDate(card.id, e.target.value || null)}
+                  className="bg-white dark:bg-neutral-900 text-neutral-900 dark:text-neutral-100 border border-neutral-300 dark:border-neutral-600 dark:[color-scheme:dark]"
                   style={{ width: '100%', fontSize: 11, padding: 4, boxSizing: 'border-box' }}
                 />
               </div>
             </div>
 
             <div>
-              <label style={{ fontSize: 10, fontWeight: 600, color: '#999', display: 'block', marginBottom: 2 }}>Checklist</label>
+              <label className="text-neutral-400 dark:text-neutral-500" style={{ fontSize: 10, fontWeight: 600, display: 'block', marginBottom: 2 }}>Checklist</label>
               <InlineChecklist cardId={card.id} onProgressChange={setLiveChecklistProgress} />
             </div>
 
-            <CardFilesSection cardId={card.id} />
+            <CardFilesSection cardId={card.id} onSetCover={(path) => onUpdateCoverPath(card.id, path)} />
           </div>
         )}
 
         {isVisualVisible('timer') && displayedTimerSeconds > 0 && (
           <span
             title={hasOpenTimer && globalTimer.running ? 'Cronômetro rodando' : 'Tempo total registrado'}
+            className={`bg-white/85 dark:bg-neutral-900/85 ${hasOpenTimer && globalTimer.running ? 'text-green-700 dark:text-green-400' : 'text-neutral-400 dark:text-neutral-500'}`}
             style={{
               position: 'absolute', bottom: 4, right: 4, fontSize: 10,
-              color: hasOpenTimer && globalTimer.running ? '#2e7d32' : '#999',
-              backgroundColor: 'rgba(255,255,255,0.85)', padding: '1px 4px', borderRadius: 3,
+              padding: '1px 4px', borderRadius: 3,
             }}
           >
             ⏱ {formatCardTimerTotal(displayedTimerSeconds)}

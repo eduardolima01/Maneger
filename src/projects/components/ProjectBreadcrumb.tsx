@@ -12,10 +12,21 @@ export default function ProjectBreadcrumb({ projectId, refreshToken }: ProjectBr
   if (loading || path.length === 0) return null;
 
   return (
-    <nav style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 4, fontSize: 13, color: '#666', marginBottom: 12 }}>
+    <nav
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        flexWrap: 'nowrap',
+        gap: 4,
+        fontSize: 13,
+        color: '#666',
+        overflowX: 'auto',
+        whiteSpace: 'nowrap',
+      }}
+    >
       <Link
         to="/projects"
-        style={{ color: '#666' }}
+        style={{ color: '#666', flexShrink: 0 }}
         className="hover:underline"
       >
         🏠 Projetos
@@ -25,7 +36,7 @@ export default function ProjectBreadcrumb({ projectId, refreshToken }: ProjectBr
         const isLast = i === path.length - 1;
         return (
           <span key={p.id}
-            style={{ display: 'flex', alignItems: 'center', gap: 4, minWidth: 0 }}>
+            style={{ display: 'flex', alignItems: 'center', gap: 4, minWidth: 0, flexShrink: 0 }}>
             <span style={{ color: '#ccc' }}>/</span>
             {isLast ? (
               <span

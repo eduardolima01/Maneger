@@ -1,7 +1,10 @@
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
+use tauri::{AppHandle, Manager};
+use tauri_plugin_clipboard_manager::ClipboardExt;
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct FsEntry {
@@ -338,4 +341,160 @@ pub fn read_text_file(path: String) -> Result<String, String> {
 pub fn write_text_file(path: String, content: String) -> Result<(), String> {
     let target = ensure_within_home(&path)?;
     fs::write(&target, content).map_err(|e| e.to_string())
+}
+
+// ---------------------------------------------------------------------------
+// Ícone customizado de pasta
+//
+// Decisão de escopo (Parte 9): a imagem final e o manifesto (pasta -> arquivo)
+// ficam só em `app_data_dir()/folder-icons/`, nunca dentro da pasta do usuário
+// — diferente do resto do módulo (que mexe em arquivos reais do usuário),
+// aqui é puramente configuração/preferência do app.
+// ---------------------------------------------------------------------------
+
+fn folder_icons_dir(app: &AppHandle) -> Result<PathBuf, String> {
+    let dir = app
+        .path()
+        .app_data_dir()
+        .map_err(|e| e.to_string())?
+        .join("folder-icons");
+    fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+    Ok(dir)
+}
+
+fn folder_icons_manifest_path(app: &AppHandle) -> Result<PathBuf, String> {
+    Ok(folder_icons_dir(app)?.join("manifest.json"))
+}
+
+/// Manifesto: path da pasta (canônico) -> nome do arquivo de imagem dentro de `folder_icons_dir`.
+fn load_folder_icons_manifest(app: &AppHandle) -> Result<HashMap<String, String>, String> {
+    let path = folder_icons_manifest_path(app)?;
+    if !path.exists() {
+        return Ok(HashMap::new());
+    }
+    let content = fs::read_to_string(&path).map_err(|e| e.to_string())?;
+    if content.trim().is_empty() {
+        return Ok(HashMap::new());
+    }
+    serde_json::from_str(&content).map_err(|e| e.to_string())
+}
+
+fn save_folder_icons_manifest(
+    app: &AppHandle,
+    manifest: &HashMap<String, String>,
+) -> Result<(), String> {
+    let path = folder_icons_manifest_path(app)?;
+    let content = serde_json::to_string_pretty(manifest).map_err(|e| e.to_string())?;
+    fs::write(&path, content).map_err(|e| e.to_string())
+}
+
+/// Troca o ícone salvo pra `folder_key`, removendo o arquivo de imagem antigo (se houver)
+/// antes de gravar o novo nome no manifesto. Não falha se o arquivo antigo já tiver sumido.
+fn replace_folder_icon_file(
+    manifest: &mut HashMap<String, String>,
+    dir: &Path,
+    folder_key: &str,
+    new_file_name: String,
+) {
+    if let Some(old_file_name) = manifest.get(folder_key) {
+        let _ = fs::remove_file(dir.join(old_file_name));
+    }
+    manifest.insert(folder_key.to_string(), new_file_name);
+}
+
+/// Carrega o manifesto inteiro de uma vez (path da pasta -> path absoluto do arquivo de
+/// ícone), pro front cachear tudo na inicialização em vez de perguntar item por item.
+#[tauri::command]
+pub fn get_folder_icons(app: AppHandle) -> Result<HashMap<String, String>, String> {
+    let manifest = load_folder_icons_manifest(&app)?;
+    let dir = folder_icons_dir(&app)?;
+    Ok(manifest
+        .into_iter()
+        .map(|(folder_path, file_name)| {
+            (
+                folder_path,
+                dir.join(file_name).to_string_lossy().to_string(),
+            )
+        })
+        .collect())
+}
+
+/// `source_image_path` é o path devolvido pelo diálogo de arquivo do front
+/// (`tauri-plugin-dialog`) — não precisa estar dentro da Home, é só lido uma vez pra copiar.
+#[tauri::command]
+pub fn set_folder_icon_from_path(
+    app: AppHandle,
+    folder_path: String,
+    source_image_path: String,
+) -> Result<String, String> {
+    let target = ensure_within_home(&folder_path)?;
+    if !target.is_dir() {
+        return Err("O caminho informado não é uma pasta.".to_string());
+    }
+    let source = PathBuf::from(&source_image_path);
+    if !source.is_file() {
+        return Err("Selecione um arquivo de imagem válido.".to_string());
+    }
+    let extension = source
+        .extension()
+        .map(|e| e.to_string_lossy().to_lowercase())
+        .unwrap_or_else(|| "png".to_string());
+
+    let dir = folder_icons_dir(&app)?;
+    let file_name = format!("{}.{}", uuid::Uuid::new_v4(), extension);
+    fs::copy(&source, dir.join(&file_name)).map_err(|e| e.to_string())?;
+
+    let key = target.to_string_lossy().to_string();
+    let mut manifest = load_folder_icons_manifest(&app)?;
+    replace_folder_icon_file(&mut manifest, &dir, &key, file_name.clone());
+    save_folder_icons_manifest(&app, &manifest)?;
+
+    Ok(dir.join(file_name).to_string_lossy().to_string())
+}
+
+/// Lê a imagem atual da área de transferência (RGBA cru) e converte pra PNG antes de salvar —
+/// o clipboard não entrega um arquivo pronto, só os pixels.
+#[tauri::command]
+pub fn set_folder_icon_from_clipboard(
+    app: AppHandle,
+    folder_path: String,
+) -> Result<String, String> {
+    let target = ensure_within_home(&folder_path)?;
+    if !target.is_dir() {
+        return Err("O caminho informado não é uma pasta.".to_string());
+    }
+
+    let image = app
+        .clipboard()
+        .read_image()
+        .map_err(|_| "Não há nenhuma imagem copiada na área de transferência.".to_string())?;
+
+    let buffer = image::RgbaImage::from_raw(image.width(), image.height(), image.rgba().to_vec())
+        .ok_or_else(|| "Não foi possível decodificar a imagem colada.".to_string())?;
+
+    let dir = folder_icons_dir(&app)?;
+    let file_name = format!("{}.png", uuid::Uuid::new_v4());
+    buffer
+        .save(dir.join(&file_name))
+        .map_err(|e| e.to_string())?;
+
+    let key = target.to_string_lossy().to_string();
+    let mut manifest = load_folder_icons_manifest(&app)?;
+    replace_folder_icon_file(&mut manifest, &dir, &key, file_name.clone());
+    save_folder_icons_manifest(&app, &manifest)?;
+
+    Ok(dir.join(file_name).to_string_lossy().to_string())
+}
+
+#[tauri::command]
+pub fn remove_folder_icon(app: AppHandle, folder_path: String) -> Result<(), String> {
+    let target = ensure_within_home(&folder_path)?;
+    let dir = folder_icons_dir(&app)?;
+    let key = target.to_string_lossy().to_string();
+    let mut manifest = load_folder_icons_manifest(&app)?;
+    if let Some(file_name) = manifest.remove(&key) {
+        let _ = fs::remove_file(dir.join(file_name));
+        save_folder_icons_manifest(&app, &manifest)?;
+    }
+    Ok(())
 }

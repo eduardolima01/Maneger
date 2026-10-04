@@ -50,6 +50,7 @@ export default function ProjectSearchSelect({ value, onChange }: ProjectSearchSe
     return (
       <div
         key={p.id}
+        className="hover:bg-gray-100 dark:hover:bg-gray-700"
         style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 8px 8px 8px' }}
         onMouseDown={(e) => e.preventDefault()}
       >
@@ -59,7 +60,7 @@ export default function ProjectSearchSelect({ value, onChange }: ProjectSearchSe
         >
           <span style={{ fontSize: 14, display: 'block' }}>{p.name}</span>
           {parentLabel && (
-            <span style={{ fontSize: 11, color: '#999', display: 'block' }}>{parentLabel}</span>
+            <span className="text-gray-500 dark:text-gray-400" style={{ fontSize: 11, display: 'block' }}>{parentLabel}</span>
           )}
         </span>
         <button
@@ -68,12 +69,12 @@ export default function ProjectSearchSelect({ value, onChange }: ProjectSearchSe
             toggleFavorite(p.id);
           }}
           title={favorited ? 'Remover dos favoritos' : 'Marcar como favorito'}
+          className={favorited ? 'text-[#f6bf26]' : 'text-gray-300 dark:text-gray-600'}
           style={{
             border: 'none',
             background: 'none',
             cursor: 'pointer',
             fontSize: 14,
-            color: favorited ? '#f6bf26' : '#ccc',
             padding: '0 4px',
           }}
         >
@@ -113,12 +114,12 @@ export default function ProjectSearchSelect({ value, onChange }: ProjectSearchSe
       {selectedProject && !isOpen ? (
         <div
           onClick={() => setIsOpen(true)}
+          className="border border-gray-300 bg-white text-gray-900 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100"
           style={{
             display: 'flex',
             justifyContent: 'space-between',
             alignItems: 'center',
             padding: 8,
-            border: '1px solid #ccc',
             borderRadius: 4,
             fontSize: 14,
             cursor: 'pointer',
@@ -132,7 +133,8 @@ export default function ProjectSearchSelect({ value, onChange }: ProjectSearchSe
               e.stopPropagation();
               clearSelection();
             }}
-            style={{ border: 'none', background: 'none', cursor: 'pointer', color: '#666' }}
+            className="text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-100"
+            style={{ border: 'none', background: 'none', cursor: 'pointer' }}
           >
             ✕
           </button>
@@ -143,21 +145,21 @@ export default function ProjectSearchSelect({ value, onChange }: ProjectSearchSe
           onChange={(e) => setQuery(e.target.value)}
           onFocus={() => setIsOpen(true)}
           placeholder="Buscar ou criar projeto..."
-          style={{ width: '100%', padding: 8, fontSize: 14, border: '1px solid #ccc', borderRadius: 4 }}
+          className="border border-gray-300 bg-white text-gray-900 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100"
+          style={{ width: '100%', padding: 8, fontSize: 14, borderRadius: 4 }}
         />
       )}
 
       {isOpen && (
         <div
+          className="border border-gray-300 bg-white text-gray-900 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100"
           style={{
             position: 'absolute',
             top: '100%',
             left: 0,
             right: 0,
             marginTop: 4,
-            border: '1px solid #ccc',
             borderRadius: 4,
-            backgroundColor: '#fff',
             maxHeight: 200,
             overflowY: 'auto',
             zIndex: 10,
@@ -166,19 +168,20 @@ export default function ProjectSearchSelect({ value, onChange }: ProjectSearchSe
         >
           <div
             onClick={clearSelection}
-            style={{ padding: 8, fontSize: 13, color: '#666', cursor: 'pointer', borderBottom: '1px solid #eee' }}
+            className="border-b border-gray-200 text-gray-500 hover:bg-gray-100 dark:border-gray-700 dark:text-gray-400 dark:hover:bg-gray-700"
+            style={{ padding: 8, fontSize: 13, cursor: 'pointer' }}
           >
             Sem projeto
           </div>
 
           {favorites.length > 0 && (
             <>
-              <div style={{ padding: '6px 8px 2px', fontSize: 11, fontWeight: 700, color: '#999', textTransform: 'uppercase' }}>
+              <div className="text-gray-500 dark:text-gray-400" style={{ padding: '6px 8px 2px', fontSize: 11, fontWeight: 700, textTransform: 'uppercase' }}>
                 ★ Favoritos
               </div>
               {favorites.map(renderRow)}
               {nonFavorites.length > 0 && (
-                <div style={{ padding: '6px 8px 2px', fontSize: 11, fontWeight: 700, color: '#999', textTransform: 'uppercase', borderTop: '1px solid #eee' }}>
+                <div className="border-t border-gray-200 text-gray-500 dark:border-gray-700 dark:text-gray-400" style={{ padding: '6px 8px 2px', fontSize: 11, fontWeight: 700, textTransform: 'uppercase' }}>
                   Todos os projetos
                 </div>
               )}
@@ -190,12 +193,11 @@ export default function ProjectSearchSelect({ value, onChange }: ProjectSearchSe
           {query.trim() && !exactMatch && (
             <div
               onClick={handleCreate}
+              className={`text-blue-600 hover:bg-gray-100 dark:text-blue-400 dark:hover:bg-gray-700 ${filtered.length > 0 ? 'border-t border-gray-200 dark:border-gray-700' : ''}`}
               style={{
                 padding: 8,
                 fontSize: 14,
                 cursor: creating ? 'default' : 'pointer',
-                color: '#1a73e8',
-                borderTop: filtered.length > 0 ? '1px solid #eee' : undefined,
                 opacity: creating ? 0.6 : 1,
               }}
             >
@@ -204,7 +206,7 @@ export default function ProjectSearchSelect({ value, onChange }: ProjectSearchSe
           )}
 
           {filtered.length === 0 && !query.trim() && (
-            <div style={{ padding: 8, fontSize: 13, color: '#999' }}>Nenhum projeto ainda</div>
+            <div className="text-gray-500 dark:text-gray-400" style={{ padding: 8, fontSize: 13 }}>Nenhum projeto ainda</div>
           )}
         </div>
       )}

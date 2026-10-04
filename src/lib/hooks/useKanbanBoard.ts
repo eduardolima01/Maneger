@@ -147,6 +147,41 @@ export function useKanbanBoard(kanban: Kanban) {
     await reload();
   }, [reload]);
 
+  /**
+   * Arrastar grupo/subgrupo: muda o pai/coluna e fixa a ordem dos irmãos do destino. Atualiza a tela na hora (antes de
+   * gravar) pra não "piscar" o lugar antigo; se a gravação falhar, o reload devolve o que está salvo.
+   */
+  const placeGroup = useCallback(async (groupId: string, newParentGroupId: string | null, columnId: string, orderedSiblingIds: string[]) => {
+    setGroups((prev) => {
+      const moved = prev.find((g) => g.id === groupId);
+      if (!moved) return prev;
+      const targetColumnId = newParentGroupId ? (prev.find((g) => g.id === newParentGroupId)?.columnId ?? columnId) : columnId;
+      const descendantIds = new Set<string>();
+      let grew = true;
+      while (grew) {
+        grew = false;
+        for (const g of prev) {
+          if (g.parentGroupId && (g.parentGroupId === groupId || descendantIds.has(g.parentGroupId)) && !descendantIds.has(g.id)) {
+            descendantIds.add(g.id);
+            grew = true;
+          }
+        }
+      }
+      const positionById = new Map(orderedSiblingIds.map((id, index) => [id, index]));
+      return prev.map((g) => {
+        if (g.id === groupId) return { ...g, parentGroupId: newParentGroupId, columnId: targetColumnId, position: positionById.get(g.id) ?? g.position };
+        if (descendantIds.has(g.id)) return { ...g, columnId: targetColumnId };
+        return positionById.has(g.id) ? { ...g, position: positionById.get(g.id)! } : g;
+      });
+    });
+    try {
+      await groupsApi.placeGroup(groupId, newParentGroupId, columnId, orderedSiblingIds);
+    } catch (err) {
+      console.error(err); // destino inválido etc.
+    }
+    await reload();
+  }, [reload]);
+
   const moveCard = useCallback(async (cardId: string, targetColumnId: string, orderedCardIdsInColumn: string[]) => {
     setCards((prev) => {
       const updated = prev.map((c) => (c.id === cardId ? { ...c, columnId: targetColumnId } : c));
@@ -486,7 +521,7 @@ export function useKanbanBoard(kanban: Kanban) {
     createCardInGroup,
     renameLabel, deleteLabel, setLabelIcon, createLabel,
     fixInconsistentGroupLabels,
-    createGroup, createSubgroup, renameGroup, deleteGroup, deleteGroupWithCards, updateGroupAppearance, moveCardIntoGroup, moveCardOutOfGroup, moveGroupToColumn,
+    createGroup, createSubgroup, renameGroup, deleteGroup, deleteGroupWithCards, updateGroupAppearance, moveCardIntoGroup, moveCardOutOfGroup, moveGroupToColumn, placeGroup,
     createPlanCard, materializePlanOccurrence,
     createColumn, updateColumn, removeColumn, duplicateColumn, reorderColumns,
     bulkMoveCards, moveCardsTo, bulkDeleteCards, bulkSetColor, bulkSetStatus, bulkToggleLabel,

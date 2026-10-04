@@ -8,10 +8,11 @@ import type { ModuleStatus } from '../../lib/api/modules';
 import type { ModuleKey } from '../../types/module.types';
 
 import { setProjectArchived } from '../../lib/api/projects';
-import { invoke } from '@tauri-apps/api/core';
+import { invoke, convertFileSrc } from '@tauri-apps/api/core';
 import ImageUploadField from '@/components/ImageUploadField';
 
 import { getProjectColor, PALETTE } from '@/lib/utils/projectColor';
+import { extractCoverColors } from '@/lib/utils/extractCoverColors';
 
 interface ProjectSettingsModalProps {
   isOpen: boolean;
@@ -37,6 +38,7 @@ export default function ProjectSettingsModal({
   const [name, setName] = useState(project.name);
   const [color, setColor] = useState<string | null>(project.color);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const [coverColors, setCoverColors] = useState<string[]>([]);
 
   useEffect(() => {
     if (isOpen) {
@@ -45,6 +47,20 @@ export default function ProjectSettingsModal({
       setConfirmingDelete(false);
     }
   }, [isOpen, project.name, project.color]);
+
+  // Extrai a paleta dominante da capa (quando existir) pra sugerir como
+  // opções de cor do projeto, além da paleta fixa já existente.
+  useEffect(() => {
+    if (!isOpen || !project.cover_path) {
+      setCoverColors([]);
+      return;
+    }
+    let cancelled = false;
+    extractCoverColors(convertFileSrc(project.cover_path)).then((colors) => {
+      if (!cancelled) setCoverColors(colors);
+    });
+    return () => { cancelled = true; };
+  }, [isOpen, project.cover_path]);
 
   async function handleSaveName() {
     if (!name.trim() || name === project.name) return;
@@ -140,6 +156,32 @@ export default function ProjectSettingsModal({
               />
             ))}
           </div>
+
+          {coverColors.length > 0 && (
+            <div style={{ marginTop: 10 }}>
+              <span style={{ fontSize: 11, color: '#999', display: 'block', marginBottom: 4 }}>
+                Cores da capa
+              </span>
+              <div style={{ display: 'flex', gap: 6 }}>
+                {coverColors.map((hex) => (
+                  <button
+                    key={hex}
+                    onClick={() => handleColorChange(hex)}
+                    title={hex}
+                    style={{
+                      width: 20,
+                      height: 20,
+                      borderRadius: '50%',
+                      backgroundColor: hex,
+                      border: color === hex ? '2px solid #000' : '1px solid #ccc',
+                      cursor: 'pointer',
+                      padding: 0,
+                    }}
+                  />
+                ))}
+              </div>
+            </div>
+          )}
         </div>
 
         <div>
@@ -192,4 +234,3 @@ export default function ProjectSettingsModal({
     </Modal>
   );
 }
-

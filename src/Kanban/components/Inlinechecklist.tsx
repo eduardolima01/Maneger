@@ -1,18 +1,18 @@
 import { Fragment, useEffect, useState } from 'react';
 import { useCardChecklist } from '@/lib/hooks/kanban/useCardChecklist';
 import { buildChecklistTree, ChecklistTreeNode } from '../utils/checklistTree';
-import { CHECKLIST_STATUS_LABELS, CHECKLIST_STATUS_COLORS } from '@/types/kanban.types';
-import type { ChecklistItemStatus } from '@/types/kanban.types';
+import ChecklistStatusButtons from './ChecklistStatusButtons';
+import type { ChecklistProgress } from '@/types/kanban.types';
 
 interface InlineChecklistProps {
   cardId: string;
   /** Chamado sempre que a contagem muda (adicionar/marcar/remover), pro card por fora mostrar em tempo real. */
-  onProgressChange?: (progress: { done: number; total: number }) => void;
+  onProgressChange?: (progress: ChecklistProgress) => void;
 }
 
 const INDENT_PX = 14;
-const CHECKBOX_OFFSET_PX = 19; // largura do dropdown de status + gap, pra alinhar o campo de sub-item com o texto do item
-const STATUS_ORDER: ChecklistItemStatus[] = ['not_started', 'in_progress', 'done'];
+const STATUS_OFFSET_PX = 57; // largura dos 3 botões de estado (3×16 + 2×2 de gap) + gap, pra alinhar o campo de sub-item com o texto do item
+const PLAIN_OFFSET_PX = 13; // item de lista simples: só o marcador "•" (8) + gap
 
 function flattenWithDepth(nodes: ChecklistTreeNode[], depth = 0): { node: ChecklistTreeNode; depth: number }[] {
   const result: { node: ChecklistTreeNode; depth: number }[] = [];
@@ -45,18 +45,27 @@ export default function InlineChecklist({ cardId, onProgressChange }: InlineChec
     const parentDepth = flat[parentIndex].depth;
     let lastIndex = parentIndex;
     while (lastIndex + 1 < flat.length && flat[lastIndex + 1].depth > parentDepth) lastIndex++;
-    return { afterIndex: lastIndex, depth: parentDepth + 1, parentId: addingSubFor };
+    return { afterIndex: lastIndex, depth: parentDepth + 1, parentId: addingSubFor, simple: flat[parentIndex].node.isSimple };
   })();
 
   useEffect(() => {
     if (loading) return;
-    onProgressChange?.({ done: items.filter((i) => i.status === 'done').length, total: items.length });
+    // itens de lista simples não entram na conta (nem como pendentes nem como feitos) — só em `simpleCount`
+    let done = 0;
+    let total = 0;
+    let simpleCount = 0;
+    for (const { node } of flattenWithDepth(buildChecklistTree(items))) {
+      if (node.isSimple) simpleCount++;
+      else { total++; if (node.status === 'done') done++; }
+    }
+    onProgressChange?.({ done, total, simpleCount });
   }, [items, loading, onProgressChange]);
 
   async function handleAdd() {
-    if (!newTitle.trim()) return;
-    await create(newTitle.trim());
-    setNewTitle('');
+    const title = newTitle.trim();
+    if (!title) return;
+    setNewTitle(''); // limpa antes do await: o blur e o Enter não adicionam o mesmo item duas vezes
+    await create(title);
   }
 
   async function handleAddSub(parentId: string) {
@@ -71,7 +80,7 @@ export default function InlineChecklist({ cardId, onProgressChange }: InlineChec
     setSubTitle('');
   }
 
-  if (loading) return <p style={{ fontSize: 11, color: '#bbb', margin: '4px 0' }}>Carregando...</p>;
+  if (loading) return <p className="text-neutral-400 dark:text-neutral-500" style={{ fontSize: 11, margin: '4px 0' }}>Carregando...</p>;
 
   return (
     <div
@@ -80,28 +89,21 @@ export default function InlineChecklist({ cardId, onProgressChange }: InlineChec
       style={{ marginTop: 2, marginBottom: 4 }}
     >
       {flat.map(({ node, depth }, index) => {
-        const isDone = node.status === 'done';
+        const isDone = !node.isSimple && node.status === 'done';
         return (
           <Fragment key={node.id}>
             {/* longhand DEPOIS do shorthand: antes `paddingLeft` vinha antes de `padding` e era anulado — o recuo dos filhos não aparecia */}
             <div style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '2px 0', paddingLeft: depth * INDENT_PX }}>
-              <select
-                value={node.status}
-                onChange={(e) => { e.stopPropagation(); setStatus(node.id, e.target.value as ChecklistItemStatus); }}
-                onClick={(e) => e.stopPropagation()}
-                style={{
-                  flexShrink: 0, fontSize: 9, padding: '1px 2px', borderRadius: 3, border: '1px solid #ddd', cursor: 'pointer',
-                  color: '#fff', backgroundColor: CHECKLIST_STATUS_COLORS[node.status], fontWeight: 600,
-                }}
-              >
-                {STATUS_ORDER.map((s) => (
-                  <option key={s} value={s} style={{ backgroundColor: '#fff', color: '#000' }}>{CHECKLIST_STATUS_LABELS[s]}</option>
-                ))}
-              </select>
+              {node.isSimple ? (
+                <span className="text-neutral-400 dark:text-neutral-500" style={{ flexShrink: 0, fontSize: 11, width: 8, textAlign: 'center' }}>•</span>
+              ) : (
+                <ChecklistStatusButtons status={node.status} onChange={(s) => setStatus(node.id, s)} size={16} />
+              )}
               <span
+                className={isDone ? 'text-neutral-400 dark:text-neutral-500' : 'text-neutral-800 dark:text-neutral-200'}
                 style={{
                   flex: 1, fontSize: 11, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-                  textDecoration: isDone ? 'line-through' : 'none', color: isDone ? '#999' : '#333',
+                  textDecoration: isDone ? 'line-through' : 'none',
                 }}
               >
                 {node.title}
@@ -109,21 +111,23 @@ export default function InlineChecklist({ cardId, onProgressChange }: InlineChec
               <button
                 onClick={() => (addingSubFor === node.id ? closeSubInput() : (setAddingSubFor(node.id), setSubTitle('')))}
                 title="Adicionar sub-item"
-                style={{ border: 'none', background: 'none', cursor: 'pointer', color: addingSubFor === node.id ? '#1a73e8' : '#999', fontSize: 12, flexShrink: 0, padding: '0 2px' }}
+                className={addingSubFor === node.id ? 'text-blue-600 dark:text-blue-400' : 'text-neutral-400 dark:text-neutral-500'}
+                style={{ border: 'none', background: 'none', cursor: 'pointer', fontSize: 12, flexShrink: 0, padding: '0 2px' }}
               >
                 ＋
               </button>
               <button
                 onClick={() => remove(node.id)}
                 title="Remover"
-                style={{ border: 'none', background: 'none', cursor: 'pointer', color: '#c62828', fontSize: 10, flexShrink: 0, padding: '0 2px' }}
+                className="text-red-600 dark:text-red-400"
+                style={{ border: 'none', background: 'none', cursor: 'pointer', fontSize: 10, flexShrink: 0, padding: '0 2px' }}
               >
                 ✕
               </button>
             </div>
 
             {subInput && subInput.afterIndex === index && (
-              <div style={{ padding: '2px 0', paddingLeft: subInput.depth * INDENT_PX + CHECKBOX_OFFSET_PX }}>
+              <div style={{ padding: '2px 0', paddingLeft: subInput.depth * INDENT_PX + (subInput.simple ? PLAIN_OFFSET_PX : STATUS_OFFSET_PX) }}>
                 <input
                   autoFocus
                   value={subTitle}
@@ -137,7 +141,8 @@ export default function InlineChecklist({ cardId, onProgressChange }: InlineChec
                     closeSubInput();
                   }}
                   placeholder="+ sub-item..."
-                  style={{ width: '100%', boxSizing: 'border-box', padding: 3, fontSize: 11, border: '1px solid #cfe0fc', borderRadius: 3 }}
+                  className="border-blue-200 dark:border-blue-900 bg-white dark:bg-neutral-800 text-neutral-900 dark:text-neutral-100 placeholder:text-neutral-400 dark:placeholder:text-neutral-500"
+                  style={{ width: '100%', boxSizing: 'border-box', padding: 3, fontSize: 11, borderWidth: 1, borderStyle: 'solid', borderRadius: 3 }}
                 />
               </div>
             )}
@@ -150,8 +155,10 @@ export default function InlineChecklist({ cardId, onProgressChange }: InlineChec
           value={newTitle}
           onChange={(e) => setNewTitle(e.target.value)}
           onKeyDown={(e) => e.key === 'Enter' && handleAdd()}
+          onBlur={() => handleAdd()} // clicar fora do campo com texto digitado também adiciona
           placeholder="+ item..."
-          style={{ flex: 1, padding: 3, fontSize: 11, border: '1px solid #eee', borderRadius: 3 }}
+          className="border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 text-neutral-900 dark:text-neutral-100 placeholder:text-neutral-400 dark:placeholder:text-neutral-500"
+          style={{ flex: 1, padding: 3, fontSize: 11, borderWidth: 1, borderStyle: 'solid', borderRadius: 3 }}
         />
       </div>
     </div>

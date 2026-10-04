@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import EmojiPicker, { EmojiStyle } from 'emoji-picker-react';
+import EmojiPicker, { EmojiStyle, Theme } from 'emoji-picker-react';
 import ImageUploadField from '@/components/ImageUploadField';
 import type { LabelIcon } from '@/types/kanban.types';
 import LabelIconBadge from './LabelIconBadge';
@@ -66,9 +66,12 @@ export default function LabelIconPicker({ value, onChange }: LabelIconPickerProp
   }, [open]);
 
   const tabStyle = (active: boolean): React.CSSProperties => ({
-    flex: 1, fontSize: 12, padding: '5px 0', border: 'none', cursor: 'pointer',
-    background: active ? '#e8f0fe' : 'transparent', color: active ? '#1a73e8' : '#555', fontWeight: active ? 600 : 400,
+    flex: 1, fontSize: 12, padding: '5px 0', border: 'none', cursor: 'pointer', fontWeight: active ? 600 : 400,
   });
+  const tabClass = (active: boolean) =>
+    active
+      ? 'bg-blue-50 dark:bg-blue-950 text-blue-600 dark:text-blue-400'
+      : 'bg-transparent text-neutral-600 dark:text-neutral-400';
 
   return (
     <>
@@ -77,10 +80,13 @@ export default function LabelIconPicker({ value, onChange }: LabelIconPickerProp
         type="button"
         onClick={toggleOpen}
         title="Ícone da etiqueta (emoji ou imagem)"
+        className={[
+          'bg-white dark:bg-neutral-800 text-neutral-500 dark:text-neutral-400 border',
+          value ? 'border-neutral-300 dark:border-neutral-600' : 'border-dashed border-neutral-400 dark:border-neutral-500',
+        ].join(' ')}
         style={{
           width: 24, height: 24, flexShrink: 0, display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-          border: value ? '1px solid #ddd' : '1px dashed #bbb', borderRadius: 4, background: '#fff', cursor: 'pointer', padding: 0,
-          color: '#888', fontSize: 13,
+          borderRadius: 4, cursor: 'pointer', padding: 0, fontSize: 13,
         }}
       >
         {value ? <LabelIconBadge icon={value} size={16} /> : '＋'}
@@ -92,20 +98,22 @@ export default function LabelIconPicker({ value, onChange }: LabelIconPickerProp
           // pára o evento aqui: o menu/modal por baixo fecha em clique "de fora", e este popover está fora deles no DOM (portal)
           onMouseDown={(e) => e.stopPropagation()}
           onClick={(e) => e.stopPropagation()}
+          className="bg-white dark:bg-neutral-800 border border-neutral-300 dark:border-neutral-600"
           style={{
             position: 'fixed', left: pos.left, top: pos.top, zIndex: 30000, width: POPOVER_WIDTH,
-            backgroundColor: '#fff', border: '1px solid #ddd', borderRadius: 8, boxShadow: '0 4px 14px rgba(0,0,0,0.2)', overflow: 'hidden',
+            borderRadius: 8, boxShadow: '0 4px 14px rgba(0,0,0,0.2)', overflow: 'hidden',
           }}
         >
-          <div style={{ display: 'flex', borderBottom: '1px solid #eee' }}>
-            <button type="button" onClick={() => setTab('emoji')} style={tabStyle(tab === 'emoji')}>😀 Emoji</button>
-            <button type="button" onClick={() => setTab('image')} style={tabStyle(tab === 'image')}>🖼️ Imagem</button>
+          <div className="border-b border-neutral-200 dark:border-neutral-700" style={{ display: 'flex' }}>
+            <button type="button" onClick={() => setTab('emoji')} className={tabClass(tab === 'emoji')} style={tabStyle(tab === 'emoji')}>😀 Emoji</button>
+            <button type="button" onClick={() => setTab('image')} className={tabClass(tab === 'image')} style={tabStyle(tab === 'image')}>🖼️ Imagem</button>
           </div>
 
           {tab === 'emoji' ? (
             <EmojiPicker
               onEmojiClick={(data) => { onChange({ kind: 'emoji', value: data.emoji }); setOpen(false); }}
               emojiStyle={EmojiStyle.NATIVE}
+              theme={document.documentElement.classList.contains('dark') ? Theme.DARK : Theme.LIGHT}
               width={POPOVER_WIDTH - 2}
               height={340}
               previewConfig={{ showPreview: false }}
@@ -123,11 +131,12 @@ export default function LabelIconPicker({ value, onChange }: LabelIconPickerProp
           )}
 
           {value && (
-            <div style={{ borderTop: '1px solid #eee', padding: '4px 8px', textAlign: 'right' }}>
+            <div className="border-t border-neutral-200 dark:border-neutral-700" style={{ padding: '4px 8px', textAlign: 'right' }}>
               <button
                 type="button"
                 onClick={() => { onChange(null); setOpen(false); }}
-                style={{ fontSize: 11, color: '#c62828', background: 'none', border: 'none', cursor: 'pointer', padding: '2px 4px' }}
+                className="text-red-600 dark:text-red-400"
+                style={{ fontSize: 11, background: 'none', border: 'none', cursor: 'pointer', padding: '2px 4px' }}
               >
                 Remover ícone
               </button>

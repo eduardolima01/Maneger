@@ -23,15 +23,15 @@ export default function KanbanBoardModal({ isOpen, onClose, kanban, onKanbanChan
 
   return (
     <Modal open={isOpen} onClose={onClose} title={displayKanban.name}>
-      <div style={{ padding: 16, width: '90vw', maxWidth: "100%", maxHeight: '85vh', overflowY: 'auto' }}>
+      <div className="text-neutral-900 dark:text-neutral-100" style={{ padding: 16, width: '90vw', maxWidth: "100%", maxHeight: '85vh', overflowY: 'auto' }}>
         <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 8 }}>
           <Button variant="secondary" onClick={() => setSettingsOpen(true)}>⚙ Configurações do Kanban</Button>
         </div>
 
         <KanbanBoard kanban={displayKanban} />
 
-        <div style={{ display: 'flex', justifyContent: 'flex-end', borderTop: '1px solid #eee', paddingTop: 12, marginTop: 12 }}>
-          <div style={{ display: 'flex', justifyContent: 'flex-end', borderTop: '1px solid #eee', paddingTop: 12, marginTop: 12 }}>
+        <div className="border-t border-neutral-200 dark:border-neutral-700" style={{ display: 'flex', justifyContent: 'flex-end', paddingTop: 12, marginTop: 12 }}>
+          <div className="border-t border-neutral-200 dark:border-neutral-700" style={{ display: 'flex', justifyContent: 'flex-end', paddingTop: 12, marginTop: 12 }}>
             <Button variant="secondary" onClick={onClose}>Fechar</Button>
           </div>
         </div>

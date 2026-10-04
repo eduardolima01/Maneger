@@ -52,13 +52,14 @@ export default function DueDateMenu({ x, y, value, onSave, onClose, onMouseEnter
       ref={ref}
       onMouseEnter={onMouseEnter}
       onMouseLeave={onMouseLeave}
+      className="bg-white dark:bg-neutral-800 text-neutral-900 dark:text-neutral-100 border border-neutral-300 dark:border-neutral-600"
       style={{
-        position: 'fixed', top: y, left: x, backgroundColor: '#fff', border: '1px solid #ddd',
+        position: 'fixed', top: y, left: x,
         borderRadius: 6, boxShadow: '0 2px 12px rgba(0,0,0,0.15)', zIndex: 1000, padding: 10,
         display: 'flex', flexDirection: 'column', gap: 8, minWidth: 180,
       }}
     >
-      <label style={{ fontSize: 11, fontWeight: 600, color: '#666' }}>Definir data do card</label>
+      <label className="text-neutral-500 dark:text-neutral-400" style={{ fontSize: 11, fontWeight: 600 }}>Definir data do card</label>
       <input
         type="date"
         ref={inputRef}
@@ -66,15 +67,16 @@ export default function DueDateMenu({ x, y, value, onSave, onClose, onMouseEnter
         value={draft}
         onChange={(e) => setDraft(e.target.value)}
         onKeyDown={(e) => e.key === 'Enter' && handleSave()}
+        className="bg-white dark:bg-neutral-900 text-neutral-900 dark:text-neutral-100 dark:border-neutral-600 dark:[color-scheme:dark]"
         style={{ padding: 6, fontSize: 13 }}
       />
       <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end' }}>
         {value && (
-          <button onClick={handleClear} style={{ fontSize: 12, color: '#c62828', border: 'none', background: 'none', cursor: 'pointer', padding: '4px 8px' }}>
+          <button onClick={handleClear} className="text-red-600 dark:text-red-400" style={{ fontSize: 12, border: 'none', background: 'none', cursor: 'pointer', padding: '4px 8px' }}>
             Remover
           </button>
         )}
-        <button onClick={handleSave} style={{ fontSize: 12, color: '#1a73e8', border: 'none', background: 'none', cursor: 'pointer', padding: '4px 8px', fontWeight: 600 }}>
+        <button onClick={handleSave} className="text-blue-600 dark:text-blue-400" style={{ fontSize: 12, border: 'none', background: 'none', cursor: 'pointer', padding: '4px 8px', fontWeight: 600 }}>
           Salvar
         </button>
       </div>

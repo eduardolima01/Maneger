@@ -94,6 +94,50 @@ export async function moveGroupToColumn(groupId: string, targetColumnId: string,
   await saveKanbanData(data);
 }
 
+/**
+ * Move um grupo/subgrupo pra qualquer lugar da árvore: vira filho de `newParentGroupId` (null = grupo de topo de
+ * `targetColumnId`) e já fixa a ORDEM dos irmãos do destino — `orderedSiblingGroupIds` é a lista final de ids dos grupos
+ * irmãos, incluindo o próprio grupo na posição desejada. Os cards do grupo não mudam (continuam ligados pelo
+ * `cardGroupId`); os subgrupos dele vão junto e acompanham a coluna nova (denormalização em dia, como em moveGroupToColumn).
+ * Recusa mover o grupo pra dentro dele mesmo ou de um subgrupo dele (criaria um ciclo e a árvore sumiria da tela).
+ */
+export async function placeGroup(
+  groupId: string,
+  newParentGroupId: string | null,
+  targetColumnId: string,
+  orderedSiblingGroupIds: string[],
+): Promise<void> {
+  const data = await loadKanbanData();
+  const group = data.cardGroups.find((g) => g.id === groupId);
+  if (!group) return;
+
+  const descendantIds = collectDescendantGroupIds(groupId, data.cardGroups);
+
+  let columnId = targetColumnId;
+  if (newParentGroupId) {
+    const parent = data.cardGroups.find((g) => g.id === newParentGroupId);
+    if (!parent || parent.kanbanId !== group.kanbanId) throw new Error('Destino inválido: o grupo-pai precisa ser do mesmo kanban');
+    if (newParentGroupId === groupId || descendantIds.includes(newParentGroupId)) {
+      throw new Error('Não dá pra mover um grupo pra dentro dele mesmo ou de um subgrupo dele');
+    }
+    columnId = parent.columnId; // subgrupo sempre mora na coluna do pai
+  }
+
+  group.parentGroupId = newParentGroupId;
+  group.columnId = columnId;
+  for (const descendantId of descendantIds) {
+    const descendant = data.cardGroups.find((g) => g.id === descendantId);
+    if (descendant) descendant.columnId = columnId;
+  }
+
+  orderedSiblingGroupIds.forEach((id, index) => {
+    const sibling = data.cardGroups.find((g) => g.id === id && g.kanbanId === group.kanbanId);
+    if (sibling) sibling.position = index;
+  });
+
+  await saveKanbanData(data);
+}
+
 /** Reordena um conjunto de grupos irmãos (top-level de uma coluna, ou subgrupos de um mesmo pai). */
 export async function reorderGroupPosition(orderedGroupIds: string[]): Promise<void> {
   const data = await loadKanbanData();

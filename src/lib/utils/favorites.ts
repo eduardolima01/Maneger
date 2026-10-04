@@ -1,4 +1,5 @@
 const STORAGE_KEY = 'maneger:favoriteProjectIds';
+export const FAVORITES_EVENT = 'favorites-changed';
 
 export function readFavoriteIds(): string[] {
   try {
@@ -15,4 +16,6 @@ export function writeFavoriteIds(ids: string[]): void {
   } catch {
     // localStorage indisponível (ex: contexto restrito) — falha silenciosa, favoritos não persistem nessa sessão
   }
+  // avisa todas as instâncias de useFavoriteProjects (barra de fixados, cards, botão da aba...)
+  window.dispatchEvent(new Event(FAVORITES_EVENT));
 }

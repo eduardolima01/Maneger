@@ -34,10 +34,11 @@ export default function KanbanToolbar({
         value={search}
         onChange={(e) => onSearchChange(e.target.value)}
         placeholder="Buscar título, descrição ou etiqueta..."
+        className="bg-white dark:bg-neutral-900 text-neutral-900 dark:text-neutral-100 dark:border-neutral-600 dark:[color-scheme:dark]"
         style={{ flex: 1, padding: 8, fontSize: 14 }}
       />
 
-      <select value={density} onChange={(e) => onDensityChange(e.target.value as KanbanDensity)} style={{ padding: 8, fontSize: 13 }}>
+      <select value={density} onChange={(e) => onDensityChange(e.target.value as KanbanDensity)} className="bg-white dark:bg-neutral-900 text-neutral-900 dark:text-neutral-100 dark:border-neutral-600 dark:[color-scheme:dark]" style={{ padding: 8, fontSize: 13 }}>
         {DENSITY_OPTIONS.map((d) => (
           <option key={d.key} value={d.key}>{d.label}</option>
         ))}

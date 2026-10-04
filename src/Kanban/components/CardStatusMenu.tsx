@@ -18,31 +18,32 @@ export default function CardStatusMenu({ x, y, value, onSave, onClose, onMouseEn
     <div
       onMouseEnter={onMouseEnter}
       onMouseLeave={onMouseLeave}
+      className="bg-white dark:bg-neutral-800 text-neutral-900 dark:text-neutral-100 border border-neutral-300 dark:border-neutral-600"
       style={{
         position: 'fixed', left: x, top: y, zIndex: 1000,
-        background: '#fff', border: '1px solid #e0e0e0', borderRadius: 6,
+        borderRadius: 6,
         padding: 4, boxShadow: '0 2px 8px rgba(0,0,0,0.15)', minWidth: 140,
       }}
     >
       <button
         onClick={() => { onSave(null); onClose(); }}
+        className={value === null ? 'bg-indigo-50 dark:bg-indigo-950 text-neutral-500 dark:text-neutral-400' : 'text-neutral-500 dark:text-neutral-400 hover:bg-neutral-100 dark:hover:bg-neutral-700'}
         style={{
           display: 'flex', alignItems: 'center', gap: 6, width: '100%', textAlign: 'left',
           fontSize: 12, padding: '6px 8px', border: 'none', borderRadius: 4, cursor: 'pointer',
-          background: value === null ? '#eef2ff' : 'transparent', color: '#666',
         }}
       >
-        <span style={{ width: 8, height: 8, borderRadius: '50%', backgroundColor: '#e0e0e0', flexShrink: 0 }} />
+        <span className="bg-neutral-300 dark:bg-neutral-600" style={{ width: 8, height: 8, borderRadius: '50%', flexShrink: 0 }} />
         Nenhum
       </button>
       {STATUS_ORDER.map((status) => (
         <button
           key={status}
           onClick={() => { onSave(status); onClose(); }}
+          className={value === status ? 'bg-indigo-50 dark:bg-indigo-950 text-neutral-900 dark:text-neutral-100' : 'text-neutral-900 dark:text-neutral-100 hover:bg-neutral-100 dark:hover:bg-neutral-700'}
           style={{
             display: 'flex', alignItems: 'center', gap: 6, width: '100%', textAlign: 'left',
             fontSize: 12, padding: '6px 8px', border: 'none', borderRadius: 4, cursor: 'pointer',
-            background: value === status ? '#eef2ff' : 'transparent', color: '#333',
           }}
         >
           <span style={{ width: 8, height: 8, borderRadius: '50%', backgroundColor: STATUS_COLORS[status], flexShrink: 0 }} />

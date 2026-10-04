@@ -29,20 +29,21 @@ export default function GlobalCardTimerWidget() {
   return (
     <div
       ref={widgetRef}
+      className="bg-white dark:bg-neutral-800 text-neutral-900 dark:text-neutral-100 border border-neutral-300 dark:border-neutral-600"
       style={{
         position: 'fixed', bottom: 16, left: '50%', zIndex: 1500,
-        background: '#fff', border: '1px solid #ddd', borderRadius: 12,
+        borderRadius: 12,
         boxShadow: '0 8px 24px rgba(0,0,0,0.18)', padding: '10px 14px',
         display: 'flex', alignItems: 'center', gap: 10, minWidth: 200,
         transform: 'translate(-50%, 0) translateZ(0)',
       }}
     >
       <div style={{ minWidth: 0 }}>
-        <div style={{ fontSize: 11, color: '#888', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 140 }}>
+        <div className="text-neutral-500 dark:text-neutral-400" style={{ fontSize: 11, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 140 }}>
           ⏱ {timer.activeCardTitle}
         </div>
         {timer.sessionTitle && (
-          <div style={{ fontSize: 11, color: '#1a73e8', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 140 }}>
+          <div className="text-blue-600 dark:text-blue-400" style={{ fontSize: 11, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 140 }}>
             {timer.sessionTitle}
           </div>
         )}

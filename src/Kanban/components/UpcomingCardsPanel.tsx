@@ -76,22 +76,26 @@ function MomentRow({ moment, column, onClick }: { moment: Moment; column: Kanban
     <div
       onClick={onClick}
       title={moment.virtualRef ? 'Ocorrência de plano ainda não editada (clique pra criar)' : undefined}
-      style={{
-        display: 'flex', alignItems: 'center', gap: 8, padding: '8px 10px', borderRadius: 6,
-        border: moment.virtualRef ? '1px dashed #bbb' : '1px solid #eee', cursor: 'pointer',
-        backgroundColor: moment.virtualRef ? 'transparent' : '#fff',
-      }}
+      className={
+        (moment.virtualRef
+          ? 'border border-dashed border-neutral-400 dark:border-neutral-600 bg-transparent'
+          : 'border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800')
+      }
+      style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 10px', borderRadius: 6, cursor: 'pointer' }}
     >
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', minWidth: 52, flexShrink: 0 }}>
-        <span style={{ fontSize: 11, fontWeight: 700, color: '#333' }}>{formatDateLabel(moment.time, now)}</span>
-        <span style={{ fontSize: 10, color: '#999' }}>{moment.isAllDay ? 'dia inteiro' : formatTimeLabel(moment.time)}</span>
+        <span className="text-neutral-800 dark:text-neutral-100" style={{ fontSize: 11, fontWeight: 700 }}>{formatDateLabel(moment.time, now)}</span>
+        <span className="text-neutral-400 dark:text-neutral-500" style={{ fontSize: 10 }}>{moment.isAllDay ? 'dia inteiro' : formatTimeLabel(moment.time)}</span>
       </div>
       <span style={{ width: 3, alignSelf: 'stretch', borderRadius: 2, backgroundColor: column?.color ?? '#ccc', flexShrink: 0 }} />
       <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0, flex: 1 }}>
-        <span style={{ fontSize: 13, fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', opacity: moment.virtualRef ? 0.7 : 1 }}>
+        <span
+          className="text-neutral-900 dark:text-neutral-100"
+          style={{ fontSize: 13, fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', opacity: moment.virtualRef ? 0.7 : 1 }}
+        >
           {moment.virtualRef && '📋 '}{moment.card.title}
         </span>
-        <span style={{ fontSize: 11, color: '#666', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+        <span className="text-neutral-500 dark:text-neutral-400" style={{ fontSize: 11, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
           {moment.label ? `${moment.label} · ` : ''}{column?.name ?? 'Sem coluna'}
         </span>
       </div>
@@ -199,41 +203,41 @@ export default function UpcomingCardsPanel({ cards, columns, groups, onCardClick
 
   return (
     <div
-      style={{
-        width: 320, flexShrink: 0, backgroundColor: '#fafafa', border: '1px solid #eee', borderRadius: 8,
-        padding: 12, display: 'flex', flexDirection: 'column', gap: 10, maxHeight: '80vh', overflowY: 'auto',
-      }}
+      className="bg-neutral-50 dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-700"
+      style={{ width: 320, flexShrink: 0, borderRadius: 8, padding: 12, display: 'flex', flexDirection: 'column', gap: 10, maxHeight: '80vh', overflowY: 'auto' }}
     >
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-        <span style={{ fontSize: 13, fontWeight: 700 }}>🕐 Mais próximos</span>
-        <button onClick={onClose} title="Fechar" style={{ border: 'none', background: 'none', cursor: 'pointer', fontSize: 14, color: '#999' }}>✕</button>
+        <span className="text-neutral-900 dark:text-neutral-100" style={{ fontSize: 13, fontWeight: 700 }}>🕐 Mais próximos</span>
+        <button onClick={onClose} title="Fechar" className="text-neutral-400 dark:text-neutral-500" style={{ border: 'none', background: 'none', cursor: 'pointer', fontSize: 14 }}>✕</button>
       </div>
 
       <div style={{ display: 'flex', gap: 4 }}>
         <button
           onClick={() => setTab('upcoming')}
-          style={{
-            flex: 1, padding: '6px 4px', fontSize: 11, fontWeight: 600, borderRadius: 6, cursor: 'pointer',
-            border: '1px solid ' + (tab === 'upcoming' ? '#1a73e8' : '#ddd'),
-            backgroundColor: tab === 'upcoming' ? '#1a73e8' : '#fff', color: tab === 'upcoming' ? '#fff' : '#666',
-          }}
+          className={
+            tab === 'upcoming'
+              ? 'border border-blue-600 bg-blue-600 text-white'
+              : 'border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 text-neutral-500 dark:text-neutral-400'
+          }
+          style={{ flex: 1, padding: '6px 4px', fontSize: 11, fontWeight: 600, borderRadius: 6, cursor: 'pointer' }}
         >
           Próximos ({upcoming.length})
         </button>
         <button
           onClick={() => setTab('overdue')}
-          style={{
-            flex: 1, padding: '6px 4px', fontSize: 11, fontWeight: 600, borderRadius: 6, cursor: 'pointer',
-            border: '1px solid ' + (tab === 'overdue' ? '#c62828' : '#ddd'),
-            backgroundColor: tab === 'overdue' ? '#c62828' : '#fff', color: tab === 'overdue' ? '#fff' : '#666',
-          }}
+          className={
+            tab === 'overdue'
+              ? 'border border-red-600 bg-red-600 text-white'
+              : 'border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 text-neutral-500 dark:text-neutral-400'
+          }
+          style={{ flex: 1, padding: '6px 4px', fontSize: 11, fontWeight: 600, borderRadius: 6, cursor: 'pointer' }}
         >
           ⚠️ Atrasados ({overdue.length})
         </button>
       </div>
 
       {list.length === 0 && (
-        <p style={{ fontSize: 12, color: '#999', margin: 0 }}>
+        <p className="text-neutral-400 dark:text-neutral-500" style={{ fontSize: 12, margin: 0 }}>
           {tab === 'upcoming' ? 'Nada agendado pra frente.' : 'Nenhum atrasado 🎉'}
         </p>
       )}

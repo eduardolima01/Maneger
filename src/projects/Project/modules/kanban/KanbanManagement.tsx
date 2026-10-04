@@ -33,13 +33,15 @@ function KanbanTab({ kanban, active, onSelect, onRequestMenu }: KanbanTabProps) 
       className="flex items-center gap-1"
     >
       <button
+        className={
+          active
+            ? 'border-0 border-b-2 border-blue-600 dark:border-blue-400 text-blue-600 dark:text-blue-400'
+            : 'border-0 border-b-2 border-transparent text-neutral-500 dark:text-neutral-400'
+        }
         style={{
           padding: '6px 12px',
           fontSize: 13,
           fontWeight: 600,
-          border: 'none',
-          borderBottom: active ? '2px solid #1a73e8' : '2px solid transparent',
-          color: active ? '#1a73e8' : '#666',
           background: 'none',
           cursor: 'pointer',
           whiteSpace: 'nowrap',
@@ -47,7 +49,7 @@ function KanbanTab({ kanban, active, onSelect, onRequestMenu }: KanbanTabProps) 
       >
         {kanban.isDefault && '⭐ '}{kanban.color && <span style={{ display: 'inline-block', width: 8, height: 8, borderRadius: '50%', backgroundColor: kanban.color, marginRight: 4 }} />}{kanban.name}
       </button>
-      <button onClick={(e) => { e.stopPropagation(); onRequestMenu(); }} style={{ border: 'none', background: 'none', cursor: 'pointer', fontSize: 12, color: '#999' }}>⋮</button>
+      <button onClick={(e) => { e.stopPropagation(); onRequestMenu(); }} className="text-neutral-400 dark:text-neutral-500" style={{ border: 'none', background: 'none', cursor: 'pointer', fontSize: 12 }}>⋮</button>
     </div>
   );
 }
@@ -92,14 +94,14 @@ export default function KanbanManagement({ projectId }: KanbanManagementProps) {
     reorder(arrayMove(ids, fromIndex, toIndex));
   }
 
-  if (loading) return <p style={{ color: '#666', fontSize: 14 }}>Carregando...</p>;
+  if (loading) return <p className="text-neutral-500 dark:text-neutral-400" style={{ fontSize: 14 }}>Carregando...</p>;
 
   if (kanbans.length === 0) {
     return (
-      <div style={{ textAlign: 'center', padding: 24, border: '1px dashed #ddd', borderRadius: 8 }}>
-        <p style={{ color: '#666', fontSize: 14, marginBottom: 12 }}>Este Projeto ainda não possui nenhum Kanban.</p>
+      <div className="border border-dashed border-neutral-300 dark:border-neutral-600" style={{ textAlign: 'center', padding: 24, borderRadius: 8 }}>
+        <p className="text-neutral-500 dark:text-neutral-400" style={{ fontSize: 14, marginBottom: 12 }}>Este Projeto ainda não possui nenhum Kanban.</p>
         <div style={{ display: 'flex', gap: 6, justifyContent: 'center' }}>
-          <input value={newName} onChange={(e) => setNewName(e.target.value)} placeholder="Nome do Kanban..." style={{ padding: 8, fontSize: 14 }} />
+          <input value={newName} onChange={(e) => setNewName(e.target.value)} placeholder="Nome do Kanban..." className="bg-white dark:bg-neutral-900 text-neutral-900 dark:text-neutral-100 dark:border-neutral-600 dark:[color-scheme:dark]" style={{ padding: 8, fontSize: 14 }} />
           <Button variant="primary" onClick={handleCreate}>Criar primeiro Kanban</Button>
         </div>
       </div>
@@ -108,7 +110,7 @@ export default function KanbanManagement({ projectId }: KanbanManagementProps) {
 
   return (
     <div>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, borderBottom: '1px solid #e0e0e0', marginBottom: 12, position: 'relative' }}>
+      <div className="border-b border-neutral-200 dark:border-neutral-700" style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12, position: 'relative' }}>
         <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
           <SortableContext items={kanbans.map((k) => k.id)} strategy={verticalListSortingStrategy}>
             <div style={{ display: 'flex', overflowX: 'auto' }}>
@@ -124,7 +126,8 @@ export default function KanbanManagement({ projectId }: KanbanManagementProps) {
                   {menuFor === k.id && (
                     <div
                       onMouseLeave={() => setMenuFor(null)}
-                      style={{ position: 'absolute', top: '100%', left: 0, backgroundColor: '#fff', border: '1px solid #ddd', borderRadius: 4, boxShadow: '0 2px 8px rgba(0,0,0,0.12)', zIndex: 10, minWidth: 160 }}
+                      className="bg-white dark:bg-neutral-800 text-neutral-900 dark:text-neutral-100 border border-neutral-300 dark:border-neutral-600"
+                      style={{ position: 'absolute', top: '100%', left: 0, borderRadius: 4, boxShadow: '0 2px 8px rgba(0,0,0,0.12)', zIndex: 10, minWidth: 160 }}
                     >
                       {([
                         ['Renomear', () => { setRenamingId(k.id); setRenameDraft(k.name); }],
@@ -136,7 +139,8 @@ export default function KanbanManagement({ projectId }: KanbanManagementProps) {
                         <button
                           key={label as string}
                           onClick={() => { (action as () => void)(); setMenuFor(null); }}
-                          style={{ display: 'block', width: '100%', textAlign: 'left', padding: '8px 12px', fontSize: 13, border: 'none', background: 'none', cursor: 'pointer', color: label === 'Excluir' ? '#c62828' : '#000' }}
+                          className={`hover:bg-neutral-100 dark:hover:bg-neutral-700 ${label === 'Excluir' ? 'text-red-600 dark:text-red-400' : 'text-neutral-900 dark:text-neutral-100'}`}
+                          style={{ display: 'block', width: '100%', textAlign: 'left', padding: '8px 12px', fontSize: 13, border: 'none', cursor: 'pointer' }}
                         >
                           {label}
                         </button>
@@ -155,6 +159,7 @@ export default function KanbanManagement({ projectId }: KanbanManagementProps) {
             onChange={(e) => setNewName(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && handleCreate()}
             placeholder="Novo Kanban..."
+            className="bg-white dark:bg-neutral-900 text-neutral-900 dark:text-neutral-100 dark:border-neutral-600 dark:[color-scheme:dark]"
             style={{ padding: 6, fontSize: 12, width: 140 }}
           />
           <Button variant="secondary" onClick={handleCreate}>+</Button>
@@ -168,6 +173,7 @@ export default function KanbanManagement({ projectId }: KanbanManagementProps) {
             value={renameDraft}
             onChange={(e) => setRenameDraft(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && (rename(renamingId, renameDraft.trim()), setRenamingId(null))}
+            className="bg-white dark:bg-neutral-900 text-neutral-900 dark:text-neutral-100 dark:border-neutral-600 dark:[color-scheme:dark]"
             style={{ flex: 1, padding: 6, fontSize: 13 }}
           />
           <Button variant="primary" onClick={() => { rename(renamingId, renameDraft.trim()); setRenamingId(null); }}>Salvar</Button>

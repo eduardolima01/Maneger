@@ -54,6 +54,8 @@ export async function createCard(input: CreateKanbanCardInput): Promise<string> 
     priority: input.priority ?? null,
     status: input.status ?? 'pendente',
     labels: input.labels ?? [],
+    notes: input.notes ?? null,
+    notesColor: input.notesColor ?? null,
     schedules: input.schedules ?? [],
     assignedTo: null,
     startDate: input.startDate ?? null,
@@ -133,6 +135,8 @@ export async function materializePlanOccurrence(planId: string, date: string, oc
     priority: plan.priority,
     status: plan.status,
     labels: plan.labels,
+    notes: plan.notes,
+    notesColor: plan.notesColor,
     schedules: plan.schedules,
     startDate: date,
     dueDate: date,
@@ -159,6 +163,8 @@ export async function updateCard(id: string, input: UpdateKanbanCardInput): Prom
   if (input.priority !== undefined) { card.priority = input.priority; changed = true; }
   if (input.status !== undefined) { card.status = input.status; changed = true; }
   if (input.labels !== undefined) { card.labels = input.labels; changed = true; }
+  if (input.notes !== undefined) { card.notes = input.notes; changed = true; }
+  if (input.notesColor !== undefined) { card.notesColor = input.notesColor; changed = true; }
   if (input.schedules !== undefined) { card.schedules = input.schedules; changed = true; }
   if (input.assignedTo !== undefined) { card.assignedTo = input.assignedTo; changed = true; }
   if (input.startDate !== undefined) { card.startDate = input.startDate; changed = true; }
@@ -202,6 +208,8 @@ export async function duplicateCard(id: string): Promise<string> {
     priority: original.priority,
     status: original.status,
     labels: original.labels,
+    notes: original.notes,
+    notesColor: original.notesColor,
     schedules: original.schedules.map((s) => ({ ...s, id: generateId() })),
     startDate: original.startDate,
     dueDate: original.dueDate,

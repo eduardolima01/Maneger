@@ -5,9 +5,9 @@ import GlobalChatWidget from '@/Chat/components/GlobalChatWidget'
 import GlobalSearchWidget from '@/modules/search/components/GlobalSearchWidget';
 import GlobalKanbanModalHost from '@/Kanban/GlobalKanbanModalHost';
 import TabBar from './tabs/TabBar';
+import PinnedProjectsBar from './tabs/PinnedProjectsBar';
 import TabRouterHost from './tabs/TabRouterHost';
 import { useTabs, initTabsFromDisk } from './tabs/tabStore';
-import TabBreadcrumbBar from './tabs/TabBreadcrumbBar';
 import GlobalPomodoroWidget from '@/Projects/Project/modules/pomodoro/components/GlobalPomodoroWidget';
 import GlobalMomentComposerHost from '@/Feed/components/GlobalMomentComposerHost';
 import GlobalCardTimerWidget from '@/Kanban/Timer/components/GlobalCardTimerWidget';
@@ -26,7 +26,7 @@ export function AppLayout() {
       <Aside />
       <main className="flex flex-1 flex-col overflow-hidden">
         <TabBar />
-        <TabBreadcrumbBar />
+        <PinnedProjectsBar />
         <div className="flex-1 overflow-y-auto" style={{ position: 'relative' }}>
           <div className="p-6" style={{ display: activeTabId === null ? 'block' : 'none' }}>
             <Outlet />

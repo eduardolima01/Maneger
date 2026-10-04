@@ -43,6 +43,9 @@ const DURATION_PRESETS = [
   { label: 'Dia inteiro', minutes: 24 * 60 },
 ];
 
+const FIELD = 'rounded border border-gray-300 bg-white text-gray-900 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100';
+const LABEL = 'text-gray-500 dark:text-gray-400';
+
 function toTimeInputValue(d: Date): string {
   return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
 }
@@ -126,22 +129,26 @@ export default function CreateEventModal({
 
   return (
     <Modal open={isOpen} onClose={onClose}>
-      <div style={{ padding: 16, paddingBottom: 200, maxWidth: '92vw', maxHeight: '85vh', overflowY: 'auto' }}>
+      <div
+        className="bg-white text-gray-900 dark:bg-gray-900 dark:text-gray-100"
+        style={{ padding: 16, paddingBottom: 200, maxWidth: '92vw', maxHeight: '85vh', overflowY: 'auto' }}
+      >
         {hasProjectTab && (
-          <div style={{ display: 'flex', gap: 4, borderBottom: '1px solid #e0e0e0', marginBottom: 12 }}>
+          <div className="border-b border-gray-200 dark:border-gray-700" style={{ display: 'flex', gap: 4, marginBottom: 12 }}>
             {(['event', 'project'] as EditorTab[]).map((tab, i) => (
               <button
                 key={tab}
                 onClick={() => setActiveTab(tab)}
                 title={`Alt+${i + 1}`}
+                className={activeTab === tab ? 'text-blue-600 dark:text-blue-400' : 'text-gray-500 dark:text-gray-400'}
                 style={{
                   padding: '8px 14px', fontSize: 13, fontWeight: 600, background: 'none', border: 'none',
                   borderBottom: activeTab === tab ? '2px solid #1a73e8' : '2px solid transparent',
-                  color: activeTab === tab ? '#1a73e8' : '#666', cursor: 'pointer',
+                  cursor: 'pointer',
                 }}
               >
                 {tab === 'event' ? 'Evento' : 'Projeto'}
-                <span style={{ fontSize: 9, color: '#aaa', marginLeft: 4, fontWeight: 400 }}>Alt+{i + 1}</span>
+                <span className="text-gray-400 dark:text-gray-500" style={{ fontSize: 9, marginLeft: 4, fontWeight: 400 }}>Alt+{i + 1}</span>
               </button>
             ))}
           </div>
@@ -162,16 +169,18 @@ export default function CreateEventModal({
               value={title}
               onChange={(e) => setTitle(e.target.value)}
               placeholder="Título do evento"
+              className={FIELD}
               style={{ width: '100%', padding: 8, marginBottom: 12, fontSize: 14 }}
             />
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginBottom: 8 }}>
               <div style={{ flex: 1 }}>
-                <label style={{ fontSize: 12, fontWeight: 600, color: '#666', display: 'block', marginBottom: 4 }}>Início</label>
+                <label className={LABEL} style={{ fontSize: 12, fontWeight: 600, display: 'block', marginBottom: 4 }}>Início</label>
                 <div style={{ display: 'flex', width: '100px', gap: 6 }}>
                   <select
                     value={startDayOffset}
                     onChange={(e) => setStartDayOffset(Number(e.target.value))}
+                    className={FIELD}
                     style={{ flex: 1, padding: 6, fontSize: 12 }}
                   >
                     {DAY_OFFSET_OPTIONS.map((o) => (
@@ -183,11 +192,12 @@ export default function CreateEventModal({
               </div>
 
               <div style={{ flex: 1 }}>
-                <label style={{ fontSize: 12, fontWeight: 600, color: '#666', display: 'block', marginBottom: 4 }}>Fim</label>
+                <label className={LABEL} style={{ fontSize: 12, fontWeight: 600, display: 'block', marginBottom: 4 }}>Fim</label>
                 <div style={{ display: 'flex', width: '100px', gap: 6 }}>
                   <select
                     value={endDayOffset}
                     onChange={(e) => setEndDayOffset(Number(e.target.value))}
+                    className={FIELD}
                     style={{ flex: 1, padding: 6, fontSize: 12 }}
                   >
                     {DAY_OFFSET_OPTIONS.map((o) => (
@@ -200,10 +210,11 @@ export default function CreateEventModal({
             </div>
 
             <div style={{ marginBottom: 8 }}>
-              <label style={{ fontSize: 12, fontWeight: 600, color: '#666', display: 'block', marginBottom: 4 }}>Duração rápida</label>
+              <label className={LABEL} style={{ fontSize: 12, fontWeight: 600, display: 'block', marginBottom: 4 }}>Duração rápida</label>
               <select
                 onChange={(e) => e.target.value && applyDurationPreset(Number(e.target.value))}
                 value=""
+                className={FIELD}
                 style={{ width: '100%', padding: 8, fontSize: 13 }}
               >
                 <option value="">
@@ -215,7 +226,10 @@ export default function CreateEventModal({
               </select>
             </div>
 
-            <div style={{ fontSize: 12, color: isValidRange ? '#666' : '#c62828', marginBottom: 16 }}>
+            <div
+              className={isValidRange ? 'text-gray-500 dark:text-gray-400' : 'text-red-700 dark:text-red-400'}
+              style={{ fontSize: 12, marginBottom: 16 }}
+            >
               {isValidRange
                 ? `${start.toLocaleDateString('pt-BR')} ${toTimeInputValue(start)} → ${end.toLocaleDateString('pt-BR')} ${toTimeInputValue(end)}`
                 : 'O horário de fim precisa ser depois do início.'}

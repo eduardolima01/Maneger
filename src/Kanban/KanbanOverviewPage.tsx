@@ -79,6 +79,7 @@ export default function KanbanOverviewPage() {
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           placeholder="Buscar Kanban ou projeto..."
+          className="bg-white dark:bg-neutral-900 text-neutral-900 dark:text-neutral-100 dark:border-neutral-600 dark:[color-scheme:dark]"
           style={{ flex: 1, minWidth: 200, padding: 8, fontSize: 14 }}
         />
         <label style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 13 }}>
@@ -96,14 +97,14 @@ export default function KanbanOverviewPage() {
       </div>
 
       {visible.length === 0 && (
-        <p style={{ color: '#999', fontSize: 14, textAlign: 'center', padding: 40 }}>
+        <p className="text-neutral-400 dark:text-neutral-500" style={{ fontSize: 14, textAlign: 'center', padding: 40 }}>
           {kanbans.length === 0 ? 'Nenhum Kanban criado ainda em nenhum projeto.' : 'Nenhum resultado para essa busca.'}
         </p>
       )}
 
       {pinned.length > 0 && (
         <div style={{ marginBottom: 20 }}>
-          <h3 style={{ fontSize: 13, color: '#666', marginBottom: 8 }}>📌 Fixados</h3>
+          <h3 className="text-neutral-500 dark:text-neutral-400" style={{ fontSize: 13, marginBottom: 8 }}>📌 Fixados</h3>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: 10 }}>
             {pinned.map(renderTile)}
           </div>

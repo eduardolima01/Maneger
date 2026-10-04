@@ -7,10 +7,10 @@ interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   variant?: ButtonVariant;
 }
 
-const variantStyles: Record<ButtonVariant, React.CSSProperties> = {
-  primary: { backgroundColor: '#2563eb', color: '#fff' },
-  secondary: { backgroundColor: '#e5e7eb', color: '#111827' },
-  danger: { backgroundColor: '#dc2626', color: '#fff' },
+const variantClasses: Record<ButtonVariant, string> = {
+  primary: 'bg-blue-600 text-white',
+  secondary: 'bg-gray-200 text-gray-900 dark:bg-neutral-700 dark:text-neutral-100',
+  danger: 'bg-red-600 text-white',
 };
 
 export default function Button({
@@ -18,11 +18,13 @@ export default function Button({
   variant = 'primary',
   disabled,
   style,
+  className,
   ...rest
 }: ButtonProps) {
   return (
     <button
       disabled={disabled}
+      className={[variantClasses[variant], className].filter(Boolean).join(' ')}
       style={{
         padding: '8px 16px',
         border: 'none',
@@ -30,7 +32,6 @@ export default function Button({
         cursor: disabled ? 'not-allowed' : 'pointer',
         opacity: disabled ? 0.6 : 1,
         fontWeight: 500,
-        ...variantStyles[variant],
         ...style,
       }}
       {...rest}

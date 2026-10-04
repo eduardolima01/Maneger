@@ -37,6 +37,10 @@ export interface KanbanCard {
   priority: TaskPriority | null;
   status: TaskStatus | null;
   labels: string[];
+  /** Nota rápida, separada da descrição (Markdown) — texto simples, mostrada em destaque no topo do card no quadro. */
+  notes: string | null;
+  /** Cor de fundo da nota (hex) — null usa o amarelo padrão. */
+  notesColor: string | null;
   /** Horários do dia (podem ser vários), cada um com título próprio — não tem data, é sempre relativo ao card. */
   schedules: CardScheduleEntry[];
   assignedTo: string | null;
@@ -67,6 +71,8 @@ export interface CreateKanbanCardInput {
   priority?: TaskPriority | null;
   status?: TaskStatus | null;
   labels?: string[];
+  notes?: string | null;
+  notesColor?: string | null;
   schedules?: CardScheduleEntry[];
   startDate?: string | null;
   dueDate?: string | null;
@@ -88,6 +94,9 @@ export type UpdateKanbanCardInput = Partial<{
   priority: TaskPriority | null;
   status: TaskStatus | null;
   labels: string[];
+  /** Nota rápida, separada da descrição (Markdown) — texto simples, mostrada em destaque no topo do card no quadro. */
+  notes: string | null;
+  notesColor: string | null;
   schedules: CardScheduleEntry[];
   assignedTo: string | null;
   startDate: string | null;
@@ -119,6 +128,8 @@ export interface KanbanViewPrefs {
   density: KanbanDensity;
   columnWidths: Record<string, number>; // columnId -> px
   columnBackgrounds: Record<string, string>; // columnId -> cor de fundo (hex); ausente = branco padrão
+  /** columnId -> opacidade do fundo (0 a 1); ausente = 1 (opaco). Só vale pra coluna com cor de fundo escolhida. Kanbans antigos não têm o campo: ler com `?? {}`. */
+  columnBackgroundOpacity?: Record<string, number>;
   labelIcons: Record<string, LabelIcon>; // nome da etiqueta -> ícone (emoji ou imagem)
   /** Etiquetas criadas mas não necessariamente em uso em nenhum card/grupo (mesmo formato `nome::cor[::group]`
    *  de KanbanCard.labels) — sem isso, uma etiqueta sem uso não tem onde "existir" e desaparece do catálogo. */
@@ -230,7 +241,7 @@ export const STATUS_COLORS: Record<TaskStatus, string> = {
  */
 export type CardFieldKey =
   | 'description' | 'subKanban' | 'checklist' | 'startDate' | 'dueDate'
-  | 'cover' | 'priority' | 'status' | 'color' | 'labels' | 'schedules' | 'convertToPlan' | 'files';
+  | 'cover' | 'priority' | 'status' | 'color' | 'labels' | 'schedules' | 'notes' | 'convertToPlan' | 'files';
 
 export type CardFieldTab = 'details' | 'properties';
 
@@ -252,6 +263,7 @@ export const CARD_FIELD_LABELS: Record<CardFieldKey, string> = {
   color: 'Cor',
   labels: 'Etiquetas',
   schedules: 'Horários',
+  notes: 'Notas',
   convertToPlan: 'Transformar em plano',
   files: 'Arquivos',
 };
@@ -269,6 +281,7 @@ export function defaultCardFieldConfig(): CardFieldConfig[] {
     { key: 'color', tab: 'properties', visible: true },
     { key: 'labels', tab: 'properties', visible: true },
     { key: 'schedules', tab: 'details', visible: true },
+    { key: 'notes', tab: 'details', visible: true },
     { key: 'convertToPlan', tab: 'details', visible: true },
     { key: 'files', tab: 'details', visible: true },
   ];
@@ -291,7 +304,7 @@ export function mergeCardFieldConfig(config: CardFieldConfig[] | undefined): Car
  * checklist, cronômetro e os dois selos (sub-kanban, plano). Sem aba: é só visível/oculto.
  */
 export type CardVisualFieldKey =
-  | 'cover' | 'description' | 'labels' | 'dueDate' | 'status' | 'priority' | 'schedules'
+  | 'cover' | 'description' | 'labels' | 'dueDate' | 'status' | 'priority' | 'schedules' | 'notes'
   | 'checklist' | 'timer' | 'subKanbanBadge' | 'planBadge' | 'filesButton' | 'expandToggle';
 
 export interface CardVisualFieldConfig {
@@ -307,6 +320,7 @@ export const CARD_VISUAL_FIELD_LABELS: Record<CardVisualFieldKey, string> = {
   status: 'Status',
   priority: 'Prioridade',
   schedules: 'Horários',
+  notes: 'Notas (destaque no topo do card)',
   checklist: 'Progresso da checklist',
   timer: 'Cronômetro',
   subKanbanBadge: 'Selo de sub-kanban',
@@ -324,6 +338,7 @@ export function defaultCardVisualConfig(): CardVisualFieldConfig[] {
     { key: 'status', visible: true },
     { key: 'priority', visible: true },
     { key: 'schedules', visible: true },
+    { key: 'notes', visible: true },
     { key: 'checklist', visible: true },
     { key: 'timer', visible: true },
     { key: 'subKanbanBadge', visible: true },
@@ -419,9 +434,17 @@ export interface KanbanChecklistItem {
   title: string;
   status: ChecklistItemStatus;
   position: number;
+  /**
+   * Marca este item como "lista simples": ele e tudo que está debaixo dele ficam SEM estado e FORA da conta de tarefas
+   * (não entram em pendentes/feitos nem no progresso do card). O item só guarda a marca na raiz da lista; os
+   * descendentes herdam. Itens antigos não têm o campo: ausente = com estado. O `status` guardado é preservado.
+   */
+  simple?: boolean;
 }
 
 export interface ChecklistProgress {
   done: number;
   total: number;
+  /** Itens que estão em listas simples — não entram em `done`/`total`, mas existem (o card mostra que há itens). */
+  simpleCount?: number;
 }

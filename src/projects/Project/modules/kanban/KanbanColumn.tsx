@@ -6,6 +6,8 @@ import { useDroppable } from '@dnd-kit/core';
 import { convertFileSrc } from '@tauri-apps/api/core';
 import ImageUploadField from '@/components/ImageUploadField';
 import BackgroundColorPicker from '@/Kanban/components/BackgroundColorPicker';
+import BackgroundOpacitySlider from '@/Kanban/components/BackgroundOpacitySlider';
+import { withAlpha, blendOverSurface, currentSurfaceHex } from '@/Kanban/utils/colorAlpha';
 import { readableTextColors } from '@/Kanban/utils/readableColors';
 import KanbanCard from './KanbanCard';
 
@@ -68,6 +70,9 @@ interface KanbanColumnProps {
   /** Cor de fundo da coluna (guardada em viewPrefs.columnBackgrounds); null = branco padrão. */
   backgroundColor: string | null;
   onUpdateBackgroundColor: (color: string | null) => void;
+  /** Opacidade do fundo da coluna (0 a 1; viewPrefs.columnBackgroundOpacity). Ausente = 1. Só vale com cor de fundo escolhida. */
+  backgroundOpacity?: number;
+  onUpdateBackgroundOpacity?: (opacity: number) => void;
   /** Modo foco: a coluna ocupa a largura toda e os grupos se organizam em grade. */
   focused: boolean;
   onToggleFocus: () => void;
@@ -121,6 +126,8 @@ export default function KanbanColumn({
   onArchive,
   backgroundColor,
   onUpdateBackgroundColor,
+  backgroundOpacity = 1,
+  onUpdateBackgroundOpacity,
   focused,
   onToggleFocus,
   onReorderGroupCards,
@@ -173,12 +180,38 @@ export default function KanbanColumn({
   };
 
   const overLimit = column.wipLimit !== null && cards.length > column.wipLimit;
-  const tc = readableTextColors(backgroundColor ?? '#ffffff'); // texto do cabeçalho legível sobre a cor de fundo da coluna
+  const hasCustomBg = backgroundColor !== null;
+  // Com o fundo translúcido, o contraste depende do que está embaixo: usa a cor MISTURADA com a superfície do tema pra escolher o texto
+  const effectiveBg = backgroundColor === null ? '#ffffff'
+    : backgroundOpacity < 1 ? blendOverSurface(backgroundColor, backgroundOpacity, currentSurfaceHex()) : backgroundColor;
+  const tc = readableTextColors(effectiveBg); // texto do cabeçalho legível sobre a cor de fundo CUSTOM da coluna
+  const backgroundCss = backgroundColor === null ? undefined : (backgroundOpacity < 1 ? withAlpha(backgroundColor, backgroundOpacity) : backgroundColor);
   const { clusters, loose } = useMemo(() => clusterCardsByGroupLabel(cards), [cards]);
+
+  // Sem cor de fundo custom: usa classes Tailwind com dark: (estático, correto nos dois temas).
+  // COM cor de fundo custom: o usuário escolheu aquela cor de propósito — nesse caso o contraste
+  // continua vindo do `tc` calculado dinamicamente (readableTextColors), igual nos dois temas,
+  // porque é a cor exata que está no fundo, não uma classe de tema.
+  const staticText = {
+    text: 'text-neutral-900 dark:text-neutral-100',
+    secondary: 'text-neutral-500 dark:text-neutral-400',
+    muted: 'text-neutral-400 dark:text-neutral-500',
+    accent: 'text-blue-600 dark:text-blue-400',
+    danger: 'text-red-600 dark:text-red-400',
+  };
+  function textClass(token: keyof typeof staticText): string | undefined {
+    return hasCustomBg ? undefined : staticText[token];
+  }
+  function textColor(token: keyof typeof staticText): string | undefined {
+    return hasCustomBg ? tc[token] : undefined;
+  }
 
   return (
     <div ref={setSortableRef} style={style}>
-      <div style={{ display: 'flex', flexDirection: 'column', height: '100%', backgroundColor: backgroundColor ?? '#ffffff', borderRadius: 8, padding: 8 }}>
+      <div
+        className={hasCustomBg ? undefined : 'bg-white dark:bg-neutral-800'}
+        style={{ display: 'flex', flexDirection: 'column', height: '100%', ...(hasCustomBg ? { backgroundColor: backgroundCss } : {}), borderRadius: 8, padding: 8 }}
+      >
         {column.coverPath && (
           <div style={{ position: 'relative' }}>
             <img
@@ -207,10 +240,10 @@ export default function KanbanColumn({
           </div>
         )}
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
-          <button onClick={onToggleCollapsed} style={{ border: 'none', background: 'none', cursor: 'pointer', fontSize: 11, color: tc.secondary }}>
+          <button onClick={onToggleCollapsed} className={textClass('secondary')} style={{ border: 'none', background: 'none', cursor: 'pointer', fontSize: 11, color: textColor('secondary') }}>
             {collapsed ? '▶' : '▼'}
           </button>
-          <span {...attributes} {...listeners} style={{ cursor: 'grab', color: tc.muted, fontSize: 12 }} title="Arrastar">⠿</span>
+          <span {...attributes} {...listeners} className={textClass('muted')} style={{ cursor: 'grab', color: textColor('muted'), fontSize: 12 }} title="Arrastar">⠿</span>
           {column.icon && <span>{column.icon}</span>}
           {editingName ? (
             <input
@@ -219,10 +252,11 @@ export default function KanbanColumn({
               onChange={(e) => setNameDraft(e.target.value)}
               onBlur={() => { setEditingName(false); nameDraft.trim() && nameDraft !== column.name && onRename(nameDraft.trim()); }}
               onKeyDown={(e) => e.key === 'Enter' && (e.target as HTMLInputElement).blur()}
+              className="bg-white dark:bg-neutral-900 text-neutral-900 dark:text-neutral-100 border border-neutral-300 dark:border-neutral-600"
               style={{ fontSize: 13, fontWeight: 600, flex: 1, padding: 2 }}
             />
           ) : (
-            <span onClick={() => setEditingName(true)} style={{ fontSize: 13, fontWeight: 600, flex: 1, color: column.color ?? tc.text }}>
+            <span onClick={() => setEditingName(true)} className={column.color ? undefined : textClass('text')} style={{ fontSize: 13, fontWeight: 600, flex: 1, color: column.color ?? textColor('text') }}>
               {column.name}
             </span>
           )}
@@ -238,7 +272,8 @@ export default function KanbanColumn({
           <button
             onClick={onToggleFocus}
             title={focused ? 'Voltar a todas as colunas' : 'Focar só nesta coluna (grupos e subgrupos em tela cheia)'}
-            style={{ border: 'none', background: 'none', cursor: 'pointer', fontSize: 13, color: focused ? tc.accent : tc.secondary }}
+            className={textClass(focused ? 'accent' : 'secondary')}
+            style={{ border: 'none', background: 'none', cursor: 'pointer', fontSize: 13, color: textColor(focused ? 'accent' : 'secondary') }}
           >
             {focused ? '↩' : '🔍'}
           </button>
@@ -249,18 +284,19 @@ export default function KanbanColumn({
           >
             🎨
           </button>
-          <button onClick={onColumnMenu} style={{ border: 'none', background: 'none', cursor: 'pointer', fontSize: 14, color: tc.secondary }}>⋮</button>
+          <button onClick={onColumnMenu} className={textClass('secondary')} style={{ border: 'none', background: 'none', cursor: 'pointer', fontSize: 14, color: textColor('secondary') }}>⋮</button>
           <button
             onClick={onArchive}
             title={column.visible ? 'Arquivar coluna' : 'Restaurar coluna'}
-            style={{ border: 'none', background: 'none', cursor: 'pointer', fontSize: 12, color: column.visible ? tc.muted : tc.accent }}
+            className={textClass(column.visible ? 'muted' : 'accent')}
+            style={{ border: 'none', background: 'none', cursor: 'pointer', fontSize: 12, color: textColor(column.visible ? 'muted' : 'accent') }}
           >
             {column.visible ? '🗄' : '↩'}
           </button>
         </div>
 
         {showCoverEditor && (
-          <div style={{ marginBottom: 8, padding: 6, backgroundColor: '#fff', borderRadius: 6, border: '1px dashed #ccc', display: 'flex', flexDirection: 'column', gap: 6 }}>
+          <div className="bg-white dark:bg-neutral-800 border border-dashed border-neutral-300 dark:border-neutral-600" style={{ marginBottom: 8, padding: 6, borderRadius: 6, display: 'flex', flexDirection: 'column', gap: 6 }}>
             <ImageUploadField
               entityId={column.id}
               currentPath={column.coverPath}
@@ -271,14 +307,14 @@ export default function KanbanColumn({
               {column.coverPath ? (
                 <button
                   onClick={() => { onUpdateColumnCover(null); setShowCoverEditor(false); }}
-                  style={{ fontSize: 11, color: '#c62828', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
+                  className="text-red-600 dark:text-red-400" style={{ fontSize: 11, background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
                 >
                   Remover capa
                 </button>
               ) : <span />}
               <button
                 onClick={() => setShowCoverEditor(false)}
-                style={{ fontSize: 11, color: '#666', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
+                className="text-neutral-500 dark:text-neutral-400" style={{ fontSize: 11, background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
               >
                 Fechar
               </button>
@@ -287,18 +323,21 @@ export default function KanbanColumn({
         )}
 
         {showColorEditor && (
-          <div style={{ marginBottom: 8, padding: 6, backgroundColor: '#fff', borderRadius: 6, border: '1px dashed #ccc', display: 'flex', flexDirection: 'column', gap: 6 }}>
-            <div style={{ fontSize: 10, color: '#888' }}>Cor de fundo da coluna</div>
+          <div className="bg-white dark:bg-neutral-800 border border-dashed border-neutral-300 dark:border-neutral-600" style={{ marginBottom: 8, padding: 6, borderRadius: 6, display: 'flex', flexDirection: 'column', gap: 6 }}>
+            <div className="text-neutral-500 dark:text-neutral-400" style={{ fontSize: 10 }}>Cor de fundo da coluna</div>
             <BackgroundColorPicker
               value={backgroundColor}
               fallbackColor="#ffffff"
               coverPath={column.coverPath}
               onChange={onUpdateBackgroundColor}
             />
+            {onUpdateBackgroundOpacity && (
+              <BackgroundOpacitySlider value={backgroundOpacity} enabled={hasCustomBg} onChange={onUpdateBackgroundOpacity} />
+            )}
             <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
               <button
                 onClick={() => setShowColorEditor(false)}
-                style={{ fontSize: 11, color: '#666', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
+                className="text-neutral-500 dark:text-neutral-400" style={{ fontSize: 11, background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
               >
                 Fechar
               </button>
@@ -306,7 +345,7 @@ export default function KanbanColumn({
           </div>
         )}
 
-        <div style={{ fontSize: 11, color: overLimit ? tc.danger : tc.secondary, marginBottom: 6, display: 'flex', gap: 8 }}>
+        <div className={textClass(overLimit ? 'danger' : 'secondary')} style={{ fontSize: 11, color: textColor(overLimit ? 'danger' : 'secondary'), marginBottom: 6, display: 'flex', gap: 8 }}>
           <span>{cards.length} card{cards.length !== 1 ? 's' : ''}</span>
           {column.wipLimit !== null && <span>WIP: {cards.length}/{column.wipLimit}</span>}
         </div>
@@ -314,8 +353,9 @@ export default function KanbanColumn({
         {!collapsed && (
           <div
             ref={setDroppableRef}
+            className={isOver ? 'bg-blue-50 dark:bg-blue-900/30' : undefined}
             style={{
-              flex: 1, minHeight: 40, borderRadius: 6, backgroundColor: isOver ? '#e8f0fe' : 'transparent', padding: 2,
+              flex: 1, minHeight: 40, borderRadius: 6, padding: 2,
               ...(focused
                 // foco: coluna única ocupando a largura toda (cards de cada grupo continuam em lista vertical,
                 // só o bloco do grupo em si passa a ocupar 100% da largura); alignItems 'start' pra cada bloco ter a própria altura

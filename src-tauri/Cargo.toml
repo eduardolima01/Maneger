@@ -24,7 +24,10 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 tauri-plugin-sql = { version = "2.4.0", features = ["sqlite"] }
 tauri-plugin-dialog = "2.7.1"
+tauri-plugin-clipboard-manager = "2.3.3"
 uuid = { version = "1", features = ["v4"] }
 chrono = "0.4"
 trash = "5"
-
+msedge-tts = "0.4"
+base64 = "0.22"
+image = "0.25"

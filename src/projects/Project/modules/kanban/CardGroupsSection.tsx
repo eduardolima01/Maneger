@@ -21,10 +21,10 @@ function SortableCardRow({ card, onOpen, onRequestDelete }: { card: KanbanCard; 
   const style: React.CSSProperties = { transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.5 : 1 };
 
   return (
-    <div ref={setNodeRef} style={{ ...style, display: 'flex', alignItems: 'center', gap: 6, padding: '6px 8px', border: '1px solid #eee', borderRadius: 4, marginBottom: 4, backgroundColor: '#fff' }}>
-      <span {...attributes} {...listeners} style={{ color: '#bbb', fontSize: 12, cursor: 'grab', touchAction: 'none' }} title="Arrastar">⠿</span>
+    <div ref={setNodeRef} className="bg-white dark:bg-neutral-800 text-neutral-900 dark:text-neutral-100 border border-neutral-200 dark:border-neutral-700" style={{ ...style, display: 'flex', alignItems: 'center', gap: 6, padding: '6px 8px', borderRadius: 4, marginBottom: 4 }}>
+      <span {...attributes} {...listeners} className="text-neutral-400 dark:text-neutral-500" style={{ fontSize: 12, cursor: 'grab', touchAction: 'none' }} title="Arrastar">⠿</span>
       <span onClick={onOpen} style={{ flex: 1, fontSize: 13, cursor: 'pointer' }}>{card.title}</span>
-      <button onClick={onRequestDelete} style={{ border: 'none', background: 'none', cursor: 'pointer', color: '#c62828', fontSize: 12 }}>✕</button>
+      <button onClick={onRequestDelete} className="text-red-600 dark:text-red-400" style={{ border: 'none', background: 'none', cursor: 'pointer', fontSize: 12 }}>✕</button>
     </div>
   );
 }
@@ -32,9 +32,9 @@ function SortableCardRow({ card, onOpen, onRequestDelete }: { card: KanbanCard; 
 /** Linha de card solto (sem grupo) — mesma aparência da SortableCardRow, mas sem drag (não tem lista pra reordenar). */
 function LooseCardRow({ card, onOpen, onRequestDelete }: { card: KanbanCard; onOpen: () => void; onRequestDelete: () => void }) {
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 8px', border: '1px solid #eee', borderRadius: 4, marginBottom: 4, backgroundColor: '#fff' }}>
+    <div className="bg-white dark:bg-neutral-800 text-neutral-900 dark:text-neutral-100 border border-neutral-200 dark:border-neutral-700" style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 8px', borderRadius: 4, marginBottom: 4 }}>
       <span onClick={onOpen} style={{ flex: 1, fontSize: 13, cursor: 'pointer' }}>{card.title}</span>
-      <button onClick={onRequestDelete} style={{ border: 'none', background: 'none', cursor: 'pointer', color: '#c62828', fontSize: 12 }}>✕</button>
+      <button onClick={onRequestDelete} className="text-red-600 dark:text-red-400" style={{ border: 'none', background: 'none', cursor: 'pointer', fontSize: 12 }}>✕</button>
     </div>
   );
 }
@@ -111,7 +111,7 @@ export default function CardGroupsSection({ parentCardId }: CardGroupsSectionPro
     setDeleteCardTarget({ id, title });
   }
 
-  if (loading) return <p style={{ fontSize: 12, color: '#999' }}>Carregando grupos...</p>;
+  if (loading) return <p className="text-neutral-400 dark:text-neutral-500" style={{ fontSize: 12 }}>Carregando grupos...</p>;
 
   return (
     <div>
@@ -138,8 +138,8 @@ export default function CardGroupsSection({ parentCardId }: CardGroupsSectionPro
       </DndContext>
 
       {ungroupedCards.length > 0 && (
-        <div style={{ border: '1px dashed #ccc', borderRadius: 6, padding: 8, marginBottom: 8 }}>
-          <div style={{ fontSize: 12, fontWeight: 600, color: '#999', marginBottom: 6 }}>
+        <div className="border border-dashed border-neutral-300 dark:border-neutral-600" style={{ borderRadius: 6, padding: 8, marginBottom: 8 }}>
+          <div className="text-neutral-400 dark:text-neutral-500" style={{ fontSize: 12, fontWeight: 600, marginBottom: 6 }}>
             Sem grupo
           </div>
           {ungroupedCards.map((c) => (
@@ -159,6 +159,7 @@ export default function CardGroupsSection({ parentCardId }: CardGroupsSectionPro
           onChange={(e) => setNewGroupName(e.target.value)}
           onKeyDown={(e) => e.key === 'Enter' && handleCreateGroup()}
           placeholder="Nome do novo grupo..."
+          className="bg-white dark:bg-neutral-900 text-neutral-900 dark:text-neutral-100 dark:border-neutral-600 dark:[color-scheme:dark]"
           style={{ flex: 1, padding: 6, fontSize: 13 }}
         />
         <Button variant="secondary" onClick={handleCreateGroup}>+ Grupo</Button>
@@ -217,17 +218,18 @@ function SortableGroupBlock({
   const style: React.CSSProperties = { transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.5 : 1 };
 
   return (
-    <div ref={setNodeRef} style={{ ...style, border: '1px solid #eee', borderRadius: 6, padding: 8, marginBottom: 8, backgroundColor: '#fafafa' }}>
+    <div ref={setNodeRef} className="bg-neutral-50 dark:bg-neutral-900 text-neutral-900 dark:text-neutral-100 border border-neutral-200 dark:border-neutral-700" style={{ ...style, borderRadius: 6, padding: 8, marginBottom: 8 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
-        <span {...attributes} {...listeners} style={{ color: '#bbb', fontSize: 12, cursor: 'grab', touchAction: 'none' }} title="Arrastar">⠿</span>
+        <span {...attributes} {...listeners} className="text-neutral-400 dark:text-neutral-500" style={{ fontSize: 12, cursor: 'grab', touchAction: 'none' }} title="Arrastar">⠿</span>
         <input
           value={nameDraft}
           onChange={(e) => setNameDraft(e.target.value)}
           onBlur={() => nameDraft.trim() && nameDraft !== name && onRename(nameDraft.trim())}
+          className="text-neutral-900 dark:text-neutral-100"
           style={{ flex: 1, fontSize: 13, fontWeight: 600, border: 'none', background: 'none', outline: 'none' }}
         />
-        <span style={{ fontSize: 11, color: '#999' }}>({cards.length})</span>
-        <button onClick={onRequestDelete} style={{ border: 'none', background: 'none', cursor: 'pointer', color: '#c62828', fontSize: 12 }}>✕</button>
+        <span className="text-neutral-400 dark:text-neutral-500" style={{ fontSize: 11 }}>({cards.length})</span>
+        <button onClick={onRequestDelete} className="text-red-600 dark:text-red-400" style={{ border: 'none', background: 'none', cursor: 'pointer', fontSize: 12 }}>✕</button>
       </div>
 
       <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onCardsDragEnd}>
@@ -244,12 +246,14 @@ function SortableGroupBlock({
           onChange={(e) => onNewCardTitleChange(e.target.value)}
           onKeyDown={(e) => e.key === 'Enter' && onCreateCard()}
           placeholder="Novo card..."
+          className="bg-white dark:bg-neutral-900 text-neutral-900 dark:text-neutral-100 dark:border-neutral-600 dark:[color-scheme:dark]"
           style={{ flex: 1, padding: 6, fontSize: 12 }}
         />
         <button
           onClick={onCreateCard}
           disabled={!newCardTitle.trim()}
-          style={{ padding: '6px 10px', fontSize: 12, border: 'none', borderRadius: 4, backgroundColor: newCardTitle.trim() ? '#1a73e8' : '#ccc', color: '#fff', cursor: newCardTitle.trim() ? 'pointer' : 'default' }}
+          className={newCardTitle.trim() ? 'bg-blue-600 text-white' : 'bg-neutral-300 dark:bg-neutral-600 text-white'}
+          style={{ padding: '6px 10px', fontSize: 12, border: 'none', borderRadius: 4, cursor: newCardTitle.trim() ? 'pointer' : 'default' }}
         >
           +
         </button>
@@ -257,5 +261,3 @@ function SortableGroupBlock({
     </div>
   );
 }
-
-

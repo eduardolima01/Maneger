@@ -40,27 +40,27 @@ export default function CreateKanbanModal({ isOpen, onClose, onCreated }: Create
 
   return (
     <Modal open={isOpen} onClose={resetAndClose} title="Novo Kanban">
-      <div style={{ padding: 16, width: "100%", height: '300px', display: 'flex', flexDirection: 'column', gap: 12 }}>
+      <div className="text-neutral-900 dark:text-neutral-100" style={{ padding: 16, width: "100%", height: '300px', display: 'flex', flexDirection: 'column', gap: 12 }}>
         <div>
-          <label style={{ fontSize: 12, fontWeight: 600, color: '#666', display: 'block', marginBottom: 4 }}>Projeto ou subprojeto</label>
+          <label className="text-neutral-500 dark:text-neutral-400" style={{ fontSize: 12, fontWeight: 600, display: 'block', marginBottom: 4 }}>Projeto ou subprojeto</label>
           <ProjectSearchSelect value={projectId} onChange={(id) => setProjectId(id)} />
         </div>
 
         <div>
-          <label style={{ fontSize: 12, fontWeight: 600, color: '#666', display: 'block', marginBottom: 4 }}>Nome do Kanban</label>
+          <label className="text-neutral-500 dark:text-neutral-400" style={{ fontSize: 12, fontWeight: 600, display: 'block', marginBottom: 4 }}>Nome do Kanban</label>
           <input
             value={name}
             onChange={(e) => setName(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && handleCreate()}
             placeholder="Ex: Sprint Atual"
-            style={{ width: '100%', padding: 8, fontSize: 14 }}
+            className="bg-white dark:bg-neutral-900 text-neutral-900 dark:text-neutral-100 dark:border-neutral-600 dark:[color-scheme:dark]" style={{ width: '100%', padding: 8, fontSize: 14 }}
           />
         </div>
 
-        {error && <p style={{ color: 'red', fontSize: 12 }}>{error}</p>}
+        {error && <p className="text-red-600 dark:text-red-400" style={{ fontSize: 12 }}>{error}</p>}
 
       </div>
-      <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, borderTop: '1px solid #eee', paddingTop: 12 }}>
+      <div className="border-t border-neutral-200 dark:border-neutral-700" style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, paddingTop: 12 }}>
         <Button variant="secondary" onClick={resetAndClose}>Cancelar</Button>
         <Button variant="primary" onClick={handleCreate} disabled={saving || !projectId || !name.trim()}>
           {saving ? 'Criando...' : 'Criar'}

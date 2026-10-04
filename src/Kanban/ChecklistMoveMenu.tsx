@@ -34,23 +34,26 @@ function Row({ depth = 0, label, hint, strike, disabled, onClick }: RowProps) {
       onMouseEnter={() => setHover(true)}
       onMouseLeave={() => setHover(false)}
       onClick={() => { if (!disabled) onClick(); }}
+      className={[
+        disabled ? 'text-neutral-400 dark:text-neutral-500' : 'text-neutral-900 dark:text-neutral-100',
+        hover && !disabled ? 'bg-blue-50 dark:bg-blue-950' : '',
+      ].join(' ')}
       style={{
         display: 'flex', alignItems: 'center', gap: 4, fontSize: 12,
         padding: '4px 8px', paddingLeft: 8 + depth * INDENT_PX,
         cursor: disabled ? 'default' : 'pointer',
-        color: disabled ? '#aaa' : '#222',
-        backgroundColor: hover && !disabled ? '#e8f0fe' : 'transparent',
       }}
     >
       <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', textDecoration: strike ? 'line-through' : 'none' }}>
         {label}
       </span>
-      {hint && <span style={{ fontSize: 10, color: '#aaa' }}>{hint}</span>}
+      {hint && <span className="text-neutral-400 dark:text-neutral-500" style={{ fontSize: 10 }}>{hint}</span>}
     </div>
   );
 }
 
-const sectionLabel: React.CSSProperties = { padding: '6px 8px 2px', fontSize: 10, fontWeight: 600, color: '#888' };
+const sectionLabel: React.CSSProperties = { padding: '6px 8px 2px', fontSize: 10, fontWeight: 600 };
+const SECTION_LABEL_CLS = 'text-neutral-500 dark:text-neutral-400';
 
 /**
  * Menu "Mover item" da checklist: virar tarefa principal, subir um nível, ou virar sub-item de qualquer outro
@@ -73,7 +76,7 @@ export default function ChecklistMoveMenu({ x, y, items, movingId, onPickParent,
           <Row
             depth={depth}
             label={n.title}
-            strike={n.checked}
+            strike={n.status === 'done'}
             hint={n.id === currentParentId ? '(atual)' : undefined}
             disabled={n.id === currentParentId}
             onClick={() => onPickParent(n.id)}
@@ -118,11 +121,11 @@ export default function ChecklistMoveMenu({ x, y, items, movingId, onPickParent,
       onMouseDown={(e) => e.stopPropagation()}
       onClick={(e) => e.stopPropagation()}
       onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); }}
+      className="bg-white dark:bg-neutral-800 border border-neutral-300 dark:border-neutral-600"
       style={{
         position: 'fixed', left: pos.left, top: pos.top, zIndex: 20000,
         width: 240, maxHeight: 'min(360px, calc(100vh - 16px))', overflowY: 'auto',
-        backgroundColor: '#fff', border: '1px solid #ddd', borderRadius: 6,
-        boxShadow: '0 4px 14px rgba(0,0,0,0.18)', padding: '4px 0',
+        borderRadius: 6, boxShadow: '0 4px 14px rgba(0,0,0,0.18)', padding: '4px 0',
       }}
     >
       {moving?.parentItemId && (
@@ -132,9 +135,9 @@ export default function ChecklistMoveMenu({ x, y, items, movingId, onPickParent,
         </>
       )}
 
-      <div style={sectionLabel}>Tornar sub-item de…</div>
+      <div className={SECTION_LABEL_CLS} style={sectionLabel}>Tornar sub-item de…</div>
       {hasTargets ? renderTargets(tree, 0) : (
-        <div style={{ padding: '4px 8px', fontSize: 12, color: '#999' }}>Não há outro item no card.</div>
+        <div className="text-neutral-400 dark:text-neutral-500" style={{ padding: '4px 8px', fontSize: 12 }}>Não há outro item no card.</div>
       )}
     </div>
   );

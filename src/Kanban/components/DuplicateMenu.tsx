@@ -17,6 +17,9 @@ interface DuplicateMenuProps {
   onMouseLeave?: () => void;
 }
 
+const INPUT_CLS = 'bg-white dark:bg-neutral-900 text-neutral-900 dark:text-neutral-100 dark:border-neutral-600 dark:[color-scheme:dark]';
+const ROW_HOVER_CLS = 'hover:bg-neutral-100 dark:hover:bg-neutral-700';
+
 export default function DuplicateMenu({ x, y, onDuplicateOnce, onDuplicateMultiple, onClose, onMouseEnter, onMouseLeave }: DuplicateMenuProps) {
   const ref = useRef<HTMLDivElement>(null);
   const [expanded, setExpanded] = useState(false);
@@ -56,58 +59,77 @@ export default function DuplicateMenu({ x, y, onDuplicateOnce, onDuplicateMultip
       ref={ref}
       onMouseEnter={onMouseEnter}
       onMouseLeave={onMouseLeave}
+      className="bg-white dark:bg-neutral-800 text-neutral-900 dark:text-neutral-100 border border-neutral-300 dark:border-neutral-600"
       style={{
-        position: 'fixed', top: y, left: x, backgroundColor: '#fff', border: '1px solid #ddd',
+        position: 'fixed', top: y, left: x,
         borderRadius: 6, boxShadow: '0 2px 12px rgba(0,0,0,0.15)', zIndex: 1000, minWidth: 220, padding: 6,
       }}
     >
       <button
         onClick={() => { onDuplicateOnce(); onClose(); }}
-        style={{ display: 'block', width: '100%', textAlign: 'left', padding: '8px 8px', fontSize: 13, border: 'none', background: 'none', cursor: 'pointer', borderRadius: 4 }}
+        className={ROW_HOVER_CLS}
+        style={{ display: 'block', width: '100%', textAlign: 'left', padding: '8px 8px', fontSize: 13, border: 'none', cursor: 'pointer', borderRadius: 4 }}
       >
         ⧉ Duplicar
       </button>
       <button
         onClick={() => setExpanded((v) => !v)}
-        style={{ display: 'block', width: '100%', textAlign: 'left', padding: '8px 8px', fontSize: 13, border: 'none', background: 'none', cursor: 'pointer', borderRadius: 4, color: '#1a73e8' }}
+        className={`text-blue-600 dark:text-blue-400 ${ROW_HOVER_CLS}`}
+        style={{ display: 'block', width: '100%', textAlign: 'left', padding: '8px 8px', fontSize: 13, border: 'none', cursor: 'pointer', borderRadius: 4 }}
       >
         ⧉ Duplicar várias vezes... {expanded ? '▲' : '▼'}
       </button>
 
       {expanded && (
-        <div style={{ borderTop: '1px solid #eee', marginTop: 4, paddingTop: 8, display: 'flex', flexDirection: 'column', gap: 8, padding: '8px 6px' }}>
+        <div className="border-t border-neutral-200 dark:border-neutral-700" style={{ marginTop: 4, paddingTop: 8, display: 'flex', flexDirection: 'column', gap: 8, padding: '8px 6px' }}>
           <div style={{ display: 'flex', gap: 4 }}>
-            <button onClick={() => setMode('numbered')} style={{ flex: 1, fontSize: 11, padding: 6, border: mode === 'numbered' ? '1px solid #1a73e8' : '1px solid #ddd', borderRadius: 4, background: mode === 'numbered' ? '#eef2ff' : '#fff', cursor: 'pointer' }}>Numerado</button>
-            <button onClick={() => setMode('dates')} style={{ flex: 1, fontSize: 11, padding: 6, border: mode === 'dates' ? '1px solid #1a73e8' : '1px solid #ddd', borderRadius: 4, background: mode === 'dates' ? '#eef2ff' : '#fff', cursor: 'pointer' }}>Datas</button>
+            <button
+              onClick={() => setMode('numbered')}
+              className={
+                mode === 'numbered'
+                  ? 'border border-blue-600 dark:border-blue-400 bg-indigo-50 dark:bg-indigo-950 text-neutral-900 dark:text-neutral-100'
+                  : 'border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 text-neutral-900 dark:text-neutral-100'
+              }
+              style={{ flex: 1, fontSize: 11, padding: 6, borderRadius: 4, cursor: 'pointer' }}
+            >Numerado</button>
+            <button
+              onClick={() => setMode('dates')}
+              className={
+                mode === 'dates'
+                  ? 'border border-blue-600 dark:border-blue-400 bg-indigo-50 dark:bg-indigo-950 text-neutral-900 dark:text-neutral-100'
+                  : 'border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 text-neutral-900 dark:text-neutral-100'
+              }
+              style={{ flex: 1, fontSize: 11, padding: 6, borderRadius: 4, cursor: 'pointer' }}
+            >Datas</button>
           </div>
 
           {mode === 'numbered' && (
             <div>
-              <label style={{ fontSize: 11, color: '#666', display: 'block', marginBottom: 2 }}>Quantidade</label>
-              <input type="number" min={1} max={50} value={count} onChange={(e) => setCount(Number(e.target.value))} style={{ width: '100%', padding: 4, fontSize: 12 }} />
+              <label className="text-neutral-500 dark:text-neutral-400" style={{ fontSize: 11, display: 'block', marginBottom: 2 }}>Quantidade</label>
+              <input type="number" min={1} max={50} value={count} onChange={(e) => setCount(Number(e.target.value))} className={INPUT_CLS} style={{ width: '100%', padding: 4, fontSize: 12 }} />
             </div>
           )}
 
           {mode === 'numbered' ? (
             <div>
-              <label style={{ fontSize: 11, color: '#666', display: 'block', marginBottom: 2 }}>Começar em</label>
-              <input type="number" value={startAt} onChange={(e) => setStartAt(Number(e.target.value))} style={{ width: '100%', padding: 4, fontSize: 12 }} />
+              <label className="text-neutral-500 dark:text-neutral-400" style={{ fontSize: 11, display: 'block', marginBottom: 2 }}>Começar em</label>
+              <input type="number" value={startAt} onChange={(e) => setStartAt(Number(e.target.value))} className={INPUT_CLS} style={{ width: '100%', padding: 4, fontSize: 12 }} />
             </div>
           ) : (
             <div style={{ display: 'flex', gap: 6 }}>
               <div style={{ flex: 1 }}>
-                <label style={{ fontSize: 11, color: '#666', display: 'block', marginBottom: 2 }}>De</label>
-                <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} style={{ width: '100%', padding: 4, fontSize: 12 }} />
+                <label className="text-neutral-500 dark:text-neutral-400" style={{ fontSize: 11, display: 'block', marginBottom: 2 }}>De</label>
+                <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className={INPUT_CLS} style={{ width: '100%', padding: 4, fontSize: 12 }} />
               </div>
               <div style={{ flex: 1 }}>
-                <label style={{ fontSize: 11, color: '#666', display: 'block', marginBottom: 2 }}>Até</label>
-                <input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} style={{ width: '100%', padding: 4, fontSize: 12 }} />
+                <label className="text-neutral-500 dark:text-neutral-400" style={{ fontSize: 11, display: 'block', marginBottom: 2 }}>Até</label>
+                <input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} className={INPUT_CLS} style={{ width: '100%', padding: 4, fontSize: 12 }} />
               </div>
             </div>
           )}
 
           {mode === 'dates' && startDate && endDate && (
-            <p style={{ fontSize: 11, color: '#666', margin: 0 }}>
+            <p className="text-neutral-500 dark:text-neutral-400" style={{ fontSize: 11, margin: 0 }}>
               {generateDailyDates(startDate, endDate).length > 0
                 ? `${generateDailyDates(startDate, endDate).length} cópia(s), 1 por dia`
                 : 'Data final precisa ser depois da inicial'}
@@ -116,7 +138,8 @@ export default function DuplicateMenu({ x, y, onDuplicateOnce, onDuplicateMultip
 
           <button
             onClick={submitMultiple}
-            style={{ fontSize: 12, padding: '6px 8px', border: 'none', borderRadius: 4, backgroundColor: '#1a73e8', color: '#fff', cursor: 'pointer' }}
+            className="bg-blue-600 text-white"
+            style={{ fontSize: 12, padding: '6px 8px', border: 'none', borderRadius: 4, cursor: 'pointer' }}
           >
             Duplicar
           </button>

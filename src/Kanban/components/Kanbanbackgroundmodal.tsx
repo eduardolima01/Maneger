@@ -17,9 +17,9 @@ export default function KanbanBackgroundModal({
 }: KanbanBackgroundModalProps) {
   return (
     <Modal open={isOpen} onClose={onClose} title="Plano de fundo do Kanban">
-      <div style={{ padding: 16, width: 380, maxWidth: '90vw', display: 'flex', flexDirection: 'column', gap: 16 }}>
+      <div className="text-neutral-900 dark:text-neutral-100" style={{ padding: 16, width: 380, maxWidth: '90vw', display: 'flex', flexDirection: 'column', gap: 16 }}>
         <div>
-          <label style={{ fontSize: 12, fontWeight: 600, color: '#666', display: 'block', marginBottom: 6 }}>
+          <label className="text-neutral-500 dark:text-neutral-400" style={{ fontSize: 12, fontWeight: 600, display: 'block', marginBottom: 6 }}>
             Cor de fundo
           </label>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -27,12 +27,13 @@ export default function KanbanBackgroundModal({
               type="color"
               value={backgroundColor ?? '#f0f0f0'}
               onChange={(e) => onUpdate({ backgroundColor: e.target.value })}
-              style={{ width: 40, height: 32, padding: 0, border: '1px solid #ccc', borderRadius: 4, cursor: 'pointer' }}
+              className="border border-neutral-300 dark:border-neutral-600" style={{ width: 40, height: 32, padding: 0, borderRadius: 4, cursor: 'pointer' }}
             />
             {backgroundColor && (
               <button
                 onClick={() => onUpdate({ backgroundColor: null })}
-                style={{ fontSize: 12, color: '#c62828', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
+                className="text-red-600 dark:text-red-400"
+                style={{ fontSize: 12, background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
               >
                 Remover cor
               </button>
@@ -40,11 +41,11 @@ export default function KanbanBackgroundModal({
           </div>
         </div>
 
-        <div style={{ borderTop: '1px solid #eee', paddingTop: 12 }}>
-          <label style={{ fontSize: 12, fontWeight: 600, color: '#666', display: 'block', marginBottom: 4 }}>
+        <div className="border-t border-neutral-200 dark:border-neutral-700" style={{ paddingTop: 12 }}>
+          <label className="text-neutral-500 dark:text-neutral-400" style={{ fontSize: 12, fontWeight: 600, display: 'block', marginBottom: 4 }}>
             Imagem de fundo
           </label>
-          <p style={{ fontSize: 11, color: '#999', margin: '0 0 8px' }}>
+          <p className="text-neutral-400 dark:text-neutral-500" style={{ fontSize: 11, margin: '0 0 8px' }}>
             Se definida, a imagem aparece por trás das colunas no lugar da cor.
           </p>
           <ImageUploadField
@@ -56,7 +57,8 @@ export default function KanbanBackgroundModal({
           {backgroundImagePath && (
             <button
               onClick={() => onUpdate({ backgroundImagePath: null })}
-              style={{ marginTop: 6, fontSize: 12, color: '#c62828', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
+              className="text-red-600 dark:text-red-400"
+              style={{ marginTop: 6, fontSize: 12, background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
             >
               Remover imagem
             </button>

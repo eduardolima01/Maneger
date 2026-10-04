@@ -22,18 +22,16 @@ export default function KanbanTile({ kanban, columnCounts, isPinned, isHidden, o
   return (
     <div
       onClick={onClick}
+      className="bg-white dark:bg-neutral-800 hover:bg-gray-50 dark:hover:bg-neutral-700 text-neutral-900 dark:text-neutral-100 border border-neutral-200 dark:border-neutral-700"
       style={{
-        border: '1px solid #e5e7eb',
         borderLeft: `4px solid ${kanban.color ?? projectColor}`,
         borderRadius: 8,
         padding: 0,
         cursor: 'pointer',
         opacity: kanban.archived || isHidden ? 0.55 : 1,
-        backgroundColor: '#fff',
         position: 'relative',
         overflow: 'hidden',
       }}
-      className="hover:bg-gray-50"
     >
       <div
         style={{
@@ -52,7 +50,7 @@ export default function KanbanTile({ kanban, columnCounts, isPinned, isHidden, o
         ) : (
           <span style={{ width: 28, height: 28, borderRadius: '50%', backgroundColor: 'rgba(255,255,255,0.3)', flexShrink: 0 }} />
         )}
-        <span style={{ fontWeight: 600, fontSize: 14, color: '#fff', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+        <span className="text-white" style={{ fontWeight: 600, fontSize: 14, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
           {isPinned && '📌 '}
           {kanban.isDefault && '⭐ '}{kanban.name}
         </span>
@@ -62,24 +60,28 @@ export default function KanbanTile({ kanban, columnCounts, isPinned, isHidden, o
         <div style={{ position: 'absolute', top: 8, right: 8 }} onClick={(e) => e.stopPropagation()}>
           <button
             onClick={() => setMenuOpen((v) => !v)}
-            style={{ border: 'none', background: 'none', cursor: 'pointer', fontSize: 14, color: '#fff' }}
+            className="text-white"
+            style={{ border: 'none', background: 'none', cursor: 'pointer', fontSize: 14 }}
           >
             ⋮
           </button>
           {menuOpen && (
             <div
               onMouseLeave={() => setMenuOpen(false)}
-              style={{ position: 'absolute', right: 0, top: '100%', backgroundColor: '#fff', border: '1px solid #ddd', borderRadius: 4, boxShadow: '0 2px 8px rgba(0,0,0,0.12)', zIndex: 10, minWidth: 150 }}
+              className="bg-white dark:bg-neutral-800 text-neutral-900 dark:text-neutral-100 border border-neutral-300 dark:border-neutral-600"
+              style={{ position: 'absolute', right: 0, top: '100%', borderRadius: 4, boxShadow: '0 2px 8px rgba(0,0,0,0.12)', zIndex: 10, minWidth: 150 }}
             >
               <button
                 onClick={() => { onTogglePinned(); setMenuOpen(false); }}
-                style={{ display: 'block', width: '100%', textAlign: 'left', padding: '8px 12px', fontSize: 13, border: 'none', background: 'none', cursor: 'pointer' }}
+                className="hover:bg-neutral-100 dark:hover:bg-neutral-700"
+                style={{ display: 'block', width: '100%', textAlign: 'left', padding: '8px 12px', fontSize: 13, border: 'none', cursor: 'pointer' }}
               >
                 {isPinned ? '📌 Desafixar' : '📌 Fixar no topo'}
               </button>
               <button
                 onClick={() => { onToggleHidden(); setMenuOpen(false); }}
-                style={{ display: 'block', width: '100%', textAlign: 'left', padding: '8px 12px', fontSize: 13, border: 'none', background: 'none', cursor: 'pointer' }}
+                className="hover:bg-neutral-100 dark:hover:bg-neutral-700"
+                style={{ display: 'block', width: '100%', textAlign: 'left', padding: '8px 12px', fontSize: 13, border: 'none', cursor: 'pointer' }}
               >
                 {isHidden ? '👁 Mostrar' : '🙈 Ocultar'}
               </button>
@@ -90,38 +92,39 @@ export default function KanbanTile({ kanban, columnCounts, isPinned, isHidden, o
 
       <div style={{ padding: '10px 12px' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
-          <span style={{ fontSize: 12, color: '#666', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+          <span className="text-neutral-500 dark:text-neutral-400" style={{ fontSize: 12, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
             {kanban.projectName}
           </span>
           {kanban.archived && (
-            <span style={{ fontSize: 10, backgroundColor: '#eee', color: '#666', borderRadius: 3, padding: '2px 6px' }}>
+            <span className="bg-neutral-200 dark:bg-neutral-700 text-neutral-500 dark:text-neutral-300" style={{ fontSize: 10, borderRadius: 3, padding: '2px 6px' }}>
               Arquivado
             </span>
           )}
           {isHidden && (
-            <span style={{ fontSize: 10, backgroundColor: '#fce8e6', color: '#c62828', borderRadius: 3, padding: '2px 6px' }}>
+            <span className="bg-red-50 dark:bg-red-950 text-red-700 dark:text-red-300" style={{ fontSize: 10, borderRadius: 3, padding: '2px 6px' }}>
               Oculto
             </span>
           )}
-          {kanban.projectArchived && <span style={{ fontSize: 10, color: '#c62828' }}>(projeto arquivado)</span>}
+          {kanban.projectArchived && <span className="text-red-600 dark:text-red-400" style={{ fontSize: 10 }}>(projeto arquivado)</span>}
         </div>
 
         {kanban.description && (
-          <p style={{ fontSize: 11, color: '#999', margin: '4px 0 0', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+          <p className="text-neutral-400 dark:text-neutral-500" style={{ fontSize: 11, margin: '4px 0 0', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
             {kanban.description}
           </p>
         )}
 
         <div style={{ marginTop: 8, display: 'flex', flexWrap: 'wrap', gap: 6 }}>
           {columnCounts.length === 0 && (
-            <span style={{ fontSize: 11, color: '#999' }}>Sem colunas visíveis</span>
+            <span className="text-neutral-400 dark:text-neutral-500" style={{ fontSize: 11 }}>Sem colunas visíveis</span>
           )}
           {columnCounts.map((c) => (
             <span
               key={c.columnId}
               title={`${c.columnName}: ${c.count} card${c.count !== 1 ? 's' : ''}`}
+              className="bg-neutral-100 dark:bg-neutral-700 text-neutral-700 dark:text-neutral-200"
               style={{
-                fontSize: 10, backgroundColor: '#f1f3f4', color: '#444', borderRadius: 10,
+                fontSize: 10, borderRadius: 10,
                 padding: '2px 8px', display: 'flex', alignItems: 'center', gap: 3,
               }}
             >
@@ -131,10 +134,9 @@ export default function KanbanTile({ kanban, columnCounts, isPinned, isHidden, o
           ))}
         </div>
         {totalCards > 0 && (
-          <div style={{ marginTop: 4, fontSize: 10, color: '#999' }}>{totalCards} card{totalCards !== 1 ? 's' : ''} no total</div>
+          <div className="text-neutral-400 dark:text-neutral-500" style={{ marginTop: 4, fontSize: 10 }}>{totalCards} card{totalCards !== 1 ? 's' : ''} no total</div>
         )}
       </div>
     </div>
   );
 }
-

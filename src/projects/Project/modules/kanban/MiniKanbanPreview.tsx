@@ -18,10 +18,11 @@ export default function MiniKanbanPreview({ columns, accentColor, barMaxHeight =
             <div
               key={c.columnId}
               title={`${c.columnName}: ${c.count} card${c.count !== 1 ? 's' : ''}`}
+              className={c.count === 0 ? 'bg-neutral-200 dark:bg-neutral-700' : undefined}
               style={{
                 flex: 1,
                 height: barHeight,
-                backgroundColor: c.count === 0 ? '#e8e8e8' : accentColor,
+                backgroundColor: c.count === 0 ? undefined : accentColor,
                 opacity: c.count === 0 ? 1 : 0.35 + 0.65 * (c.count / maxCount),
                 borderRadius: '2px 2px 0 0',
                 minWidth: 6,
@@ -34,7 +35,8 @@ export default function MiniKanbanPreview({ columns, accentColor, barMaxHeight =
         {columns.map((c) => (
           <div
             key={c.columnId}
-            style={{ flex: 1, minWidth: 6, textAlign: 'center', fontSize: 9, color: '#888', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+            className="text-neutral-500 dark:text-neutral-400"
+            style={{ flex: 1, minWidth: 6, textAlign: 'center', fontSize: 9, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
           >
             {c.count}
           </div>

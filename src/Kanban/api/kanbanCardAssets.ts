@@ -31,6 +31,15 @@ export async function listCardFiles(cardId: string): Promise<CardFileInfo[]> {
   return invoke<CardFileInfo[]>('list_card_files', { cardId });
 }
 
+/**
+ * Renomeia um arquivo do card, mantendo-o na mesma pasta. `filePath` é o caminho absoluto ATUAL (`CardFileInfo.path`);
+ * devolve o novo caminho absoluto. O comando Rust recusa nome inválido, nome já existente e arquivo que não esteja
+ * numa pasta `card-files` — então não serve pra renomear arquivo qualquer do disco.
+ */
+export async function renameCardFile(filePath: string, newName: string): Promise<string> {
+  return invoke<string>('rename_card_file', { path: filePath, newName });
+}
+
 /** Remove um arquivo específico do card, sem apagar os outros. */
 export async function deleteCardFile(cardId: string, fileName: string): Promise<void> {
   await invoke('delete_card_file', { cardId, fileName });

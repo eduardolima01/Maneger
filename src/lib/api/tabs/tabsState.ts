@@ -5,6 +5,11 @@ export interface PersistedTab {
   customTitle?: string;
   createdAt: string;
   updatedAt: string;
+  /** Histórico de navegação (voltar/avançar) dessa aba. Opcional: arquivos salvos antes
+   *  dessa funcionalidade existir não têm esse campo — tabStore.ts trata a ausência
+   *  inicializando o histórico só com `path`. */
+  navHistory?: string[];
+  navIndex?: number;
 }
 
 export interface TabsState {

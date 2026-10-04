@@ -42,19 +42,22 @@ function Row({ depth, hasChildren, collapsed, onToggle, icon, label, bold, disab
       onMouseLeave={() => setHover(false)}
       onClick={() => { if (!disabled) onClick(); }}
       title={disabled ? 'O card já está aqui' : undefined}
+      className={[
+        disabled ? 'text-neutral-400 dark:text-neutral-500' : 'text-neutral-900 dark:text-neutral-100',
+        hover && !disabled ? 'bg-blue-50 dark:bg-blue-950' : '',
+      ].join(' ')}
       style={{
         display: 'flex', alignItems: 'center', gap: 4,
         padding: '4px 8px', paddingLeft: 8 + depth * INDENT_PX,
         fontSize: 12, cursor: disabled ? 'default' : 'pointer',
-        color: disabled ? '#aaa' : '#222',
         fontWeight: bold ? 600 : 400,
-        backgroundColor: hover && !disabled ? '#e8f0fe' : 'transparent',
       }}
     >
       {hasChildren ? (
         <span
           onClick={(e) => { e.stopPropagation(); onToggle(); }}
-          style={{ width: 14, fontSize: 9, color: '#666', textAlign: 'center', cursor: 'pointer', flexShrink: 0 }}
+          className="text-neutral-500 dark:text-neutral-400"
+          style={{ width: 14, fontSize: 9, textAlign: 'center', cursor: 'pointer', flexShrink: 0 }}
         >
           {collapsed ? '▶' : '▼'}
         </span>
@@ -63,7 +66,7 @@ function Row({ depth, hasChildren, collapsed, onToggle, icon, label, bold, disab
       )}
       <span style={{ flexShrink: 0 }}>{icon}</span>
       <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{label}</span>
-      {disabled && <span style={{ fontSize: 10, color: '#aaa' }}>(atual)</span>}
+      {disabled && <span className="text-neutral-400 dark:text-neutral-500" style={{ fontSize: 10 }}>(atual)</span>}
     </div>
   );
 }
@@ -158,19 +161,22 @@ export default function CardMoveMenu({
       onMouseDown={(e) => e.stopPropagation()}
       onClick={(e) => e.stopPropagation()}
       onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); }}
+      className="bg-white dark:bg-neutral-800 border border-neutral-300 dark:border-neutral-600"
       style={{
         position: 'fixed', left: pos.left, top: pos.top, zIndex: 10001,
         width: 240, maxHeight: 'min(420px, calc(100vh - 16px))', overflowY: 'auto',
-        backgroundColor: '#fff', border: '1px solid #ddd', borderRadius: 6,
-        boxShadow: '0 4px 14px rgba(0,0,0,0.18)', padding: '4px 0',
+        borderRadius: 6, boxShadow: '0 4px 14px rgba(0,0,0,0.18)', padding: '4px 0',
       }}
     >
-      <div style={{ padding: '4px 8px 6px', fontSize: 11, fontWeight: 600, color: '#888', borderBottom: '1px solid #eee', marginBottom: 2 }}>
+      <div
+        className="text-neutral-500 dark:text-neutral-400 border-b border-neutral-200 dark:border-neutral-700"
+        style={{ padding: '4px 8px 6px', fontSize: 11, fontWeight: 600, marginBottom: 2 }}
+      >
         {cardCount > 1 ? `Mover ${cardCount} cards para…` : 'Mover para…'}
       </div>
 
       {columns.length === 0 && (
-        <div style={{ padding: '8px', fontSize: 12, color: '#999' }}>Nenhuma coluna visível.</div>
+        <div className="text-neutral-400 dark:text-neutral-500" style={{ padding: '8px', fontSize: 12 }}>Nenhuma coluna visível.</div>
       )}
 
       {columns.map((col) => {

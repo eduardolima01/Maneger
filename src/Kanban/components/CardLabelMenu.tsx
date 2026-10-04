@@ -18,6 +18,10 @@ interface CardLabelMenuProps {
   onReorder?: (nextLabels: string[]) => void;
 }
 
+const FAINT_CLS = 'text-neutral-400 dark:text-neutral-500';
+const INPUT_CLS = 'bg-white dark:bg-neutral-900 text-neutral-900 dark:text-neutral-100 border border-neutral-300 dark:border-neutral-600';
+const ROW_HOVER_CLS = 'hover:bg-neutral-100 dark:hover:bg-neutral-700';
+
 export default function CardLabelMenu({ x, y, cardLabels, allLabels, onToggle, onCreate, onClose, onMouseEnter, onMouseLeave, onReorder }: CardLabelMenuProps) {
   const ref = useRef<HTMLDivElement>(null);
   const [creating, setCreating] = useState(false);
@@ -101,14 +105,15 @@ export default function CardLabelMenu({ x, y, cardLabels, allLabels, onToggle, o
       ref={ref}
       onMouseEnter={onMouseEnter}
       onMouseLeave={onMouseLeave}
+      className="bg-white dark:bg-neutral-800 text-neutral-900 dark:text-neutral-100 border border-neutral-300 dark:border-neutral-600"
       style={{
-        position: 'fixed', top: y, left: x, backgroundColor: '#fff', border: '1px solid #ddd',
+        position: 'fixed', top: y, left: x,
         borderRadius: 6, boxShadow: '0 2px 12px rgba(0,0,0,0.15)', zIndex: 1000, minWidth: 200, padding: 6,
       }}
     >
       {onReorder && cardLabels.length > 0 && (
         <>
-          <div style={{ fontSize: 11, fontWeight: 600, color: '#999', padding: '4px 6px' }}>
+          <div className={FAINT_CLS} style={{ fontSize: 11, fontWeight: 600, padding: '4px 6px' }}>
             SUAS ETIQUETAS (arraste para reordenar — a 1ª define a cor do card)
           </div>
           {cardLabels.map((raw, i) => {
@@ -117,15 +122,16 @@ export default function CardLabelMenu({ x, y, cardLabels, allLabels, onToggle, o
               <div
                 key={raw}
                 data-label-row-index={i}
+                className={hoverIndex === i && dragIndex !== null && dragIndex !== i ? 'bg-indigo-50 dark:bg-indigo-950' : ''}
                 style={{
                   display: 'flex', alignItems: 'center', gap: 6, padding: '6px 6px', fontSize: 13,
                   borderRadius: 4, opacity: dragIndex === i ? 0.4 : 1,
-                  backgroundColor: hoverIndex === i && dragIndex !== null && dragIndex !== i ? '#eef2ff' : 'transparent',
                 }}
               >
                 <span
                   onMouseDown={(e) => { e.preventDefault(); handleDragHandleMouseDown(i); }}
-                  style={{ color: '#bbb', fontSize: 11, cursor: 'grab' }}
+                  className={FAINT_CLS}
+                  style={{ fontSize: 11, cursor: 'grab' }}
                 >
                   ⠿
                 </span>
@@ -136,14 +142,14 @@ export default function CardLabelMenu({ x, y, cardLabels, allLabels, onToggle, o
               </div>
             );
           })}
-          <div style={{ borderTop: '1px solid #eee', margin: '4px 0' }} />
+          <div className="border-t border-neutral-200 dark:border-neutral-700" style={{ margin: '4px 0' }} />
         </>
       )}
 
-      <div style={{ fontSize: 11, fontWeight: 600, color: '#999', padding: '4px 6px' }}>ETIQUETAS</div>
+      <div className={FAINT_CLS} style={{ fontSize: 11, fontWeight: 600, padding: '4px 6px' }}>ETIQUETAS</div>
 
       {allLabels.length === 0 && !creating && (
-        <div style={{ fontSize: 12, color: '#999', padding: '4px 6px' }}>Nenhuma etiqueta ainda.</div>
+        <div className={FAINT_CLS} style={{ fontSize: 12, padding: '4px 6px' }}>Nenhuma etiqueta ainda.</div>
       )}
 
       <div style={{ maxHeight: 200, overflowY: 'auto' }}>
@@ -153,24 +159,23 @@ export default function CardLabelMenu({ x, y, cardLabels, allLabels, onToggle, o
             <button
               key={name}
               onClick={() => onToggle(name, color, isGroup)}
+              className={ROW_HOVER_CLS}
               style={{
                 display: 'flex', alignItems: 'center', gap: 6, width: '100%', textAlign: 'left',
-                padding: '6px 6px', fontSize: 13, border: 'none', background: 'none', cursor: 'pointer', borderRadius: 4,
+                padding: '6px 6px', fontSize: 13, border: 'none', cursor: 'pointer', borderRadius: 4,
               }}
-              onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = '#f5f5f5')}
-              onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
             >
               <span style={{ width: 10, height: 10, borderRadius: 3, backgroundColor: color, flexShrink: 0 }} />
               <LabelIconBadge icon={icons[name]} size={13} />
               <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{name}</span>
               {isGroup && <span title="Etiqueta de grupo" style={{ fontSize: 10 }}>🏷</span>}
-              {checked && <span style={{ fontSize: 12, color: '#1a73e8' }}>✓</span>}
+              {checked && <span className="text-blue-600 dark:text-blue-400" style={{ fontSize: 12 }}>✓</span>}
             </button>
           );
         })}
       </div>
 
-      <div style={{ borderTop: '1px solid #eee', marginTop: 4, paddingTop: 4 }}>
+      <div className="border-t border-neutral-200 dark:border-neutral-700" style={{ marginTop: 4, paddingTop: 4 }}>
         {creating ? (
           <div style={{ padding: '4px 6px', display: 'flex', flexDirection: 'column', gap: 6 }}>
             <input
@@ -179,21 +184,20 @@ export default function CardLabelMenu({ x, y, cardLabels, allLabels, onToggle, o
               onChange={(e) => setNewName(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && submitCreate()}
               placeholder="Nome da etiqueta..."
-              style={{ fontSize: 12, padding: 6, border: '1px solid #ddd', borderRadius: 4 }}
+              className={INPUT_CLS}
+              style={{ fontSize: 12, padding: 6, borderRadius: 4 }}
             />
             <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
               {LABEL_COLOR_PALETTE.map((c) => (
                 <button
                   key={c}
                   onClick={() => setNewColor(c)}
-                  style={{
-                    width: 18, height: 18, borderRadius: 4, backgroundColor: c, cursor: 'pointer',
-                    border: newColor === c ? '2px solid #000' : '1px solid rgba(0,0,0,0.15)', padding: 0,
-                  }}
+                  className={newColor === c ? 'border-2 border-black dark:border-white' : 'border border-black/15 dark:border-white/25'}
+                  style={{ width: 18, height: 18, borderRadius: 4, backgroundColor: c, cursor: 'pointer', padding: 0 }}
                 />
               ))}
             </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: '#555' }}>
+            <div className="text-neutral-600 dark:text-neutral-400" style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12 }}>
               <LabelIconPicker value={newIcon} onChange={setNewIcon} />
               <span>Ícone (emoji ou imagem, opcional)</span>
             </div>
@@ -204,16 +208,17 @@ export default function CardLabelMenu({ x, y, cardLabels, allLabels, onToggle, o
             <div style={{ display: 'flex', gap: 4, justifyContent: 'flex-end' }}>
               <button
                 onClick={() => { setCreating(false); setNewName(''); setNewIcon(null); }}
-                style={{ fontSize: 12, padding: '4px 8px', border: 'none', background: 'none', cursor: 'pointer', color: '#666' }}
+                className="text-neutral-500 dark:text-neutral-400"
+                style={{ fontSize: 12, padding: '4px 8px', border: 'none', background: 'none', cursor: 'pointer' }}
               >
                 Cancelar
               </button>
               <button
                 onClick={submitCreate}
                 disabled={!newName.trim()}
+                className={newName.trim() ? 'bg-blue-600 text-white' : 'bg-neutral-300 dark:bg-neutral-600 text-white'}
                 style={{
                   fontSize: 12, padding: '4px 10px', border: 'none', borderRadius: 4,
-                  backgroundColor: newName.trim() ? '#1a73e8' : '#ccc', color: '#fff',
                   cursor: newName.trim() ? 'pointer' : 'default',
                 }}
               >
@@ -224,9 +229,8 @@ export default function CardLabelMenu({ x, y, cardLabels, allLabels, onToggle, o
         ) : (
           <button
             onClick={() => setCreating(true)}
-            style={{ width: '100%', textAlign: 'left', padding: '6px 6px', fontSize: 13, border: 'none', background: 'none', cursor: 'pointer', color: '#1a73e8', borderRadius: 4 }}
-            onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = '#f5f5f5')}
-            onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
+            className={`text-blue-600 dark:text-blue-400 ${ROW_HOVER_CLS}`}
+            style={{ width: '100%', textAlign: 'left', padding: '6px 6px', fontSize: 13, border: 'none', cursor: 'pointer', borderRadius: 4 }}
           >
             + Nova etiqueta
           </button>

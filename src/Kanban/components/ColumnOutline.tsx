@@ -86,19 +86,18 @@ export default function ColumnOutline({ column, groups, cardsByGroup, looseCardC
         <div
           onClick={() => goTo(g.id)}
           title={g.name}
-          onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = '#eef3fd')}
-          onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
+          className="hover:bg-blue-50 dark:hover:bg-neutral-700"
           style={{
             display: 'flex', alignItems: 'center', gap: 5, padding: '4px 6px', paddingLeft: 6 + depth * INDENT_PX,
             fontSize: 12, cursor: 'pointer', borderRadius: 4,
           }}
         >
           <span style={{ flexShrink: 0, fontSize: 12 }}>{g.emoji ?? (depth === 0 ? '📁' : '↳')}</span>
-          <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: '#222', fontWeight: depth === 0 ? 600 : 400 }}>
+          <span className="text-neutral-900 dark:text-neutral-100" style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontWeight: depth === 0 ? 600 : 400 }}>
             {g.name}
           </span>
-          {collapsed && <span title="Grupo recolhido" style={{ fontSize: 9, color: '#999' }}>▶</span>}
-          <span style={{ fontSize: 10, color: '#999' }}>{countCards(g.id)}</span>
+          {collapsed && <span title="Grupo recolhido" className="text-neutral-400 dark:text-neutral-500" style={{ fontSize: 9 }}>▶</span>}
+          <span className="text-neutral-400 dark:text-neutral-500" style={{ fontSize: 10 }}>{countCards(g.id)}</span>
         </div>
         {kids.map((k) => renderGroup(k, depth + 1))}
       </div>
@@ -106,38 +105,40 @@ export default function ColumnOutline({ column, groups, cardsByGroup, looseCardC
   }
 
   const btn: React.CSSProperties = {
-    fontSize: 11, color: '#1a73e8', background: 'none', border: 'none', cursor: 'pointer', padding: 0,
+    fontSize: 11, background: 'none', border: 'none', cursor: 'pointer', padding: 0,
   };
+  const BTN_CLS = 'text-blue-600 dark:text-blue-400';
 
   return (
     <div
       onMouseDown={(e) => e.stopPropagation()} // o quadro tem seleção por arrastar; clicar aqui não deve começar uma
+      className="bg-white dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700"
       style={{
         width: 230, flexShrink: 0, alignSelf: 'flex-start', position: 'sticky', top: 8,
         maxHeight: 'calc(100vh - 24px)', overflowY: 'auto',
-        backgroundColor: '#fff', border: '1px solid #e0e0e0', borderRadius: 8, padding: 8,
+        borderRadius: 8, padding: 8,
       }}
     >
-      <button onClick={onExit} style={{ ...btn, marginBottom: 6 }}>← Todas as colunas</button>
-      <div style={{ fontSize: 13, fontWeight: 600, color: '#222', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={column.name}>
+      <button onClick={onExit} className={BTN_CLS} style={{ ...btn, marginBottom: 6 }}>← Todas as colunas</button>
+      <div className="text-neutral-900 dark:text-neutral-100" style={{ fontSize: 13, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={column.name}>
         {column.icon ? `${column.icon} ` : ''}{column.name}
       </div>
-      <div style={{ fontSize: 11, color: '#888', marginBottom: 6 }}>
+      <div className="text-neutral-500 dark:text-neutral-400" style={{ fontSize: 11, marginBottom: 6 }}>
         {topGroups.length} grupo{topGroups.length !== 1 ? 's' : ''} · {totalCards} card{totalCards !== 1 ? 's' : ''}
       </div>
 
       {topGroups.length > 0 && (
         <div style={{ display: 'flex', gap: 10, marginBottom: 6 }}>
-          <button onClick={() => onChangeCollapsed(Array.from(new Set([...collapsedGroupIds, ...topIds])))} style={btn}>Recolher grupos</button>
-          <button onClick={() => onChangeCollapsed(Array.from(collapsedGroupIds).filter((id) => !topIds.includes(id)))} style={btn}>Expandir grupos</button>
+          <button onClick={() => onChangeCollapsed(Array.from(new Set([...collapsedGroupIds, ...topIds])))} className={BTN_CLS} style={btn}>Recolher grupos</button>
+          <button onClick={() => onChangeCollapsed(Array.from(collapsedGroupIds).filter((id) => !topIds.includes(id)))} className={BTN_CLS} style={btn}>Expandir grupos</button>
         </div>
       )}
 
-      <div style={{ borderTop: '1px solid #eee', paddingTop: 4 }}>
-        {topGroups.length === 0 && <div style={{ fontSize: 12, color: '#999', padding: '4px 6px' }}>Esta coluna não tem grupos.</div>}
+      <div className="border-t border-neutral-200 dark:border-neutral-700" style={{ paddingTop: 4 }}>
+        {topGroups.length === 0 && <div className="text-neutral-400 dark:text-neutral-500" style={{ fontSize: 12, padding: '4px 6px' }}>Esta coluna não tem grupos.</div>}
         {topGroups.map((g) => renderGroup(g, 0))}
         {looseCardCount > 0 && (
-          <div style={{ fontSize: 11, color: '#999', padding: '6px 6px 2px' }}>
+          <div className="text-neutral-400 dark:text-neutral-500" style={{ fontSize: 11, padding: '6px 6px 2px' }}>
             + {looseCardCount} card{looseCardCount !== 1 ? 's' : ''} sem grupo
           </div>
         )}

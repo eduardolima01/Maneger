@@ -8,9 +8,14 @@ interface ImageUploadFieldProps {
   currentPath: string | null;
   onUploaded: (path: string) => void;
   height?: number;
+  /**
+   * Se informado, o campo vira um quadrado de `squareSize` px (imagem cortada pra preencher o quadrado),
+   * em vez de uma faixa de largura total com `height` px. Sem esta prop o visual é o de sempre.
+   */
+  squareSize?: number;
 }
 
-export default function ImageUploadField({ entityId, currentPath, onUploaded, height = 100 }: ImageUploadFieldProps) {
+export default function ImageUploadField({ entityId, currentPath, onUploaded, height = 100, squareSize }: ImageUploadFieldProps) {
   const [isDragOver, setIsDragOver] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -80,28 +85,37 @@ export default function ImageUploadField({ entityId, currentPath, onUploaded, he
         onDrop={handleDrop}
         onPaste={handlePaste}
         onClick={handlePickFile}
+        className={
+          isDragOver
+            ? 'border-2 border-dashed border-blue-600 dark:border-blue-400 bg-blue-50 dark:bg-blue-950'
+            : 'border-2 border-dashed border-neutral-300 dark:border-neutral-600 bg-neutral-50 dark:bg-neutral-900'
+        }
         style={{
-          border: isDragOver ? '2px dashed #1a73e8' : '2px dashed #ccc',
           borderRadius: 8,
           padding: currentPath ? 0 : 16,
           textAlign: 'center',
           cursor: 'pointer',
-          backgroundColor: isDragOver ? '#e8f0fe' : '#fafafa',
           position: 'relative',
           overflow: 'hidden',
           outline: 'none',
+          ...(squareSize
+            ? {
+              width: squareSize, height: squareSize, maxWidth: '100%', boxSizing: 'border-box',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+            }
+            : {}),
         }}
       >
         {currentPath ? (
-          <img src={convertFileSrc(currentPath)} style={{ width: '100%', height, objectFit: 'cover', display: 'block' }} />
+          <img src={convertFileSrc(currentPath)} style={{ width: '100%', height: squareSize ? '100%' : height, objectFit: 'cover', display: 'block' }} />
         ) : (
-          <div style={{ fontSize: 12, color: '#999', padding: `${height / 2 - 20}px 0` }}>
+          <div className="text-neutral-400 dark:text-neutral-500" style={{ fontSize: 12, padding: squareSize ? 0 : `${height / 2 - 20}px 0` }}>
             {uploading ? 'Enviando...' : '📷 Clique, arraste uma imagem, ou cole (Ctrl+V)'}
           </div>
         )}
 
         {uploading && currentPath && (
-          <div style={{ position: 'absolute', inset: 0, backgroundColor: 'rgba(255,255,255,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, color: '#666' }}>
+          <div className="bg-white/70 dark:bg-neutral-900/70 text-neutral-500 dark:text-neutral-400" style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12 }}>
             Enviando...
           </div>
         )}
@@ -110,17 +124,19 @@ export default function ImageUploadField({ entityId, currentPath, onUploaded, he
       {currentPath && (
         <button
           onClick={(e) => { e.stopPropagation(); containerRef.current?.click(); }}
-          style={{ fontSize: 11, color: '#1a73e8', background: 'none', border: 'none', cursor: 'pointer', marginTop: 4, padding: 0 }}
+          className="text-blue-600 dark:text-blue-400"
+          style={{ fontSize: 11, background: 'none', border: 'none', cursor: 'pointer', marginTop: 4, padding: 0 }}
         >
           Trocar imagem
         </button>
       )}
 
-      {error && <p style={{ fontSize: 11, color: '#c62828', marginTop: 4 }}>{error}</p>}
+      {error && <p className="text-red-600 dark:text-red-400" style={{ fontSize: 11, marginTop: 4 }}>{error}</p>}
 
       <label
         onClick={(e) => e.stopPropagation()}
-        style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 11, color: '#666', marginTop: 4, cursor: 'pointer' }}
+        className="text-neutral-500 dark:text-neutral-400"
+        style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 11, marginTop: 4, cursor: 'pointer' }}
       >
         <input type="checkbox" checked={compress} onChange={(e) => setCompress(e.target.checked)} />
         Comprimir imagem antes de salvar (recomendado)

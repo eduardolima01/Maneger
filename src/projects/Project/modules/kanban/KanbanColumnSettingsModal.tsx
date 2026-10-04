@@ -26,14 +26,15 @@ function ColumnRow({ column, onUpdate, onDuplicate, onRequestDelete }: ColumnRow
   const style: React.CSSProperties = { transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.5 : 1 };
 
   return (
-    <div ref={setNodeRef} style={{ ...style, border: '1px solid #eee', borderRadius: 4, padding: '6px 8px' }}>
+    <div ref={setNodeRef} className="border border-neutral-200 dark:border-neutral-700 text-neutral-900 dark:text-neutral-100" style={{ ...style, borderRadius: 4, padding: '6px 8px' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-        <span {...attributes} {...listeners} style={{ color: '#bbb', fontSize: 12, cursor: 'grab', touchAction: 'none' }} title="Arrastar">⠿</span>
+        <span {...attributes} {...listeners} className="text-neutral-400 dark:text-neutral-500" style={{ fontSize: 12, cursor: 'grab', touchAction: 'none' }} title="Arrastar">⠿</span>
 
         <input
           value={nameDraft}
           onChange={(e) => setNameDraft(e.target.value)}
           onBlur={() => nameDraft.trim() && nameDraft !== column.name && onUpdate({ name: nameDraft.trim() })}
+          className="bg-transparent text-neutral-900 dark:text-neutral-100"
           style={{ flex: 1, fontSize: 13, border: 'none', outline: 'none' }}
         />
 
@@ -41,7 +42,7 @@ function ColumnRow({ column, onUpdate, onDuplicate, onRequestDelete }: ColumnRow
           type="color"
           value={column.color ?? '#cccccc'}
           onChange={(e) => onUpdate({ color: e.target.value })}
-          style={{ width: 24, height: 24, padding: 0, border: '1px solid #ccc', borderRadius: 4, cursor: 'pointer' }}
+          className="border border-neutral-300 dark:border-neutral-600" style={{ width: 24, height: 24, padding: 0, borderRadius: 4, cursor: 'pointer' }}
         />
 
         <input
@@ -50,7 +51,7 @@ function ColumnRow({ column, onUpdate, onDuplicate, onRequestDelete }: ColumnRow
           placeholder="WIP"
           value={column.wipLimit ?? ''}
           onChange={(e) => onUpdate({ wipLimit: e.target.value === '' ? null : Number(e.target.value) })}
-          style={{ width: 50, fontSize: 12, padding: 4 }}
+          className="bg-white dark:bg-neutral-900 text-neutral-900 dark:text-neutral-100 dark:border-neutral-600 dark:[color-scheme:dark]" style={{ width: 50, fontSize: 12, padding: 4 }}
         />
 
         <label style={{ display: 'flex', alignItems: 'center', gap: 2, fontSize: 11 }}>
@@ -70,12 +71,12 @@ function ColumnRow({ column, onUpdate, onDuplicate, onRequestDelete }: ColumnRow
         </button>
 
         <button onClick={onDuplicate} title="Duplicar" style={{ border: 'none', background: 'none', cursor: 'pointer', fontSize: 12 }}>⧉</button>
-        <button onClick={onRequestDelete} style={{ border: 'none', background: 'none', cursor: 'pointer', color: '#c62828', fontSize: 12 }}>✕</button>
+        <button onClick={onRequestDelete} className="text-red-600 dark:text-red-400" style={{ border: 'none', background: 'none', cursor: 'pointer', fontSize: 12 }}>✕</button>
       </div>
 
       {showCoverEditor && (
-        <div style={{ marginTop: 8, paddingTop: 8, borderTop: '1px dashed #eee', display: 'flex', flexDirection: 'column', gap: 6 }}>
-          <label style={{ fontSize: 11, fontWeight: 600, color: '#666' }}>Capa da coluna (aparece no calendário)</label>
+        <div className="border-t border-dashed border-neutral-200 dark:border-neutral-700" style={{ marginTop: 8, paddingTop: 8, display: 'flex', flexDirection: 'column', gap: 6 }}>
+          <label className="text-neutral-500 dark:text-neutral-400" style={{ fontSize: 11, fontWeight: 600 }}>Capa da coluna (aparece no calendário)</label>
           <ImageUploadField
             entityId={column.id}
             currentPath={column.coverPath}
@@ -85,7 +86,8 @@ function ColumnRow({ column, onUpdate, onDuplicate, onRequestDelete }: ColumnRow
           {column.coverPath && (
             <button
               onClick={() => onUpdate({ coverPath: null })}
-              style={{ alignSelf: 'flex-start', fontSize: 11, color: '#c62828', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
+              className="text-red-600 dark:text-red-400"
+              style={{ alignSelf: 'flex-start', fontSize: 11, background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
             >
               Remover capa
             </button>
@@ -127,7 +129,7 @@ export default function KanbanColumnSettingsModal({
   return (
     <>
       <Modal open={isOpen} onClose={onClose} title="Colunas do Kanban">
-        <div style={{ padding: 16, width: 460, maxWidth: '90vw', maxHeight: '70vh', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 12 }}>
+        <div className="text-neutral-900 dark:text-neutral-100" style={{ padding: 16, width: 460, maxWidth: '90vw', maxHeight: '70vh', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 12 }}>
           <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
             <SortableContext items={columns.map((c) => c.id)} strategy={verticalListSortingStrategy}>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
@@ -144,12 +146,13 @@ export default function KanbanColumnSettingsModal({
             </SortableContext>
           </DndContext>
 
-          <div style={{ display: 'flex', gap: 6, borderTop: '1px solid #eee', paddingTop: 12 }}>
+          <div className="border-t border-neutral-200 dark:border-neutral-700" style={{ display: 'flex', gap: 6, paddingTop: 12 }}>
             <input
               value={newName}
               onChange={(e) => setNewName(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && newName.trim() && (onCreate(newName.trim()), setNewName(''))}
               placeholder="Nome da nova coluna..."
+              className="bg-white dark:bg-neutral-900 text-neutral-900 dark:text-neutral-100 dark:border-neutral-600 dark:[color-scheme:dark]"
               style={{ flex: 1, padding: 8, fontSize: 13 }}
             />
             <Button variant="primary" onClick={() => { if (newName.trim()) { onCreate(newName.trim()); setNewName(''); } }}>

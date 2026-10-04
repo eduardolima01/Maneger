@@ -38,6 +38,12 @@ export function useCardChecklist(cardId: string) {
     await reload();
   }, [reload]);
 
+  /** Marca/desmarca o item como lista simples (sem estado, fora da conta de tarefas) — vale pro item e pros sub-itens. */
+  const setSimple = useCallback(async (id: string, simple: boolean) => {
+    await api.updateItem(id, { simple });
+    await reload();
+  }, [reload]);
+
   const rename = useCallback(async (id: string, title: string) => {
     if (!title.trim()) return;
     await api.updateItem(id, { title: title.trim() });
@@ -52,6 +58,26 @@ export function useCardChecklist(cardId: string) {
   /** Muda o pai do item (null = tarefa principal); `afterItemId` = ficar logo depois desse irmão. */
   const move = useCallback(async (id: string, newParentId: string | null, afterItemId?: string) => {
     await api.moveItem(id, newParentId, afterItemId);
+    await reload();
+  }, [reload]);
+
+  /**
+   * Arrastar e soltar: muda o pai do item e fixa a ordem dos filhos do destino (`orderedIds` = ids finais dos filhos
+   * do novo pai, com o item na posição certa). Atualiza a tela na hora, antes de gravar, pra não "piscar" o lugar antigo.
+   */
+  const place = useCallback(async (id: string, newParentId: string | null, orderedIds: string[]) => {
+    setItems((prev) => {
+      const positionById = new Map(orderedIds.map((itemId, index) => [itemId, index]));
+      return prev.map((item) => {
+        if (item.id === id) return { ...item, parentItemId: newParentId, position: positionById.get(id) ?? item.position };
+        return positionById.has(item.id) ? { ...item, position: positionById.get(item.id)! } : item;
+      });
+    });
+    try {
+      await api.placeItem(id, newParentId, orderedIds);
+    } catch (err) {
+      console.error(err); // destino inválido etc.: o reload abaixo devolve a tela ao que está gravado
+    }
     await reload();
   }, [reload]);
 
@@ -77,5 +103,12 @@ export function useCardChecklist(cardId: string) {
     await reload();
   }, [cardId, reload]);
 
-  return { items, loading, create, createSubItem, setStatus, rename, remove, reorder, move, replaceAllFromText };
+  /** Cola uma lista (texto) no fim da checklist, sem apagar nada. Devolve quantos itens foram colados. */
+  const appendFromText = useCallback(async (text: string) => {
+    const count = await api.appendFromText(cardId, text);
+    await reload();
+    return count;
+  }, [cardId, reload]);
+
+  return { items, loading, create, createSubItem, setStatus, setSimple, rename, remove, reorder, move, place, replaceAllFromText, appendFromText };
 }

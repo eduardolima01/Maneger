@@ -69,13 +69,14 @@ export default function KanbanSettingsModal({ isOpen, onClose, kanban, onUpdated
   return (
     <>
       <Modal open={isOpen} onClose={onClose} title="Configurações do Kanban">
-        <div style={{ padding: 16, width: 380, maxWidth: '90vw', display: 'flex', flexDirection: 'column', gap: 16 }}>
+        <div className="text-neutral-900 dark:text-neutral-100" style={{ padding: 16, width: 380, maxWidth: '90vw', display: 'flex', flexDirection: 'column', gap: 16 }}>
           <div>
             <label style={{ fontSize: 13, fontWeight: 600, display: 'block', marginBottom: 4 }}>Nome</label>
             <input
               value={name}
               onChange={(e) => setName(e.target.value)}
               onBlur={handleSaveName}
+              className="bg-white dark:bg-neutral-900 text-neutral-900 dark:text-neutral-100 dark:border-neutral-600 dark:[color-scheme:dark]"
               style={{ width: '100%', padding: 8, fontSize: 14 }}
             />
           </div>
@@ -87,6 +88,7 @@ export default function KanbanSettingsModal({ isOpen, onClose, kanban, onUpdated
               onChange={(e) => setDescription(e.target.value)}
               onBlur={handleSaveDescription}
               rows={3}
+              className="bg-white dark:bg-neutral-900 text-neutral-900 dark:text-neutral-100 dark:border-neutral-600 dark:[color-scheme:dark]"
               style={{ width: '100%', padding: 8, fontSize: 13, resize: 'vertical' }}
             />
           </div>
@@ -98,12 +100,13 @@ export default function KanbanSettingsModal({ isOpen, onClose, kanban, onUpdated
                 type="color"
                 value={kanban.color ?? '#1a73e8'}
                 onChange={(e) => handleColorChange(e.target.value)}
-                style={{ width: 36, height: 28, padding: 0, border: '1px solid #ccc', borderRadius: 4, cursor: 'pointer' }}
+                className="border border-neutral-300 dark:border-neutral-600" style={{ width: 36, height: 28, padding: 0, borderRadius: 4, cursor: 'pointer' }}
               />
               {kanban.color !== null && (
                 <button
                   onClick={handleResetColor}
-                  style={{ fontSize: 12, color: '#666', background: 'none', border: 'none', cursor: 'pointer', textDecoration: 'underline' }}
+                  className="text-neutral-500 dark:text-neutral-400"
+                  style={{ fontSize: 12, background: 'none', border: 'none', cursor: 'pointer', textDecoration: 'underline' }}
                 >
                   usar cor automática
                 </button>
@@ -115,16 +118,14 @@ export default function KanbanSettingsModal({ isOpen, onClose, kanban, onUpdated
                   key={hex}
                   onClick={() => handleColorChange(hex)}
                   title={hex}
-                  style={{
-                    width: 20, height: 20, borderRadius: '50%', backgroundColor: hex,
-                    border: kanban.color === hex ? '2px solid #000' : '1px solid #ccc', cursor: 'pointer', padding: 0,
-                  }}
+                  className={kanban.color === hex ? 'border-2 border-black dark:border-white' : 'border border-neutral-300 dark:border-neutral-600'}
+                  style={{ width: 20, height: 20, borderRadius: '50%', backgroundColor: hex, cursor: 'pointer', padding: 0 }}
                 />
               ))}
             </div>
           </div>
 
-          <div style={{ borderTop: '1px solid #eee', paddingTop: 12, display: 'flex', flexDirection: 'column', gap: 8 }}>
+          <div className="border-t border-neutral-200 dark:border-neutral-700" style={{ paddingTop: 12, display: 'flex', flexDirection: 'column', gap: 8 }}>
             <Button variant="secondary" onClick={handleSetDefault} disabled={kanban.isDefault}>
               {kanban.isDefault ? '⭐ Já é o Kanban padrão deste projeto' : '⭐ Definir como padrão'}
             </Button>
@@ -134,12 +135,12 @@ export default function KanbanSettingsModal({ isOpen, onClose, kanban, onUpdated
             <Button variant="secondary" onClick={handleDuplicate}>⧉ Duplicar (só estrutura, sem cards)</Button>
           </div>
 
-          <div style={{ borderTop: '1px solid #eee', paddingTop: 12 }}>
+          <div className="border-t border-neutral-200 dark:border-neutral-700" style={{ paddingTop: 12 }}>
             {!confirmingDelete ? (
               <Button variant="danger" onClick={() => setConfirmingDelete(true)}>Excluir Kanban</Button>
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                <p style={{ fontSize: 13, color: '#c62828', margin: 0 }}>
+                <p className="text-red-600 dark:text-red-400" style={{ fontSize: 13, margin: 0 }}>
                   Isso apaga as Colunas e a organização deste Kanban. Os Cards têm dados próprios (não são Tasks) e serão apagados junto. Não pode ser desfeito.
                 </p>
                 <div style={{ display: 'flex', gap: 8 }}>

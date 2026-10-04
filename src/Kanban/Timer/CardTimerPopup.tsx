@@ -94,24 +94,25 @@ export default function CardTimerPopup({ x, y, projectId, cardId, cardTitle, onC
       ref={ref}
       onMouseEnter={onMouseEnter}
       onMouseLeave={onMouseLeave}
+      className="bg-white dark:bg-neutral-800 text-neutral-900 dark:text-neutral-100 border border-neutral-300 dark:border-neutral-600"
       style={{
-        position: 'fixed', top: y, left: x, backgroundColor: '#fff', border: '1px solid #ddd',
+        position: 'fixed', top: y, left: x,
         borderRadius: 8, boxShadow: '0 2px 12px rgba(0,0,0,0.15)', zIndex: 1000, padding: 14,
         display: 'flex', flexDirection: 'column', gap: 10, minWidth: 220,
       }}
     >
-      <div style={{ fontSize: 11, fontWeight: 600, color: '#999' }}>CRONÔMETRO DO CARD</div>
+      <div className="text-neutral-400 dark:text-neutral-500" style={{ fontSize: 11, fontWeight: 600 }}>CRONÔMETRO DO CARD</div>
 
-      <div style={{ fontSize: 28, fontWeight: 700, textAlign: 'center', fontVariantNumeric: 'tabular-nums', color: isThisCardActive && timer.running ? '#1a73e8' : '#000' }}>
+      <div className={isThisCardActive && timer.running ? 'text-blue-600 dark:text-blue-400' : 'text-neutral-900 dark:text-neutral-100'} style={{ fontSize: 28, fontWeight: 700, textAlign: 'center', fontVariantNumeric: 'tabular-nums' }}>
         {loading ? '--:--:--' : formatDuration(totalSeconds)}
       </div>
 
       {otherCardActive ? (
-        <p style={{ fontSize: 12, color: '#999', textAlign: 'center', margin: 0 }}>
+        <p className="text-neutral-400 dark:text-neutral-500" style={{ fontSize: 12, textAlign: 'center', margin: 0 }}>
           Outro card está com o cronômetro ativo — pause ou cancele ele primeiro (veja o widget no canto da tela).
         </p>
       ) : !isThisCardActive ? (
-        <button onClick={() => startCardTimer(projectId, cardId, cardTitle)} style={{ padding: '8px', fontSize: 13, border: 'none', borderRadius: 4, backgroundColor: '#1a73e8', color: '#fff', cursor: 'pointer' }}>
+        <button onClick={() => startCardTimer(projectId, cardId, cardTitle)} className="bg-blue-600 text-white" style={{ padding: '8px', fontSize: 13, border: 'none', borderRadius: 4, cursor: 'pointer' }}>
           ▶ Iniciar
         </button>
       ) : timer.running ? (
@@ -119,20 +120,20 @@ export default function CardTimerPopup({ x, y, projectId, cardId, cardTitle, onC
           <button onClick={pauseCardTimer} style={{ flex: 1, padding: '8px', fontSize: 13, border: 'none', borderRadius: 4, backgroundColor: '#f4511e', color: '#fff', cursor: 'pointer' }}>
             ⏸ Pausar
           </button>
-          <button onClick={cancelCardTimer} style={{ flex: 1, padding: '8px', fontSize: 13, border: '1px solid #ddd', borderRadius: 4, background: '#fff', cursor: 'pointer' }}>
+          <button onClick={cancelCardTimer} className="bg-white dark:bg-neutral-800 text-neutral-900 dark:text-neutral-100 border border-neutral-300 dark:border-neutral-600" style={{ flex: 1, padding: '8px', fontSize: 13, borderRadius: 4, cursor: 'pointer' }}>
             Cancelar
           </button>
         </div>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-          <button onClick={() => startCardTimer(projectId, cardId, cardTitle)} style={{ padding: '8px', fontSize: 13, border: 'none', borderRadius: 4, backgroundColor: '#1a73e8', color: '#fff', cursor: 'pointer' }}>
+          <button onClick={() => startCardTimer(projectId, cardId, cardTitle)} className="bg-blue-600 text-white" style={{ padding: '8px', fontSize: 13, border: 'none', borderRadius: 4, cursor: 'pointer' }}>
             ▶ Retomar
           </button>
           <div style={{ display: 'flex', gap: 6 }}>
             <button onClick={async () => { await finishCardTimerSession(); await loadSessions(); }} style={{ flex: 1, padding: '8px', fontSize: 13, border: 'none', borderRadius: 4, backgroundColor: '#2e7d32', color: '#fff', cursor: 'pointer' }}>
               ✔ Finalizar sessão
             </button>
-            <button onClick={cancelCardTimer} style={{ flex: 1, padding: '8px', fontSize: 12, border: '1px solid #ddd', borderRadius: 4, background: '#fff', cursor: 'pointer' }}>
+            <button onClick={cancelCardTimer} className="bg-white dark:bg-neutral-800 text-neutral-900 dark:text-neutral-100 border border-neutral-300 dark:border-neutral-600" style={{ flex: 1, padding: '8px', fontSize: 12, borderRadius: 4, cursor: 'pointer' }}>
               Descartar
             </button>
           </div>
@@ -140,72 +141,73 @@ export default function CardTimerPopup({ x, y, projectId, cardId, cardTitle, onC
       )}
 
       {isThisCardActive && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 6, borderTop: '1px solid #eee', paddingTop: 10 }}>
+        <div className="border-t border-neutral-200 dark:border-neutral-700" style={{ display: 'flex', flexDirection: 'column', gap: 6, paddingTop: 10 }}>
           <input
             value={timer.sessionTitle}
             onChange={(e) => setCardTimerSessionTitle(e.target.value)}
             placeholder="Título desta sessão..."
-            style={{ padding: 6, fontSize: 12, border: '1px solid #ddd', borderRadius: 4 }}
+            className="bg-white dark:bg-neutral-900 text-neutral-900 dark:text-neutral-100 dark:border-neutral-600 dark:[color-scheme:dark] border border-neutral-300 dark:border-neutral-600"
+            style={{ padding: 6, fontSize: 12, borderRadius: 4 }}
           />
           <textarea
             value={timer.sessionDescription}
             onChange={(e) => setCardTimerSessionDescription(e.target.value)}
             placeholder="O que está sendo feito..."
             rows={2}
-            style={{ padding: 6, fontSize: 12, border: '1px solid #ddd', borderRadius: 4, resize: 'vertical', fontFamily: 'inherit' }}
+            className="bg-white dark:bg-neutral-900 text-neutral-900 dark:text-neutral-100 dark:border-neutral-600 dark:[color-scheme:dark] border border-neutral-300 dark:border-neutral-600"
+            style={{ padding: 6, fontSize: 12, borderRadius: 4, resize: 'vertical', fontFamily: 'inherit' }}
           />
         </div>
       )}
 
-      <div style={{ display: 'flex', alignItems: 'center', gap: 6, borderTop: '1px solid #eee', paddingTop: 10 }}>
+      <div className="border-t border-neutral-200 dark:border-neutral-700" style={{ display: 'flex', alignItems: 'center', gap: 6, paddingTop: 10 }}>
         <input
           type="number" min={1} value={adjustMinutes}
           onChange={(e) => setAdjustMinutes(Number(e.target.value))}
-          style={{ width: 50, padding: 4, fontSize: 12 }}
+          className="bg-white dark:bg-neutral-900 text-neutral-900 dark:text-neutral-100 dark:border-neutral-600 dark:[color-scheme:dark]" style={{ width: 50, padding: 4, fontSize: 12 }}
         />
-        <span style={{ fontSize: 11, color: '#666' }}>min</span>
-        <button onClick={() => handleAdjust(1)} style={{ marginLeft: 'auto', fontSize: 12, padding: '4px 8px', border: '1px solid #ddd', borderRadius: 4, background: '#fff', cursor: 'pointer' }}>+ Tempo</button>
-        <button onClick={() => handleAdjust(-1)} style={{ fontSize: 12, padding: '4px 8px', border: '1px solid #ddd', borderRadius: 4, background: '#fff', cursor: 'pointer' }}>− Tempo</button>
+        <span className="text-neutral-500 dark:text-neutral-400" style={{ fontSize: 11 }}>min</span>
+        <button onClick={() => handleAdjust(1)} className="bg-white dark:bg-neutral-800 text-neutral-900 dark:text-neutral-100 border border-neutral-300 dark:border-neutral-600" style={{ marginLeft: 'auto', fontSize: 12, padding: '4px 8px', borderRadius: 4, cursor: 'pointer' }}>+ Tempo</button>
+        <button onClick={() => handleAdjust(-1)} className="bg-white dark:bg-neutral-800 text-neutral-900 dark:text-neutral-100 border border-neutral-300 dark:border-neutral-600" style={{ fontSize: 12, padding: '4px 8px', borderRadius: 4, cursor: 'pointer' }}>− Tempo</button>
       </div>
 
       <button
         onClick={() => setShowHistory((v) => !v)}
-        style={{ fontSize: 12, color: '#1a73e8', border: 'none', background: 'none', cursor: 'pointer', textAlign: 'left', padding: 0 }}
+        className="text-blue-600 dark:text-blue-400"
+        style={{ fontSize: 12, border: 'none', background: 'none', cursor: 'pointer', textAlign: 'left', padding: 0 }}
       >
         {showHistory ? '▲ Ocultar histórico' : `▼ Ver histórico (${sessions.length})`}
       </button>
 
       {showHistory && (
         <div style={{ maxHeight: 160, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 4 }}>
-          {sessions.length === 0 && <p style={{ fontSize: 12, color: '#999', margin: 0 }}>Nenhuma sessão ainda.</p>}
+          {sessions.length === 0 && <p className="text-neutral-400 dark:text-neutral-500" style={{ fontSize: 12, margin: 0 }}>Nenhuma sessão ainda.</p>}
           {sessions.map((s) => (
-            <div key={s.id} style={{ display: 'flex', flexDirection: 'column', gap: 2, fontSize: 12, paddingBottom: 4, borderBottom: '1px solid #f5f5f5' }}>
+            <div key={s.id} className="border-b border-neutral-100 dark:border-neutral-700" style={{ display: 'flex', flexDirection: 'column', gap: 2, fontSize: 12, paddingBottom: 4 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                 <input
                   defaultValue={s.title ?? ''}
                   onBlur={(e) => handleEditSessionTitle(s, e.target.value)}
                   placeholder={s.manual ? '⚙ Ajuste' : new Date(s.startAt).toLocaleDateString('pt-BR')}
-                  style={{ flex: 1, padding: 2, fontSize: 12, border: '1px solid transparent', borderRadius: 3 }}
-                  onFocus={(e) => (e.target.style.border = '1px solid #ddd')}
+                  className="border border-transparent focus:border-neutral-300 dark:focus:border-neutral-600 bg-transparent text-neutral-900 dark:text-neutral-100" style={{ flex: 1, padding: 2, fontSize: 12, borderRadius: 3 }}
                 />
                 <input
                   type="number"
                   defaultValue={(s.durationSeconds / 60).toFixed(1)}
                   onBlur={(e) => handleEditSessionMinutes(s, Number(e.target.value))}
-                  style={{ width: 50, padding: 2, fontSize: 11 }}
+                  className="bg-white dark:bg-neutral-900 text-neutral-900 dark:text-neutral-100 dark:border-neutral-600 dark:[color-scheme:dark]" style={{ width: 50, padding: 2, fontSize: 11 }}
                 />
-                <span style={{ color: '#999' }}>min</span>
+                <span className="text-neutral-400 dark:text-neutral-500">min</span>
                 {!timer.activeCardId && (
-                  <button onClick={() => handleResumeSession(s)} title="Retomar e somar tempo nesta sessão" style={{ border: 'none', background: 'none', color: '#1a73e8', cursor: 'pointer', fontSize: 12 }}>▶</button>
+                  <button onClick={() => handleResumeSession(s)} title="Retomar e somar tempo nesta sessão" className="text-blue-600 dark:text-blue-400" style={{ border: 'none', background: 'none', cursor: 'pointer', fontSize: 12 }}>▶</button>
                 )}
-                <button onClick={() => handleDeleteSession(s)} style={{ border: 'none', background: 'none', color: '#c62828', cursor: 'pointer', fontSize: 12 }}>✕</button>
+                <button onClick={() => handleDeleteSession(s)} className="text-red-600 dark:text-red-400" style={{ border: 'none', background: 'none', cursor: 'pointer', fontSize: 12 }}>✕</button>
               </div>
               <input
                 defaultValue={s.description ?? ''}
                 onBlur={(e) => handleEditSessionDescription(s, e.target.value)}
                 placeholder="Sem descrição"
-                style={{ fontSize: 11, color: '#999', padding: 2, border: '1px solid transparent', borderRadius: 3 }}
-                onFocus={(e) => (e.target.style.border = '1px solid #ddd')}
+                className="border border-transparent focus:border-neutral-300 dark:focus:border-neutral-600 bg-transparent text-neutral-400 dark:text-neutral-500" style={{ fontSize: 11, padding: 2, borderRadius: 3 }}
               />
             </div>
           ))}

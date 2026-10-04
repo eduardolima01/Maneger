@@ -11,7 +11,7 @@ import LabelGroupBlock from '@/Kanban/utils/LabelGroupBlock';
 import { DuplicateMultipleMode } from '@/Kanban/components/DuplicateMenu';
 import ContextMenu from '@/components/ui/ContextMenu';
 import ImageUploadField from '@/components/ImageUploadField';
-import EmojiPicker, { EmojiClickData, EmojiStyle } from 'emoji-picker-react';
+import EmojiPicker, { EmojiClickData, EmojiStyle, Theme } from 'emoji-picker-react';
 import BackgroundColorPicker from '@/Kanban/components/BackgroundColorPicker';
 import CardLabelMenu from './CardLabelMenu';
 import LabelIconBadge from '@/Kanban/components/LabelIconBadge';
@@ -72,8 +72,9 @@ interface GroupBlockProps {
   onBulkToggleLabel: (cardIds: string[], name: string, color: string, isGroup: boolean) => void;
   onUpdateCoverPath: (cardId: string, path: string) => void
   projectId: string;
-  /** 0 = grupo de topo; 1+ = subgrupo, e a que profundidade — controla o tamanho compacto e a cor da faixa lateral. */
   depth?: number;
+  collapsedGroupIds?: Set<string>;
+  onToggleGroupCollapsed?: (groupId: string) => void;
 }
 
 const DEFAULT_GROUP_HEIGHT = 320;
@@ -99,6 +100,8 @@ export default function GroupBlock({
   onUpdateCoverPath,
   projectId,
   depth = 0,
+  collapsedGroupIds,
+  onToggleGroupCollapsed,
 }: GroupBlockProps) {
   const { attributes, listeners, setNodeRef: setSortableRef, transform, transition, isDragging } = useSortable({
     id: `group:${group.id}`,
@@ -128,6 +131,18 @@ export default function GroupBlock({
   const { icons: labelIcons } = useLabelIcons();
   const { horizontalIds, toggleHorizontal } = useGroupLayout();
   const isHorizontal = horizontalIds.has(group.id);
+  const [localCollapsedChildren, setLocalCollapsedChildren] = useState<Set<string>>(() => new Set());
+  function isChildCollapsed(id: string): boolean {
+    return collapsedGroupIds ? collapsedGroupIds.has(id) : localCollapsedChildren.has(id);
+  }
+  function toggleChild(id: string) {
+    if (onToggleGroupCollapsed) { onToggleGroupCollapsed(id); return; }
+    setLocalCollapsedChildren((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  }
   const groupLabels = group.labels ?? []; // grupos salvos antes das etiquetas existirem não têm o campo
   const childGroups = (groupsByParent.get(group.id) ?? []).sort((a, b) => a.position - b.position);
   const isSubgroup = depth > 0;
@@ -268,7 +283,25 @@ export default function GroupBlock({
   }, [hovering, collapsed]);
 
   // cores de texto que combinam com o fundo REAL do bloco (inclui o azul temporário de "arrastando por cima")
-  const tc = readableTextColors(isOver ? '#e8f0fe' : (group.backgroundColor ?? '#f5f5f5'));
+  // Sem cor de fundo custom (ou com o azul temporário de "arrastando por cima"): classes Tailwind com dark:.
+  // COM cor custom escolhida pelo usuário: o contraste continua vindo do `tc` calculado (readableTextColors),
+  // igual nos dois temas, porque é a cor exata que está no fundo.
+  const hasCustomBg = group.backgroundColor != null;
+  const staticMode = isOver || !hasCustomBg;
+  const tc = readableTextColors(group.backgroundColor ?? '#f5f5f5');
+  const staticText = {
+    text: 'text-neutral-900 dark:text-neutral-100',
+    secondary: 'text-neutral-500 dark:text-neutral-400',
+    muted: 'text-neutral-400 dark:text-neutral-500',
+    accent: 'text-blue-600 dark:text-blue-400',
+    danger: 'text-red-600 dark:text-red-400',
+  };
+  function textClass(token: keyof typeof staticText): string | undefined {
+    return staticMode ? staticText[token] : undefined;
+  }
+  function textColor(token: keyof typeof staticText): string | undefined {
+    return staticMode ? undefined : tc[token];
+  }
 
   return (
     <div ref={setSortableRef} data-group-id={group.id} style={{ ...style, marginBottom: 8 }}>
@@ -276,20 +309,27 @@ export default function GroupBlock({
         ref={setDroppableRef}
         onMouseOver={(e) => { e.stopPropagation(); setHovering(true); }}
         onMouseLeave={() => setHovering(false)}
+        className={[
+          isOver
+            ? 'bg-blue-50 dark:bg-blue-950'
+            : (hasCustomBg ? '' : (isSubgroup ? 'bg-neutral-50 dark:bg-neutral-950' : 'bg-neutral-100 dark:bg-neutral-900')),
+          isSubgroup
+            ? 'border border-neutral-200 dark:border-neutral-700'
+            : 'border-2 border-dashed border-neutral-300 dark:border-neutral-600',
+        ].join(' ')}
         style={{
           position: 'relative', borderRadius: 6, padding: isSubgroup ? 5 : 6,
-          backgroundColor: isOver ? '#e8f0fe' : (group.backgroundColor ?? (isSubgroup ? '#fafafa' : '#f5f5f5')),
-          border: isSubgroup ? '1px solid #e2e2e2' : '2px dashed #c7c7c7',
+          ...(!isOver && hasCustomBg ? { backgroundColor: group.backgroundColor as string } : {}),
           borderLeft: isSubgroup ? `3px solid ${accentColor}` : undefined,
           boxShadow: isSubgroup ? '0 1px 2px rgba(0,0,0,0.04)' : undefined,
           outline: 'none',
         }}
       >
         <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginBottom: 6 }}>
-          <span {...attributes} {...listeners} style={{ color: tc.muted, fontSize: 11, cursor: 'grab', touchAction: 'none' }} title="Arrastar grupo">⠿</span>
+          <span {...attributes} {...listeners} className={textClass('muted')} style={{ color: textColor('muted'), fontSize: 11, cursor: 'grab', touchAction: 'none' }} title="Arrastar grupo">⠿</span>
           <button
             onClick={onToggleCollapsed}
-            style={{ border: 'none', background: 'none', cursor: 'pointer', fontSize: 10, color: tc.secondary, padding: 0 }}
+            className={textClass('secondary')} style={{ border: 'none', background: 'none', cursor: 'pointer', fontSize: 10, color: textColor('secondary'), padding: 0 }}
           >
             {collapsed ? '▶' : '▼'}
           </button>
@@ -324,16 +364,18 @@ export default function GroupBlock({
                   <EmojiPicker
                     onEmojiClick={handlePickEmoji}
                     emojiStyle={EmojiStyle.NATIVE}
+                    theme={document.documentElement.classList.contains('dark') ? Theme.DARK : Theme.LIGHT}
                     width={280}
                     height={360}
                     previewConfig={{ showPreview: false }}
                     lazyLoadEmojis
                   />
                   {group.emoji && (
-                    <div style={{ background: '#fff', borderTop: '1px solid #eee', padding: '4px 8px', textAlign: 'right' }}>
+                    <div className="bg-white dark:bg-neutral-800 border-t border-neutral-200 dark:border-neutral-700" style={{ padding: '4px 8px', textAlign: 'right' }}>
                       <button
                         onClick={handleRemoveEmoji}
-                        style={{ fontSize: 11, color: '#c62828', background: 'none', border: 'none', cursor: 'pointer', padding: '2px 4px' }}
+                        className="text-red-600 dark:text-red-400"
+                        style={{ fontSize: 11, background: 'none', border: 'none', cursor: 'pointer', padding: '2px 4px' }}
                       >
                         Remover emoji
                       </button>
@@ -348,27 +390,27 @@ export default function GroupBlock({
             value={nameDraft}
             onChange={(e) => setNameDraft(e.target.value)}
             onBlur={() => nameDraft.trim() && nameDraft !== group.name && onRenameGroup(group.id, nameDraft.trim())}
-            style={{ flex: 1, fontSize: isSubgroup ? 11 : 12, fontWeight: 600, border: 'none', background: 'none', outline: 'none', color: tc.text }}
+            className={textClass('text')} style={{ flex: 1, fontSize: isSubgroup ? 11 : 12, fontWeight: 600, border: 'none', background: 'none', outline: 'none', color: textColor('text') }}
           />
-          <span style={{ fontSize: 10, color: tc.secondary }}>({cards.length})</span>
+          <span className={textClass('secondary')} style={{ fontSize: 10, color: textColor('secondary') }}>({cards.length})</span>
           <button
             onClick={() => setAppearanceOpen((v) => !v)}
             title="Aparência do grupo"
-            style={{ border: 'none', background: 'none', cursor: 'pointer', color: appearanceOpen ? tc.accent : tc.secondary, fontSize: 12 }}
+            className={appearanceOpen ? textClass('accent') : textClass('secondary')} style={{ border: 'none', background: 'none', cursor: 'pointer', color: appearanceOpen ? textColor('accent') : textColor('secondary'), fontSize: 12 }}
           >
             🎨
           </button>
           <button
             onClick={(e) => { e.stopPropagation(); setSortMenu({ x: e.clientX, y: e.clientY }); }}
             title="Ordenar cards do grupo"
-            style={{ border: 'none', background: 'none', cursor: 'pointer', color: tc.secondary, fontSize: 12 }}
+            className={textClass('secondary')} style={{ border: 'none', background: 'none', cursor: 'pointer', color: textColor('secondary'), fontSize: 12 }}
           >
             ↕
           </button>
           <button
             onClick={() => toggleHorizontal(group.id)}
             title={isHorizontal ? 'Ver em lista (vertical)' : 'Ver em linha (horizontal)'}
-            style={{ border: 'none', background: 'none', cursor: 'pointer', color: isHorizontal ? tc.accent : tc.secondary, fontSize: 12 }}
+            className={isHorizontal ? textClass('accent') : textClass('secondary')} style={{ border: 'none', background: 'none', cursor: 'pointer', color: isHorizontal ? textColor('accent') : textColor('secondary'), fontSize: 12 }}
           >
             ⬌
           </button>
@@ -376,12 +418,12 @@ export default function GroupBlock({
             <button
               onClick={(e) => { e.stopPropagation(); setAddMenu({ x: e.clientX, y: e.clientY }); }}
               title="Adicionar card ou subgrupo (atalhos: C / G com o grupo selecionado)"
-              style={{ border: 'none', background: 'none', cursor: 'pointer', color: tc.secondary, fontSize: 13, fontWeight: 600 }}
+              className={textClass('secondary')} style={{ border: 'none', background: 'none', cursor: 'pointer', color: textColor('secondary'), fontSize: 13, fontWeight: 600 }}
             >
               +
             </button>
           )}
-          <button onClick={() => onRequestDeleteGroup(group.id)} title="Desagrupar" style={{ border: 'none', background: 'none', cursor: 'pointer', color: tc.danger, fontSize: 11 }}>✕</button>
+          <button onClick={() => onRequestDeleteGroup(group.id)} title="Desagrupar" className={textClass('danger')} style={{ border: 'none', background: 'none', cursor: 'pointer', color: textColor('danger'), fontSize: 11 }}>✕</button>
         </div>
 
         {groupLabels.length > 0 && (
@@ -405,7 +447,7 @@ export default function GroupBlock({
         )}
 
         {appearanceOpen && (
-          <div style={{ background: '#fff', border: '1px solid #e0e0e0', borderRadius: 6, padding: 8, marginBottom: 6, display: 'flex', flexDirection: 'column', gap: 6 }}>
+          <div className="bg-white dark:bg-neutral-800 text-neutral-900 dark:text-neutral-100 border border-neutral-200 dark:border-neutral-700" style={{ borderRadius: 6, padding: 8, marginBottom: 6, display: 'flex', flexDirection: 'column', gap: 6 }}>
             <ImageUploadField
               entityId={group.id}
               currentPath={group.coverPath}
@@ -415,7 +457,8 @@ export default function GroupBlock({
             {group.coverPath && (
               <button
                 onClick={() => onUpdateGroupAppearance(group.id, { coverPath: null })}
-                style={{ fontSize: 11, color: '#c62828', background: 'none', border: 'none', cursor: 'pointer', padding: 0, textAlign: 'left' }}
+                className="text-red-600 dark:text-red-400"
+                style={{ fontSize: 11, background: 'none', border: 'none', cursor: 'pointer', padding: 0, textAlign: 'left' }}
               >
                 Remover capa
               </button>
@@ -426,9 +469,10 @@ export default function GroupBlock({
               onBlur={submitDescription}
               placeholder="Descrição do grupo..."
               rows={2}
+              className="bg-white dark:bg-neutral-900 text-neutral-900 dark:text-neutral-100 dark:border-neutral-600 dark:[color-scheme:dark]"
               style={{ fontSize: 11, padding: 4, resize: 'vertical', fontFamily: 'inherit' }}
             />
-            <div style={{ fontSize: 10, color: '#888' }}>Cor de fundo</div>
+            <div className="text-neutral-500 dark:text-neutral-400" style={{ fontSize: 10 }}>Cor de fundo</div>
             <BackgroundColorPicker
               value={group.backgroundColor}
               fallbackColor="#f5f5f5"
@@ -437,7 +481,8 @@ export default function GroupBlock({
             />
             <button
               onClick={(e) => { const r = e.currentTarget.getBoundingClientRect(); setLabelMenu({ x: r.left, y: r.bottom + 4 }); }}
-              style={{ fontSize: 11, color: '#1a73e8', background: 'none', border: 'none', cursor: 'pointer', padding: 0, textAlign: 'left' }}
+              className="text-blue-600 dark:text-blue-400"
+              style={{ fontSize: 11, background: 'none', border: 'none', cursor: 'pointer', padding: 0, textAlign: 'left' }}
             >
               🏷 Etiquetas do grupo{groupLabels.length > 0 ? ` (${groupLabels.length})` : ''}
             </button>
@@ -445,7 +490,7 @@ export default function GroupBlock({
         )}
 
         {group.description && !appearanceOpen && (
-          <div style={{ fontSize: 11, color: tc.secondary, marginBottom: 6 }}>{group.description}</div>
+          <div className={textClass('secondary')} style={{ fontSize: 11, color: textColor('secondary'), marginBottom: 6 }}>{group.description}</div>
         )}
 
         <div
@@ -533,7 +578,7 @@ export default function GroupBlock({
           )}
 
           {cards.length === 0 && (
-            <div style={{ fontSize: 11, color: tc.muted, textAlign: 'center', padding: 8 }}>Arraste cards pra cá</div>
+            <div className={textClass('muted')} style={{ fontSize: 11, color: textColor('muted'), textAlign: 'center', padding: 8 }}>Arraste cards pra cá</div>
           )}
 
           {!collapsed && addingCard && (
@@ -552,13 +597,14 @@ export default function GroupBlock({
               }}
               placeholder="Título do card... (Shift+Enter = várias linhas viram vários cards)"
               rows={2}
-              style={{ width: '100%', fontSize: 12, padding: 6, marginTop: 4, boxSizing: 'border-box', resize: 'vertical', fontFamily: 'inherit', backgroundColor: '#fff' }}
+              className="bg-white dark:bg-neutral-900 text-neutral-900 dark:text-neutral-100 dark:border-neutral-600 dark:[color-scheme:dark]"
+              style={{ width: '100%', fontSize: 12, padding: 6, marginTop: 4, boxSizing: 'border-box', resize: 'vertical', fontFamily: 'inherit' }}
             />
           )}
 
           {!collapsed && childGroups.length > 0 && (
-            <div style={{ marginTop: 8, padding: 6, borderRadius: 6, backgroundColor: 'rgba(0,0,0,0.025)', display: 'flex', flexDirection: 'column', gap: 6 }}>
-              <div style={{ fontSize: 10, fontWeight: 600, color: '#999', textTransform: 'uppercase', letterSpacing: 0.3 }}>
+            <div className="bg-black/[0.025] dark:bg-white/[0.04]" style={{ marginTop: 8, padding: 6, borderRadius: 6, display: 'flex', flexDirection: 'column', gap: 6 }}>
+              <div className="text-neutral-400 dark:text-neutral-500" style={{ fontSize: 10, fontWeight: 600, textTransform: 'uppercase', letterSpacing: 0.3 }}>
                 Subgrupo{childGroups.length !== 1 ? 's' : ''} ({childGroups.length})
               </div>
               {childGroups.map((child) => (
@@ -570,8 +616,10 @@ export default function GroupBlock({
                   visualConfig={visualConfig}
                   cardsWithSubKanban={cardsWithSubKanban}
                   cardsWithFiles={cardsWithFiles}
-                  collapsed={false}
-                  onToggleCollapsed={() => { }}
+                  collapsed={isChildCollapsed(child.id)}
+                  onToggleCollapsed={() => toggleChild(child.id)}
+                  collapsedGroupIds={collapsedGroupIds}
+                  onToggleGroupCollapsed={onToggleGroupCollapsed}
                   checklistProgress={checklistProgress}
                   allLabels={allLabels}
                   onCardClick={onCardClick}
@@ -618,7 +666,8 @@ export default function GroupBlock({
                 onKeyDown={(e) => e.key === 'Enter' && submitNewSubgroup()}
                 onBlur={submitNewSubgroup}
                 placeholder="Nome do subgrupo..."
-                style={{ flex: 1, fontSize: 11, padding: 5, backgroundColor: '#fff' }}
+                className="bg-white dark:bg-neutral-900 text-neutral-900 dark:text-neutral-100 dark:border-neutral-600 dark:[color-scheme:dark]"
+                style={{ flex: 1, fontSize: 11, padding: 5 }}
               />
             </div>
           )}

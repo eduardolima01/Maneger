@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { convertFileSrc } from '@tauri-apps/api/core';
 import { DndContext, PointerSensor, useDraggable, useDroppable, useSensor, useSensors, type DragEndEvent } from '@dnd-kit/core';
 import { CSS } from '@dnd-kit/utilities';
@@ -30,9 +30,43 @@ interface KanbanCalendarViewProps {
    * Ocorrência virtual de plano não é arrastável (não existe como card de verdade ainda).
    */
   onChangeCardDate: (cardId: string, updates: { startDate?: string; dueDate?: string }) => void;
+
+  /** Escopo do estado salvo da visualização (ex.: id do kanban). Sem isso, todos os kanbans compartilham o mesmo estado salvo. */
+  stateKey?: string;
 }
 
 type Granularity = 'month' | 'week' | 'day';
+
+interface SavedViewState {
+  granularity: Granularity;
+  cursor: string; // 'YYYY-MM-DD'
+  plansPanelOpen: boolean;
+}
+
+const VIEW_STATE_PREFIX = 'kanban-calendar-view:';
+
+function loadViewState(stateKey: string): SavedViewState | null {
+  try {
+    const raw = localStorage.getItem(VIEW_STATE_PREFIX + stateKey);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as Partial<SavedViewState>;
+    const granularity: Granularity =
+      parsed.granularity === 'week' || parsed.granularity === 'day' ? parsed.granularity : 'month';
+    const cursorOk = typeof parsed.cursor === 'string' && !Number.isNaN(new Date(`${parsed.cursor}T00:00:00`).getTime());
+    if (!cursorOk) return null;
+    return { granularity, cursor: parsed.cursor as string, plansPanelOpen: !!parsed.plansPanelOpen };
+  } catch {
+    return null;
+  }
+}
+
+function saveViewState(stateKey: string, state: SavedViewState) {
+  try {
+    localStorage.setItem(VIEW_STATE_PREFIX + stateKey, JSON.stringify(state));
+  } catch {
+    // sem storage disponível — só não persiste
+  }
+}
 
 interface CalendarCell {
   day: number;
@@ -124,6 +158,25 @@ function resolveColumnId(card: KanbanCard, groups: KanbanCardGroup[]): string | 
   return null;
 }
 
+/**
+ * Capa do grupo "pai" de um card de plano (ocorrência virtual ou já materializada).
+ * Grupo = o do card (cardGroupId) ou, na ocorrência virtual, o grupo-alvo do plano (planTargetGroupId).
+ * Se esse grupo não tiver capa, sobe pelos grupos-pai até achar uma.
+ */
+function resolveGroupCoverPath(card: KanbanCard, groups: KanbanCardGroup[]): string | null {
+  if (!card.planParentId) return null; // só card de plano
+  let groupId: string | null = card.cardGroupId ?? card.planTargetGroupId ?? null;
+  const seen = new Set<string>();
+  while (groupId && !seen.has(groupId)) {
+    seen.add(groupId);
+    const group = groups.find((g) => g.id === groupId);
+    if (!group) return null;
+    if (group.coverPath) return group.coverPath;
+    groupId = group.parentGroupId ?? null;
+  }
+  return null;
+}
+
 function buildWeeks(year: number, month: number): CalendarCell[][] {
   const firstOfMonth = new Date(year, month, 1);
   const startWeekday = firstOfMonth.getDay(); // 0 = domingo
@@ -177,12 +230,17 @@ function DroppableDayCell({
   return (
     <div
       ref={setNodeRef}
+      className={[
+        isOver ? 'bg-blue-50 dark:bg-blue-950' : 'bg-white dark:bg-neutral-800',
+        isToday
+          ? 'outline outline-2 outline-blue-600 dark:outline-blue-400'
+          : (isOver ? 'outline-2 outline-dashed outline-blue-600 dark:outline-blue-400' : ''),
+      ].join(' ')}
       style={{
-        backgroundColor: isOver ? '#e8f0fe' : '#fff',
         minHeight: 96,
+        minWidth: 0,
         padding: 4,
         opacity: inCurrentMonth ? 1 : 0.45,
-        outline: isToday ? '2px solid #1a73e8' : (isOver ? '2px dashed #1a73e8' : 'none'),
         outlineOffset: -2,
       }}
     >
@@ -193,13 +251,16 @@ function DroppableDayCell({
 
 /** Chip compacto de card na visão de mês, arrastável pra outro dia. Ocorrência virtual fica só clicável (disabled). */
 function DraggableMonthChip({
-  card, column, onClick,
+  card, column, groupCoverPath, onClick,
 }: {
   card: KanbanCard;
   column: KanbanColumn | undefined;
+  groupCoverPath?: string | null;
   onClick: () => void;
 }) {
   const virtual = isVirtualCard(card);
+  // Card com cor própria (escolhida pelo usuário) mantém texto escuro fixo nos dois temas.
+  const hasColor = !virtual && !!card.color;
   const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({ id: card.id, disabled: virtual });
 
   return (
@@ -213,6 +274,11 @@ function DraggableMonthChip({
           ? `${card.title} — ocorrência de plano ainda não editada (clique pra criar)`
           : [card.title, column?.name, card.status ? STATUS_LABELS[card.status] : null].filter(Boolean).join(' — ')
       }
+      className={
+        virtual
+          ? 'border border-dashed border-neutral-300 dark:border-neutral-600 text-neutral-700 dark:text-neutral-300'
+          : (hasColor ? 'text-neutral-900' : 'bg-neutral-100 dark:bg-neutral-900 text-neutral-900 dark:text-neutral-100')
+      }
       style={{
         transform: CSS.Translate.toString(transform),
         position: transform ? 'relative' : undefined,
@@ -224,9 +290,10 @@ function DraggableMonthChip({
         padding: '3px 5px',
         borderRadius: 3,
         cursor: virtual ? 'pointer' : 'grab',
-        backgroundColor: virtual ? 'transparent' : (card.color ?? '#f0f0f0'),
-        border: virtual ? '1px dashed #bbb' : 'none',
-        borderLeft: virtual ? '1px dashed #bbb' : `3px solid ${column?.color ?? '#999'}`,
+        ...(virtual ? {} : {
+          backgroundColor: card.color ?? undefined,
+          borderLeft: `3px solid ${column?.color ?? '#999'}`,
+        }),
         opacity: isDragging ? 0.35 : (virtual ? 0.6 : 1),
         overflow: 'hidden',
       }}
@@ -239,12 +306,28 @@ function DraggableMonthChip({
           style={{ width: 14, height: 14, borderRadius: 2, objectFit: 'cover', flexShrink: 0, marginTop: 1 }}
         />
       )}
+      {groupCoverPath && (
+        <img
+          src={convertFileSrc(groupCoverPath)}
+          alt=""
+          title="Capa do grupo"
+          style={{ width: 14, height: 14, borderRadius: 2, objectFit: 'cover', flexShrink: 0, marginTop: 1 }}
+        />
+      )}
+      {card.coverPath && (
+        <img
+          src={convertFileSrc(card.coverPath)}
+          alt=""
+          title="Capa do card"
+          style={{ width: 14, height: 14, borderRadius: 2, objectFit: 'cover', flexShrink: 0, marginTop: 1 }}
+        />
+      )}
       <span
         title={card.status ? STATUS_LABELS[card.status] : undefined}
+        className={card.status ? '' : 'border border-neutral-400 dark:border-neutral-500'}
         style={{
           width: 7, height: 7, borderRadius: '50%', flexShrink: 0, marginTop: 3,
           backgroundColor: card.status ? STATUS_COLORS[card.status] : 'transparent',
-          border: card.status ? 'none' : '1px solid #bbb',
         }}
       />
       <div style={{ display: 'flex', flexDirection: 'column', gap: 0, minWidth: 0, flex: 1 }}>
@@ -253,7 +336,10 @@ function DraggableMonthChip({
         </span>
         <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
           {column && (
-            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: 9, color: '#666' }}>
+            <span
+              className={hasColor ? 'text-neutral-600' : 'text-neutral-500 dark:text-neutral-400'}
+              style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: 9 }}
+            >
               {column.name}
             </span>
           )}
@@ -268,24 +354,35 @@ function DraggableMonthChip({
 
 /** Linha de detalhe usada nas visões de semana e dia — bem mais informação que o chip compacto do mês. */
 function CardDetailCard({
-  card, column, checklistProgress, isVirtual, onClick,
+  card, column, groupCoverPath, checklistProgress, isVirtual, onClick,
 }: {
   card: KanbanCard;
   column: KanbanColumn | undefined;
+  groupCoverPath?: string | null;
   checklistProgress?: ChecklistProgress;
   isVirtual: boolean;
   onClick: () => void;
 }) {
+  // Card com cor própria (escolhida pelo usuário) mantém texto escuro fixo nos dois temas.
+  const hasColor = !isVirtual && !!card.color;
+  const mutedClass = hasColor ? 'text-neutral-600' : 'text-neutral-500 dark:text-neutral-400';
+  const faintClass = hasColor ? 'text-neutral-500' : 'text-neutral-400 dark:text-neutral-500';
   return (
     <div
       onClick={onClick}
+      className={
+        isVirtual
+          ? 'border-[1.5px] border-dashed border-neutral-300 dark:border-neutral-600 text-neutral-700 dark:text-neutral-300'
+          : (hasColor ? 'text-neutral-900' : 'bg-neutral-100 dark:bg-neutral-900 text-neutral-900 dark:text-neutral-100')
+      }
       title={isVirtual ? 'Ocorrência de plano ainda não editada — clique pra criar e editar' : undefined}
       style={{
         display: 'flex', flexDirection: 'column', gap: 4,
         padding: '8px 10px', borderRadius: 6, cursor: 'pointer',
-        backgroundColor: isVirtual ? 'transparent' : (card.color ?? '#f7f7f7'),
-        border: isVirtual ? '1.5px dashed #b3b3b3' : 'none',
-        borderLeft: isVirtual ? '1.5px dashed #b3b3b3' : `4px solid ${column?.color ?? '#999'}`,
+        ...(isVirtual ? {} : {
+          backgroundColor: card.color ?? undefined,
+          borderLeft: `4px solid ${column?.color ?? '#999'}`,
+        }),
         opacity: isVirtual ? 0.65 : 1,
       }}
     >
@@ -298,6 +395,22 @@ function CardDetailCard({
             style={{ width: 18, height: 18, borderRadius: 3, objectFit: 'cover', flexShrink: 0 }}
           />
         )}
+        {groupCoverPath && (
+          <img
+            src={convertFileSrc(groupCoverPath)}
+            alt=""
+            title="Capa do grupo"
+            style={{ width: 18, height: 18, borderRadius: 3, objectFit: 'cover', flexShrink: 0 }}
+          />
+        )}
+        {card.coverPath && (
+          <img
+            src={convertFileSrc(card.coverPath)}
+            alt=""
+            title="Capa do card"
+            style={{ width: 24, height: 24, borderRadius: 3, objectFit: 'cover', flexShrink: 0 }}
+          />
+        )}
         <span style={{ fontSize: 13, fontWeight: 600, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
           {card.title}
         </span>
@@ -306,8 +419,9 @@ function CardDetailCard({
         )}
         {card.status && (
           <span
+            className="text-white"
             style={{
-              fontSize: 10, padding: '1px 6px', borderRadius: 10, color: '#fff', flexShrink: 0,
+              fontSize: 10, padding: '1px 6px', borderRadius: 10, flexShrink: 0,
               backgroundColor: STATUS_COLORS[card.status],
             }}
           >
@@ -316,7 +430,7 @@ function CardDetailCard({
         )}
       </div>
 
-      <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 6, fontSize: 11, color: '#666' }}>
+      <div className={mutedClass} style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 6, fontSize: 11 }}>
         {column && <span>{column.name}</span>}
 
         {card.priority && (
@@ -342,18 +456,19 @@ function CardDetailCard({
             return (
               <span
                 key={label}
-                style={{ fontSize: 10, padding: '1px 6px', borderRadius: 8, backgroundColor: parsed.color, color: '#fff' }}
+                className="text-white"
+                style={{ fontSize: 10, padding: '1px 6px', borderRadius: 8, backgroundColor: parsed.color }}
               >
                 {parsed.name}
               </span>
             );
           })}
-          {card.labels.length > 4 && <span style={{ fontSize: 10, color: '#999' }}>+{card.labels.length - 4}</span>}
+          {card.labels.length > 4 && <span className={faintClass} style={{ fontSize: 10 }}>+{card.labels.length - 4}</span>}
         </div>
       )}
 
       {card.description && (
-        <p style={{ fontSize: 11, color: '#888', margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}>
+        <p className={mutedClass} style={{ fontSize: 11, margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}>
           {card.description}
         </p>
       )}
@@ -363,12 +478,20 @@ function CardDetailCard({
 
 export default function KanbanCalendarView({
   cards, columns, groups, checklistProgress, onCardClick,
-  onTogglePlanActive, onVirtualOccurrenceClick, onChangeCardDate,
+  onTogglePlanActive, onVirtualOccurrenceClick, onChangeCardDate, stateKey = 'default',
 }: KanbanCalendarViewProps) {
   const today = new Date();
-  const [cursor, setCursor] = useState(() => new Date(today.getFullYear(), today.getMonth(), today.getDate()));
-  const [granularity, setGranularity] = useState<Granularity>('month');
-  const [plansPanelOpen, setPlansPanelOpen] = useState(false);
+  const [saved] = useState(() => loadViewState(stateKey));
+  const [cursor, setCursor] = useState(() =>
+    saved ? new Date(`${saved.cursor}T00:00:00`) : new Date(today.getFullYear(), today.getMonth(), today.getDate()),
+  );
+  const [granularity, setGranularity] = useState<Granularity>(saved?.granularity ?? 'month');
+  const [plansPanelOpen, setPlansPanelOpen] = useState(saved?.plansPanelOpen ?? false);
+
+  // Salva a visualização (período, granularidade, painel de planos) a cada mudança.
+  useEffect(() => {
+    saveViewState(stateKey, { granularity, cursor: dateKeyFromDate(cursor), plansPanelOpen });
+  }, [stateKey, granularity, cursor, plansPanelOpen]);
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 8 } }));
 
   const year = cursor.getFullYear();
@@ -518,26 +641,27 @@ export default function KanbanCalendarView({
 
   return (
     <div>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12, backgroundColor: '#fff', padding: 8, borderRadius: 8, flexWrap: 'wrap', gap: 8 }}>
+      <div className="bg-white dark:bg-neutral-800" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12, padding: 8, borderRadius: 8, flexWrap: 'wrap', gap: 8 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <Button variant="secondary" onClick={goPrev}>‹</Button>
-          <span style={{ fontSize: 15, fontWeight: 600, minWidth: 180, textAlign: 'center' }}>
+          <span className="text-neutral-900 dark:text-neutral-100" style={{ fontSize: 15, fontWeight: 600, minWidth: 180, textAlign: 'center' }}>
             {periodLabel}
           </span>
           <Button variant="secondary" onClick={goNext}>›</Button>
         </div>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <div style={{ display: 'flex', border: '1px solid #ddd', borderRadius: 6, overflow: 'hidden' }}>
+          <div className="border border-neutral-300 dark:border-neutral-600" style={{ display: 'flex', borderRadius: 6, overflow: 'hidden' }}>
             {(['month', 'week', 'day'] as Granularity[]).map((g) => (
               <button
                 key={g}
                 onClick={() => setGranularity(g)}
-                style={{
-                  padding: '6px 12px', fontSize: 12, border: 'none', cursor: 'pointer',
-                  backgroundColor: granularity === g ? '#1a73e8' : '#fff',
-                  color: granularity === g ? '#fff' : '#666',
-                }}
+                className={
+                  granularity === g
+                    ? 'bg-blue-600 text-white'
+                    : 'bg-white dark:bg-neutral-800 text-neutral-500 dark:text-neutral-400'
+                }
+                style={{ padding: '6px 12px', fontSize: 12, border: 'none', cursor: 'pointer' }}
               >
                 {g === 'month' ? 'Mês' : g === 'week' ? 'Semana' : 'Dia'}
               </button>
@@ -553,21 +677,22 @@ export default function KanbanCalendarView({
       </div>
 
       {plansPanelOpen && planTemplates.length > 0 && (
-        <div style={{ backgroundColor: '#fff', borderRadius: 8, padding: 10, marginBottom: 12, display: 'flex', flexDirection: 'column', gap: 6 }}>
+        <div className="bg-white dark:bg-neutral-800" style={{ borderRadius: 8, padding: 10, marginBottom: 12, display: 'flex', flexDirection: 'column', gap: 6 }}>
           {planTemplates.map((plan) => (
-            <div key={plan.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 8px', border: '1px solid #eee', borderRadius: 6 }}>
+            <div key={plan.id} className="border border-neutral-200 dark:border-neutral-700" style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 8px', borderRadius: 6 }}>
               <span
                 onClick={() => onCardClick(plan.id)}
+                className="text-neutral-900 dark:text-neutral-100"
                 style={{ flex: 1, fontSize: 12, fontWeight: 600, cursor: 'pointer' }}
                 title="Editar plano (o card-modelo está na coluna do board)"
               >
                 {plan.title}
               </span>
-              <span style={{ fontSize: 11, color: '#999' }}>
+              <span className="text-neutral-400 dark:text-neutral-500" style={{ fontSize: 11 }}>
                 {plan.startDate?.slice(8, 10)}/{plan.startDate?.slice(5, 7)} → {plan.dueDate?.slice(8, 10)}/{plan.dueDate?.slice(5, 7)}
                 {plan.planTimesPerDay > 1 ? ` · ${plan.planTimesPerDay}x/dia` : ''}
               </span>
-              <label style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 11, cursor: 'pointer', whiteSpace: 'nowrap' }}>
+              <label className="text-neutral-900 dark:text-neutral-100" style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 11, cursor: 'pointer', whiteSpace: 'nowrap' }}>
                 <input
                   type="checkbox"
                   checked={plan.planActive}
@@ -581,9 +706,9 @@ export default function KanbanCalendarView({
       )}
 
       {columnsInUse.length > 0 && (
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, marginBottom: 10, padding: '6px 8px', backgroundColor: '#fafafa', borderRadius: 6 }}>
+        <div className="bg-neutral-50 dark:bg-neutral-950" style={{ display: 'flex', flexWrap: 'wrap', gap: 10, marginBottom: 10, padding: '6px 8px', borderRadius: 6 }}>
           {columnsInUse.map((col) => (
-            <div key={col.id} style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11, color: '#555' }}>
+            <div key={col.id} className="text-neutral-600 dark:text-neutral-400" style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11 }}>
               {col.coverPath ? (
                 <img
                   src={convertFileSrc(col.coverPath)}
@@ -601,11 +726,15 @@ export default function KanbanCalendarView({
 
       {granularity === 'month' && (
         <DndContext sensors={sensors} onDragEnd={handleCalendarDragEnd}>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 1, backgroundColor: '#eee', border: '1px solid #eee' }}>
+          <div
+            className="bg-neutral-200 dark:bg-neutral-700 border border-neutral-200 dark:border-neutral-700"
+            style={{ display: 'grid', gridTemplateColumns: 'repeat(7, minmax(0, 1fr))', gap: 1 }}
+          >
             {WEEKDAY_LABELS.map((label) => (
               <div
                 key={label}
-                style={{ backgroundColor: '#fafafa', padding: '6px 4px', fontSize: 11, fontWeight: 600, color: '#666', textAlign: 'center' }}
+                className="bg-neutral-50 dark:bg-neutral-950 text-neutral-500 dark:text-neutral-400"
+                style={{ padding: '6px 4px', fontSize: 11, fontWeight: 600, textAlign: 'center' }}
               >
                 {label}
               </div>
@@ -619,9 +748,9 @@ export default function KanbanCalendarView({
                 return (
                   <DroppableDayCell key={`${wi}-${di}`} id={key} isToday={isToday} inCurrentMonth={cell.inCurrentMonth}>
                     <div
+                      className={isToday ? 'text-blue-600 dark:text-blue-400' : 'text-neutral-400 dark:text-neutral-500'}
                       style={{
                         fontSize: 11,
-                        color: isToday ? '#1a73e8' : '#999',
                         fontWeight: isToday ? 700 : 400,
                         marginBottom: 4,
                       }}
@@ -634,7 +763,7 @@ export default function KanbanCalendarView({
                         const columnId = resolveColumnId(card, groups);
                         const column = columnId ? columnById.get(columnId) : undefined;
                         return (
-                          <DraggableMonthChip key={card.id} card={card} column={column} onClick={() => handleCardClick(card)} />
+                          <DraggableMonthChip key={card.id} card={card} column={column} groupCoverPath={resolveGroupCoverPath(card, groups)} onClick={() => handleCardClick(card)} />
                         );
                       })}
                     </div>
@@ -647,7 +776,7 @@ export default function KanbanCalendarView({
       )}
 
       {granularity === 'week' && (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 8 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, minmax(0, 1fr))', gap: 8 }}>
           {weekDays.map((d) => {
             const key = dateKeyFromDate(d);
             const dayCards = cardsByDate.get(key) ?? [];
@@ -655,12 +784,18 @@ export default function KanbanCalendarView({
             return (
               <div
                 key={key}
-                style={{
-                  backgroundColor: '#fff', borderRadius: 8, padding: 8, minHeight: 200,
-                  outline: isToday ? '2px solid #1a73e8' : '1px solid #eee', outlineOffset: -2,
-                }}
+                className={[
+                  'bg-white dark:bg-neutral-800 outline',
+                  isToday
+                    ? 'outline-2 outline-blue-600 dark:outline-blue-400'
+                    : 'outline-1 outline-neutral-200 dark:outline-neutral-700',
+                ].join(' ')}
+                style={{ borderRadius: 8, padding: 8, minHeight: 200, minWidth: 0, outlineOffset: -2 }}
               >
-                <div style={{ fontSize: 11, fontWeight: 600, color: isToday ? '#1a73e8' : '#666', marginBottom: 6, textAlign: 'center' }}>
+                <div
+                  className={isToday ? 'text-blue-600 dark:text-blue-400' : 'text-neutral-500 dark:text-neutral-400'}
+                  style={{ fontSize: 11, fontWeight: 600, marginBottom: 6, textAlign: 'center' }}
+                >
                   {WEEKDAY_LABELS[d.getDay()]} {d.getDate()}
                 </div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
@@ -672,6 +807,7 @@ export default function KanbanCalendarView({
                         key={card.id}
                         card={card}
                         column={column}
+                        groupCoverPath={resolveGroupCoverPath(card, groups)}
                         checklistProgress={checklistProgress?.[card.id]}
                         isVirtual={isVirtualCard(card)}
                         onClick={() => handleCardClick(card)}
@@ -689,9 +825,9 @@ export default function KanbanCalendarView({
         const key = dateKeyFromDate(cursor);
         const dayCards = cardsByDate.get(key) ?? [];
         return (
-          <div style={{ backgroundColor: '#fff', borderRadius: 8, padding: 12, display: 'flex', flexDirection: 'column', gap: 8 }}>
+          <div className="bg-white dark:bg-neutral-800" style={{ borderRadius: 8, padding: 12, display: 'flex', flexDirection: 'column', gap: 8 }}>
             {dayCards.length === 0 ? (
-              <p style={{ color: '#999', fontSize: 13, textAlign: 'center', padding: 24, margin: 0 }}>
+              <p className="text-neutral-400 dark:text-neutral-500" style={{ fontSize: 13, textAlign: 'center', padding: 24, margin: 0 }}>
                 Nenhum card com data neste dia.
               </p>
             ) : (
@@ -703,6 +839,7 @@ export default function KanbanCalendarView({
                     key={card.id}
                     card={card}
                     column={column}
+                    groupCoverPath={resolveGroupCoverPath(card, groups)}
                     checklistProgress={checklistProgress?.[card.id]}
                     isVirtual={isVirtualCard(card)}
                     onClick={() => handleCardClick(card)}
@@ -715,7 +852,7 @@ export default function KanbanCalendarView({
       })()}
 
       {!hasAnyDatedCard && (
-        <p style={{ color: '#999', fontSize: 13, textAlign: 'center', padding: 24 }}>
+        <p className="text-neutral-400 dark:text-neutral-500" style={{ fontSize: 13, textAlign: 'center', padding: 24 }}>
           Nenhum card com data neste kanban ainda. Adicione uma data de início ou prazo a um card, ou crie um card de plano numa coluna, pra vê-lo aqui.
         </p>
       )}

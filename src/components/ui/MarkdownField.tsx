@@ -34,22 +34,24 @@ export default function MarkdownField({ value, onChange, onBlur, placeholder, ro
         <button
           type="button"
           onClick={() => setMode('preview')}
-          style={{
-            fontSize: 11, padding: '3px 8px', border: '1px solid #ccc', borderRadius: 4,
-            cursor: 'pointer', backgroundColor: mode === 'preview' ? '#1a73e8' : '#fff',
-            color: mode === 'preview' ? '#fff' : '#666',
-          }}
+          className={
+            mode === 'preview'
+              ? 'bg-blue-600 text-white border border-neutral-300 dark:border-neutral-600'
+              : 'bg-white dark:bg-neutral-800 text-neutral-500 dark:text-neutral-400 border border-neutral-300 dark:border-neutral-600'
+          }
+          style={{ fontSize: 11, padding: '3px 8px', borderRadius: 4, cursor: 'pointer' }}
         >
           👁 Visualizar
         </button>
         <button
           type="button"
           onClick={() => setMode('edit')}
-          style={{
-            fontSize: 11, padding: '3px 8px', border: '1px solid #ccc', borderRadius: 4,
-            cursor: 'pointer', backgroundColor: mode === 'edit' ? '#1a73e8' : '#fff',
-            color: mode === 'edit' ? '#fff' : '#666',
-          }}
+          className={
+            mode === 'edit'
+              ? 'bg-blue-600 text-white border border-neutral-300 dark:border-neutral-600'
+              : 'bg-white dark:bg-neutral-800 text-neutral-500 dark:text-neutral-400 border border-neutral-300 dark:border-neutral-600'
+          }
+          style={{ fontSize: 11, padding: '3px 8px', borderRadius: 4, cursor: 'pointer' }}
         >
           ✎ Editar
         </button>
@@ -62,16 +64,17 @@ export default function MarkdownField({ value, onChange, onBlur, placeholder, ro
           onBlur={onBlur}
           placeholder={placeholder}
           rows={rows}
+          className="bg-white dark:bg-neutral-900 text-neutral-900 dark:text-neutral-100 dark:border-neutral-600 dark:[color-scheme:dark]"
           style={{ width: '100%', padding: 8, fontSize: 13, resize: 'vertical', fontFamily: 'monospace' }}
         />
       ) : (
         <div
-          className="markdown-preview"
+          className="markdown-preview border border-neutral-200 dark:border-neutral-700 bg-neutral-50 dark:bg-neutral-900 text-neutral-900 dark:text-neutral-100"
           style={{
-            border: '1px solid #eee', borderRadius: 4, padding: 10, minHeight: rows * 20,
-            fontSize: 13, backgroundColor: '#fafafa', overflowY: 'auto', maxHeight: 300,
+            borderRadius: 4, padding: 10, minHeight: rows * 20,
+            fontSize: 13, overflowY: 'auto', maxHeight: 300,
           }}
-          dangerouslySetInnerHTML={{ __html: value.trim() ? html : '<p style="color:#999;font-style:italic">Sem conteúdo ainda...</p>' }}
+          dangerouslySetInnerHTML={{ __html: value.trim() ? html : '<p class="text-neutral-400 dark:text-neutral-500" style="font-style:italic">Sem conteúdo ainda...</p>' }}
         />
       )}
     </div>

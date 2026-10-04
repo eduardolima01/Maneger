@@ -8,6 +8,8 @@ import { convertFileSrc } from '@tauri-apps/api/core';
 import KanbanColumn from './KanbanColumn';
 import KanbanBackgroundModal from '@/Kanban/components/Kanbanbackgroundmodal';
 import KanbanCalendarView from '@/Kanban/components/Kanbancalendarview';
+
+const INPUT_CLS = 'bg-white dark:bg-neutral-900 text-neutral-900 dark:text-neutral-100 dark:border-neutral-600 dark:[color-scheme:dark]';
 import KanbanToolbar from './KanbanToolbar';
 import KanbanColumnSettingsModal from './KanbanColumnSettingsModal';
 import KanbanCardModal from './KanbanCardModal';
@@ -25,6 +27,7 @@ import { CardMoveContext } from '@/lib/utils/CardMoveContext';
 import { LabelIconContext } from '@/Kanban/hooks/Labeliconcontext';
 import { GroupLayoutContext } from '@/Kanban/components/GroupLayoutContext';
 import UpcomingCardsPanel from '@/Kanban/components/UpcomingCardsPanel';
+import KanbanTreeView, { type TreeMoveTarget } from '@/Kanban/components/KanbanTreeView';
 
 interface KanbanBoardProps {
   kanban: Kanban;
@@ -32,6 +35,29 @@ interface KanbanBoardProps {
 
 const DEFAULT_COLUMN_WIDTH = 280;
 const EMPTY_COLUMN_WIDTH = 160;
+
+type BoardViewMode = 'board' | 'tree';
+const VIEW_MODE_PREFIX = 'kanban-view-mode:';
+
+const TREE_CARD_PREFIX = 'kanban-tree-card:';
+
+/** Id do card que estava aberto no painel lateral da árvore deste kanban (ou null). Se o card não existir mais, o painel só não abre. */
+function readTreeCardId(kanbanId: string): string | null {
+  try {
+    return localStorage.getItem(`${TREE_CARD_PREFIX}${kanbanId}`) || null;
+  } catch {
+    return null;
+  }
+}
+
+/** Visão salva deste kanban (quadro de cards ou árvore). Sem valor salvo, valor inválido ou storage indisponível: quadro. */
+function readViewMode(kanbanId: string): BoardViewMode {
+  try {
+    return localStorage.getItem(`${VIEW_MODE_PREFIX}${kanbanId}`) === 'tree' ? 'tree' : 'board';
+  } catch {
+    return 'board';
+  }
+}
 
 export default function KanbanBoard({ kanban }: KanbanBoardProps) {
 
@@ -76,6 +102,26 @@ export default function KanbanBoard({ kanban }: KanbanBoardProps) {
   const selectionBoxRef = useRef<{ x: number; y: number; width: number; height: number } | null>(null);
   const [bulkDeleteConfirm, setBulkDeleteConfirm] = useState(false);
   const [calendarCollapsed, setCalendarCollapsed] = useState(false);
+  const [viewMode, setViewMode] = useState<BoardViewMode>(() => readViewMode(kanban.id));
+
+  // Grava só quando o usuário troca a visão (e não num efeito sobre `viewMode`): se o componente for reaproveitado
+  // por outro kanban, um efeito de gravação escreveria a visão do kanban antigo na chave do novo.
+  function changeViewMode(next: BoardViewMode) {
+    setViewMode(next);
+    try { localStorage.setItem(`${VIEW_MODE_PREFIX}${kanban.id}`, next); } catch { /* sem storage: só não persiste */ }
+  }
+  useEffect(() => { setViewMode(readViewMode(kanban.id)); }, [kanban.id]);
+  const [treeCardId, setTreeCardId] = useState<string | null>(() => readTreeCardId(kanban.id)); // card aberto no painel lateral da árvore (no lugar do modal)
+
+  // Abrir/fechar o painel grava o card aberto, pra a árvore reabrir do mesmo jeito (mesmo critério da visão: grava no clique, não em efeito)
+  function changeTreeCard(id: string | null) {
+    setTreeCardId(id);
+    try {
+      if (id) localStorage.setItem(`${TREE_CARD_PREFIX}${kanban.id}`, id);
+      else localStorage.removeItem(`${TREE_CARD_PREFIX}${kanban.id}`);
+    } catch { /* sem storage: só não persiste */ }
+  }
+  useEffect(() => { setTreeCardId(readTreeCardId(kanban.id)); }, [kanban.id]);
   const [showArchivedColumns, setShowArchivedColumns] = useState(false);
   const [focusedColumnId, setFocusedColumnId] = useState<string | null>(null);
   const archivedColumns = board.columns.filter((c) => !c.visible).sort((a, b) => a.position - b.position);
@@ -198,6 +244,7 @@ export default function KanbanBoard({ kanban }: KanbanBoardProps) {
   const collapsedIds = new Set(board.viewPrefs.collapsedColumnIds);
   const collapsedGroupIds = new Set(board.viewPrefs.collapsedGroupIds);
   const selectedCard = selectedCardId ? board.cards.find((c) => c.id === selectedCardId) ?? null : null;
+  const treeCard = treeCardId ? board.cards.find((c) => c.id === treeCardId) ?? null : null;
 
   function toggleCardSelection(cardId: string) {
     setSelectedCardIds((prev) => {
@@ -451,6 +498,49 @@ export default function KanbanBoard({ kanban }: KanbanBoardProps) {
     }
   }
 
+  /**
+   * Mover um card pela ÁRVORE: mesmo resultado do arrastar no quadro (cai num grupo/subgrupo ou solto numa coluna),
+   * ficando ANTES de `beforeCardId` (null = no fim). A etiqueta de "subgrupo por etiqueta" só é limpa quando o card
+   * muda de lugar — reordenar dentro do mesmo grupo/coluna não mexe nas etiquetas.
+   */
+  async function handleTreeMoveCard(cardId: string, target: TreeMoveTarget, beforeCardId: string | null) {
+    const card = board.cards.find((c) => c.id === cardId);
+    if (!card) return;
+
+    const siblings = (target.kind === 'group'
+      ? board.cardsByGroup.get(target.id)
+      : board.ungroupedCardsByColumn.get(target.id)) ?? [];
+    const ids = siblings.map((c) => c.id).filter((id) => id !== cardId);
+    const at = beforeCardId ? ids.indexOf(beforeCardId) : -1;
+    if (at !== -1) ids.splice(at, 0, cardId); else ids.push(cardId);
+
+    if (target.kind === 'group') board.moveCardIntoGroup(cardId, target.id, ids);
+    else if (card.cardGroupId) board.moveCardOutOfGroup(cardId, target.id, ids);
+    else board.moveCard(cardId, target.id, ids);
+
+    const sameContainer = target.kind === 'group'
+      ? card.cardGroupId === target.id
+      : !card.cardGroupId && card.columnId === target.id;
+    if (!sameContainer) {
+      const nextLabels = clearGroupLabels(card.labels);
+      const changed = nextLabels.length !== card.labels.length || nextLabels.some((l, i) => l !== card.labels[i]);
+      if (changed) board.updateCard(cardId, { labels: nextLabels });
+    }
+  }
+
+  /** Cor e opacidade do fundo da coluna vivem em viewPrefs (columnBackgrounds / columnBackgroundOpacity) — mesmas funções pro quadro e pra árvore. */
+  function updateColumnBackground(columnId: string, color: string | null) {
+    const next = { ...(board.viewPrefs.columnBackgrounds ?? {}) };
+    if (color) next[columnId] = color; else delete next[columnId];
+    board.saveViewPrefs({ columnBackgrounds: next });
+  }
+
+  function updateColumnOpacity(columnId: string, opacity: number) {
+    const next = { ...(board.viewPrefs.columnBackgroundOpacity ?? {}) };
+    if (opacity < 1) next[columnId] = opacity; else delete next[columnId]; // 1 = padrão, não precisa ficar salvo
+    board.saveViewPrefs({ columnBackgroundOpacity: next });
+  }
+
   function findColumnOfSortableItem(id: string): string | undefined {
     if (id.startsWith('card:')) {
       const cardId = id.replace('card:', '');
@@ -574,7 +664,7 @@ export default function KanbanBoard({ kanban }: KanbanBoardProps) {
                   : {}),
             }}
           >
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8, backgroundColor: '#fff', padding: 8, borderRadius: 8 }}>
+            <div className="bg-white dark:bg-neutral-800 text-neutral-900 dark:text-neutral-100" style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8, padding: 8, borderRadius: 8 }}>
               <div style={{ flex: 1 }}>
                 <KanbanToolbar
                   search={board.search}
@@ -589,6 +679,9 @@ export default function KanbanBoard({ kanban }: KanbanBoardProps) {
                   onOpenLabelManager={() => setLabelManagerOpen(true)}
                 />
               </div>
+              <Button variant="secondary" onClick={() => changeViewMode(viewMode === 'tree' ? 'board' : 'tree')}>
+                {viewMode === 'tree' ? '🗂 Ver quadro' : '🌳 Ver árvore'}
+              </Button>
               <Button variant="secondary" onClick={() => setUpcomingPanelOpen((v) => !v)}>
                 {upcomingPanelOpen ? '🕐 Ocultar próximos' : '🕐 Mais próximos'}
               </Button>
@@ -604,7 +697,66 @@ export default function KanbanBoard({ kanban }: KanbanBoardProps) {
 
             <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>
               <div style={{ flex: 1, minWidth: 0 }}>
-                <>
+                {viewMode === 'tree' && (
+                  <KanbanTreeView
+                    columns={displayedColumns}
+                    groups={board.groups}
+                    cardsByGroup={board.cardsByGroup}
+                    ungroupedCardsByColumn={board.ungroupedCardsByColumn}
+                    checklistProgress={board.checklistProgress}
+                    onCardClick={(id) => { setSelectedCardIds(new Set()); changeTreeCard(id); }}
+                    selectedCardId={treeCardId}
+                    treeActions={{
+                      onAddCardToColumn: board.createCard,
+                      onAddCardToGroup: board.createCardInGroup,
+                      onCreateGroup: board.createGroup,
+                      onCreateSubgroup: board.createSubgroup,
+                      onUpdateCardTitle: (id, title) => board.updateCard(id, { title }),
+                      onMoveCard: handleTreeMoveCard,
+                      onUpdateGroupAppearance: board.updateGroupAppearance,
+                      allLabels: allParsedLabels,
+                      onRenameGroup: board.renameGroup,
+                      onRequestDeleteGroup: (groupId) => setDeleteGroupTarget(groupId),
+                      onUpdateColumnBackground: updateColumnBackground,
+                      onUpdateColumnOpacity: updateColumnOpacity,
+                    }}
+                    columnBackgrounds={board.viewPrefs.columnBackgrounds ?? {}}
+                    columnOpacities={board.viewPrefs.columnBackgroundOpacity ?? {}}
+                    cardMenu={{
+                      allLabels: allParsedLabels,
+                      projectId: kanban.projectId,
+                      onUpdateLabels: (id, labels) => board.updateCard(id, { labels }),
+                      onUpdateDueDate: (id, dueDate) => board.updateCard(id, { dueDate }),
+                      onUpdateColor: (id, color) => board.updateCard(id, { color }),
+                      onUpdateStatus: (id, status) => board.updateCard(id, { status }),
+                      onDuplicate: board.duplicateCard,
+                      onDuplicateMultiple: board.duplicateCardMultiple,
+                      onRequestDelete: (id, title) => setDeleteTarget({ id, title }),
+                    }}
+                    sidePanel={treeCard ? (
+                      <KanbanCardModal
+                        key={treeCard.id}
+                        variant="panel"
+                        isOpen
+                        onClose={() => changeTreeCard(null)}
+                        card={treeCard}
+                        kanban={kanban}
+                        columns={board.columns}
+                        groups={board.groups}
+                        cardFieldConfig={cardFieldConfig}
+                        onUpdateCardFieldConfig={handleUpdateCardFieldConfig}
+                        cardVisualConfig={cardVisualConfig}
+                        onUpdateCardVisualConfig={handleUpdateCardVisualConfig}
+                        onUpdate={board.updateCard}
+                        onDuplicate={board.duplicateCard}
+                        onArchive={board.archiveCard}
+                        onRequestDelete={(id, title) => setDeleteTarget({ id, title })}
+                      />
+                    ) : null}
+                    stateKey={kanban.id}
+                  />
+                )}
+                <div hidden={viewMode === 'tree'}>
                   <DndContext sensors={sensors} collisionDetection={closestCorners} onDragEnd={handleDragEnd}>
                     <SortableContext items={columnsToRender.map((c) => c.id)} strategy={horizontalListSortingStrategy}>
                       <div
@@ -682,6 +834,8 @@ export default function KanbanBoard({ kanban }: KanbanBoardProps) {
                                     if (color) next[col.id] = color; else delete next[col.id];
                                     board.saveViewPrefs({ columnBackgrounds: next });
                                   }}
+                                  backgroundOpacity={board.viewPrefs.columnBackgroundOpacity?.[col.id] ?? 1}
+                                  onUpdateBackgroundOpacity={(opacity) => updateColumnOpacity(col.id, opacity)}
                                   focused={!!focusedColumn}
                                   onToggleFocus={() => setFocusedColumnId(focusedColumn ? null : col.id)}
 
@@ -698,8 +852,8 @@ export default function KanbanBoard({ kanban }: KanbanBoardProps) {
                             })()}
                             {!collapsedIds.has(col.id) && (
                               newCardColumnId === col.id ? (
-                                <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginTop: 4, backgroundColor: '#fff', padding: 6, borderRadius: 4 }}>
-                                  <label style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11, color: '#666', cursor: 'pointer' }}>
+                                <div className="bg-white dark:bg-neutral-800 text-neutral-900 dark:text-neutral-100" style={{ display: 'flex', flexDirection: 'column', gap: 4, marginTop: 4, padding: 6, borderRadius: 4 }}>
+                                  <label className="text-neutral-500 dark:text-neutral-400" style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11, cursor: 'pointer' }}>
                                     <input type="checkbox" checked={planMode} onChange={(e) => setPlanMode(e.target.checked)} />
                                     🗓 Criar como plano (gera cards diários no calendário)
                                   </label>
@@ -718,17 +872,17 @@ export default function KanbanBoard({ kanban }: KanbanBoardProps) {
                                       onBlur={() => !newCardTitle.trim() && !planMode && setNewCardColumnId(null)}
                                       placeholder={planMode ? 'Título do plano...' : 'Título do card... (Shift+Enter = várias linhas viram vários cards)'}
                                       rows={planMode ? 1 : 2}
-                                      style={{ flex: 1, padding: 6, fontSize: 12, resize: 'vertical', fontFamily: 'inherit' }}
+                                      className={INPUT_CLS} style={{ flex: 1, padding: 6, fontSize: 12, resize: 'vertical', fontFamily: 'inherit' }}
                                     />
                                     {!planMode && (
                                       <button
                                         onClick={handleCreateCard}
                                         disabled={!newCardTitle.trim()}
                                         title="Adicionar card"
+                                        className={newCardTitle.trim() ? 'bg-blue-600 text-white' : 'bg-neutral-300 dark:bg-neutral-700 text-white'}
                                         style={{
                                           padding: '6px 10px', fontSize: 12, border: 'none', borderRadius: 4,
-                                          backgroundColor: newCardTitle.trim() ? '#1a73e8' : '#ccc',
-                                          color: '#fff', cursor: newCardTitle.trim() ? 'pointer' : 'default',
+                                          cursor: newCardTitle.trim() ? 'pointer' : 'default',
                                         }}
                                       >
                                         +
@@ -740,39 +894,39 @@ export default function KanbanBoard({ kanban }: KanbanBoardProps) {
                                     <>
                                       <div style={{ display: 'flex', gap: 6 }}>
                                         <div style={{ flex: 1 }}>
-                                          <label style={{ fontSize: 10, color: '#999', display: 'block', marginBottom: 2 }}>Início</label>
-                                          <input type="date" value={planStartDate} onChange={(e) => setPlanStartDate(e.target.value)} style={{ width: '100%', padding: 5, fontSize: 11, boxSizing: 'border-box' }} />
+                                          <label className="text-neutral-400 dark:text-neutral-500" style={{ fontSize: 10, display: 'block', marginBottom: 2 }}>Início</label>
+                                          <input type="date" value={planStartDate} onChange={(e) => setPlanStartDate(e.target.value)} className={INPUT_CLS} style={{ width: '100%', padding: 5, fontSize: 11, boxSizing: 'border-box' }} />
                                         </div>
                                         <div style={{ flex: 1 }}>
-                                          <label style={{ fontSize: 10, color: '#999', display: 'block', marginBottom: 2 }}>Fim</label>
-                                          <input type="date" value={planEndDate} onChange={(e) => setPlanEndDate(e.target.value)} style={{ width: '100%', padding: 5, fontSize: 11, boxSizing: 'border-box' }} />
+                                          <label className="text-neutral-400 dark:text-neutral-500" style={{ fontSize: 10, display: 'block', marginBottom: 2 }}>Fim</label>
+                                          <input type="date" value={planEndDate} onChange={(e) => setPlanEndDate(e.target.value)} className={INPUT_CLS} style={{ width: '100%', padding: 5, fontSize: 11, boxSizing: 'border-box' }} />
                                         </div>
                                         <div style={{ width: 70 }}>
-                                          <label style={{ fontSize: 10, color: '#999', display: 'block', marginBottom: 2 }}>×/dia</label>
+                                          <label className="text-neutral-400 dark:text-neutral-500" style={{ fontSize: 10, display: 'block', marginBottom: 2 }}>×/dia</label>
                                           <input
                                             type="number"
                                             min={1}
                                             max={20}
                                             value={planTimesPerDay}
                                             onChange={(e) => setPlanTimesPerDay(Math.max(1, Number(e.target.value) || 1))}
-                                            style={{ width: '100%', padding: 5, fontSize: 11, boxSizing: 'border-box' }}
+                                            className={INPUT_CLS} style={{ width: '100%', padding: 5, fontSize: 11, boxSizing: 'border-box' }}
                                           />
                                         </div>
                                       </div>
                                       <div>
-                                        <label style={{ fontSize: 10, color: '#999', display: 'block', marginBottom: 2 }}>Dias da semana ativos</label>
+                                        <label className="text-neutral-400 dark:text-neutral-500" style={{ fontSize: 10, display: 'block', marginBottom: 2 }}>Dias da semana ativos</label>
                                         <div style={{ display: 'flex', gap: 3 }}>
                                           {['D', 'S', 'T', 'Q', 'Q', 'S', 'S'].map((label, day) => (
                                             <button
                                               key={day}
                                               onClick={() => togglePlanWeekday(day)}
                                               title={['Domingo', 'Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado'][day]}
-                                              style={{
-                                                width: 22, height: 22, fontSize: 10, borderRadius: '50%', cursor: 'pointer',
-                                                border: '1px solid #ccc',
-                                                backgroundColor: planWeekdays.includes(day) ? '#1a73e8' : '#fff',
-                                                color: planWeekdays.includes(day) ? '#fff' : '#666',
-                                              }}
+                                              className={
+                                                planWeekdays.includes(day)
+                                                  ? 'bg-blue-600 text-white border border-neutral-300 dark:border-neutral-600'
+                                                  : 'bg-white dark:bg-neutral-800 text-neutral-500 dark:text-neutral-400 border border-neutral-300 dark:border-neutral-600'
+                                              }
+                                              style={{ width: 22, height: 22, fontSize: 10, borderRadius: '50%', cursor: 'pointer' }}
                                             >
                                               {label}
                                             </button>
@@ -780,13 +934,13 @@ export default function KanbanBoard({ kanban }: KanbanBoardProps) {
                                         </div>
                                       </div>
                                       <div>
-                                        <label style={{ fontSize: 10, color: '#999', display: 'block', marginBottom: 2 }}>
+                                        <label className="text-neutral-400 dark:text-neutral-500" style={{ fontSize: 10, display: 'block', marginBottom: 2 }}>
                                           Coluna onde o card nasce ao clicar no calendário
                                         </label>
                                         <select
                                           value={planTargetColumnId}
                                           onChange={(e) => { setPlanTargetColumnId(e.target.value); setPlanTargetGroupId(''); }}
-                                          style={{ width: '100%', padding: 5, fontSize: 11, boxSizing: 'border-box' }}
+                                          className={INPUT_CLS} style={{ width: '100%', padding: 5, fontSize: 11, boxSizing: 'border-box' }}
                                         >
                                           <option value="">Nenhuma — fica só no calendário</option>
                                           {visibleColumns.map((c) => (
@@ -796,13 +950,13 @@ export default function KanbanBoard({ kanban }: KanbanBoardProps) {
                                       </div>
                                       {planTargetColumnId && flattenGroupsForColumn(planTargetColumnId).length > 0 && (
                                         <div>
-                                          <label style={{ fontSize: 10, color: '#999', display: 'block', marginBottom: 2 }}>
+                                          <label className="text-neutral-400 dark:text-neutral-500" style={{ fontSize: 10, display: 'block', marginBottom: 2 }}>
                                             Grupo/subgrupo (opcional)
                                           </label>
                                           <select
                                             value={planTargetGroupId}
                                             onChange={(e) => setPlanTargetGroupId(e.target.value)}
-                                            style={{ width: '100%', padding: 5, fontSize: 11, boxSizing: 'border-box' }}
+                                            className={INPUT_CLS} style={{ width: '100%', padding: 5, fontSize: 11, boxSizing: 'border-box' }}
                                           >
                                             <option value="">Nenhum — direto na coluna</option>
                                             {flattenGroupsForColumn(planTargetColumnId).map((g) => (
@@ -814,10 +968,10 @@ export default function KanbanBoard({ kanban }: KanbanBoardProps) {
                                       <button
                                         onClick={handleCreateCard}
                                         disabled={!newCardTitle.trim() || !planStartDate || !planEndDate || planWeekdays.length === 0}
+                                        className={(newCardTitle.trim() && planStartDate && planEndDate && planWeekdays.length > 0) ? 'bg-blue-600 text-white' : 'bg-neutral-300 dark:bg-neutral-700 text-white'}
                                         style={{
                                           padding: '6px 10px', fontSize: 12, border: 'none', borderRadius: 4, marginTop: 2,
-                                          backgroundColor: (newCardTitle.trim() && planStartDate && planEndDate && planWeekdays.length > 0) ? '#1a73e8' : '#ccc',
-                                          color: '#fff', cursor: 'pointer',
+                                          cursor: 'pointer',
                                         }}
                                       >
                                         + Criar plano
@@ -827,7 +981,7 @@ export default function KanbanBoard({ kanban }: KanbanBoardProps) {
 
                                   <button
                                     onClick={() => { setNewCardColumnId(null); setNewCardTitle(''); resetPlanForm(); }}
-                                    style={{ fontSize: 11, color: '#666', background: 'none', border: 'none', cursor: 'pointer', textAlign: 'left', padding: 0 }}
+                                    className="text-neutral-500 dark:text-neutral-400" style={{ fontSize: 11, background: 'none', border: 'none', cursor: 'pointer', textAlign: 'left', padding: 0 }}
                                   >
                                     ✕ Cancelar
                                   </button>
@@ -836,7 +990,7 @@ export default function KanbanBoard({ kanban }: KanbanBoardProps) {
                               ) : (
                                 <button
                                   onClick={() => setNewCardColumnId(col.id)}
-                                  style={{ marginTop: 4, padding: '6px', fontSize: 12, color: '#666', backgroundColor: '#fff', border: '1px dashed #ccc', borderRadius: 4, cursor: 'pointer' }}
+                                  className="text-neutral-500 dark:text-neutral-400 bg-white dark:bg-neutral-800 border border-dashed border-neutral-300 dark:border-neutral-600" style={{ marginTop: 4, padding: '6px', fontSize: 12, borderRadius: 4, cursor: 'pointer' }}
                                 >
                                   + Novo card
                                 </button>
@@ -846,7 +1000,7 @@ export default function KanbanBoard({ kanban }: KanbanBoardProps) {
 
                             {!collapsedIds.has(col.id) && !newCardColumnId && (
                               newGroupColumnId === col.id ? (
-                                <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginTop: 4, backgroundColor: '#fff', padding: 6, borderRadius: 4 }}>
+                                <div className="bg-white dark:bg-neutral-800 text-neutral-900 dark:text-neutral-100" style={{ display: 'flex', flexDirection: 'column', gap: 4, marginTop: 4, padding: 6, borderRadius: 4 }}>
                                   <div style={{ display: 'flex', gap: 4 }}>
                                     <input
                                       ref={newGroupInputRef}
@@ -855,16 +1009,16 @@ export default function KanbanBoard({ kanban }: KanbanBoardProps) {
                                       onChange={(e) => setNewGroupName(e.target.value)}
                                       onKeyDown={(e) => e.key === 'Enter' && handleCreateGroup()}
                                       placeholder="Nome do grupo..."
-                                      style={{ flex: 1, padding: 6, fontSize: 12 }}
+                                      className={INPUT_CLS} style={{ flex: 1, padding: 6, fontSize: 12 }}
                                     />
                                     <button
                                       onClick={handleCreateGroup}
                                       disabled={!newGroupName.trim()}
                                       title="Adicionar grupo"
+                                      className={newGroupName.trim() ? 'bg-neutral-500 dark:bg-neutral-600 text-white' : 'bg-neutral-300 dark:bg-neutral-700 text-white'}
                                       style={{
                                         padding: '6px 10px', fontSize: 12, border: 'none', borderRadius: 4,
-                                        backgroundColor: newGroupName.trim() ? '#666' : '#ccc',
-                                        color: '#fff', cursor: newGroupName.trim() ? 'pointer' : 'default',
+                                        cursor: newGroupName.trim() ? 'pointer' : 'default',
                                       }}
                                     >
                                       +
@@ -872,7 +1026,7 @@ export default function KanbanBoard({ kanban }: KanbanBoardProps) {
                                   </div>
                                   <button
                                     onClick={() => { setNewGroupColumnId(null); setNewGroupName(''); }}
-                                    style={{ fontSize: 11, color: '#666', background: 'none', border: 'none', cursor: 'pointer', textAlign: 'left', padding: 0 }}
+                                    className="text-neutral-500 dark:text-neutral-400" style={{ fontSize: 11, background: 'none', border: 'none', cursor: 'pointer', textAlign: 'left', padding: 0 }}
                                   >
                                     ✕ Cancelar
                                   </button>
@@ -880,7 +1034,7 @@ export default function KanbanBoard({ kanban }: KanbanBoardProps) {
                               ) : (
                                 <button
                                   onClick={() => setNewGroupColumnId(col.id)}
-                                  style={{ marginTop: 4, padding: '4px', fontSize: 11, color: '#999', backgroundColor: '#fff', border: 'none', cursor: 'pointer' }}
+                                  className="text-neutral-400 dark:text-neutral-500 bg-white dark:bg-neutral-800" style={{ marginTop: 4, padding: '4px', fontSize: 11, border: 'none', cursor: 'pointer' }}
                                 >
                                   + Novo grupo
                                 </button>
@@ -904,11 +1058,11 @@ export default function KanbanBoard({ kanban }: KanbanBoardProps) {
                   )}
 
                   {visibleColumns.length === 0 && !board.loading && (
-                    <p style={{ color: '#999', fontSize: 13, textAlign: 'center', padding: 24 }}>
+                    <p className="text-neutral-400 dark:text-neutral-500" style={{ fontSize: 13, textAlign: 'center', padding: 24 }}>
                       Nenhuma coluna visível. Abra "⚙ Colunas" pra criar ou mostrar alguma.
                     </p>
                   )}
-                </>
+                </div>
               </div>
 
               {upcomingPanelOpen && (
@@ -924,7 +1078,7 @@ export default function KanbanBoard({ kanban }: KanbanBoardProps) {
             </div>
 
             {!calendarCollapsed && (
-              <div style={{ marginTop: 16, borderTop: '1px solid #eee', paddingTop: 16 }}>
+              <div className="border-t border-neutral-200 dark:border-neutral-700" style={{ marginTop: 16, paddingTop: 16 }}>
                 <KanbanCalendarView
                   cards={board.cards}
                   columns={board.columns}
@@ -934,6 +1088,7 @@ export default function KanbanBoard({ kanban }: KanbanBoardProps) {
                   onTogglePlanActive={(planId, active) => board.updateCard(planId, { planActive: active })}
                   onVirtualOccurrenceClick={handleVirtualOccurrenceClick}
                   onChangeCardDate={(cardId, updates) => board.updateCard(cardId, updates)}
+                  stateKey={kanban.id}
                 />
               </div>
             )}
@@ -1030,13 +1185,14 @@ export default function KanbanBoard({ kanban }: KanbanBoardProps) {
               >
                 <div
                   onClick={(e) => e.stopPropagation()}
+                  className="bg-white dark:bg-neutral-800 text-neutral-900 dark:text-neutral-100"
                   style={{
-                    background: '#fff', borderRadius: 8, padding: 20, width: 380,
+                    borderRadius: 8, padding: 20, width: 380,
                     display: 'flex', flexDirection: 'column', gap: 12, boxShadow: '0 4px 20px rgba(0,0,0,0.2)',
                   }}
                 >
                   <h3 style={{ margin: 0, fontSize: 15 }}>Remover grupo</h3>
-                  <p style={{ margin: 0, fontSize: 13, color: '#666' }}>
+                  <p className="text-neutral-500 dark:text-neutral-400" style={{ margin: 0, fontSize: 13 }}>
                     {deleteGroupCardCount > 0
                       ? `Esse grupo tem ${deleteGroupCardCount} card${deleteGroupCardCount !== 1 ? 's' : ''} dentro. O que você quer fazer?`
                       : 'Esse grupo está vazio. O que você quer fazer?'}
@@ -1048,23 +1204,19 @@ export default function KanbanBoard({ kanban }: KanbanBoardProps) {
                         if (group) board.deleteGroup(group.id, group.columnId);
                         setDeleteGroupTarget(null);
                       }}
-                      style={{
-                        padding: '10px 12px', borderRadius: 6, border: '1px solid #ddd', background: '#fff',
-                        cursor: 'pointer', fontSize: 13, textAlign: 'left', color: '#333',
-                      }}
+                      className="border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 text-neutral-900 dark:text-neutral-100"
+                      style={{ padding: '10px 12px', borderRadius: 6, cursor: 'pointer', fontSize: 13, textAlign: 'left' }}
                     >
                       <strong>Desagrupar</strong>
-                      <div style={{ fontSize: 11, color: '#999', marginTop: 2 }}>O grupo some, os cards voltam soltos pra coluna. Nenhum card é apagado.</div>
+                      <div className="text-neutral-400 dark:text-neutral-500" style={{ fontSize: 11, marginTop: 2 }}>O grupo some, os cards voltam soltos pra coluna. Nenhum card é apagado.</div>
                     </button>
                     <button
                       onClick={() => {
                         if (deleteGroupTarget) board.deleteGroupWithCards(deleteGroupTarget);
                         setDeleteGroupTarget(null);
                       }}
-                      style={{
-                        padding: '10px 12px', borderRadius: 6, border: '1px solid #f5c6cb', background: '#fdecea',
-                        cursor: 'pointer', fontSize: 13, textAlign: 'left', color: '#c62828',
-                      }}
+                      className="border border-red-200 dark:border-red-900 bg-red-50 dark:bg-red-950 text-red-700 dark:text-red-300"
+                      style={{ padding: '10px 12px', borderRadius: 6, cursor: 'pointer', fontSize: 13, textAlign: 'left' }}
                     >
                       <strong>Excluir grupo e cards</strong>
                       <div style={{ fontSize: 11, marginTop: 2 }}>Apaga o grupo e todos os cards de dentro. Não pode ser desfeito.</div>
@@ -1072,7 +1224,7 @@ export default function KanbanBoard({ kanban }: KanbanBoardProps) {
                   </div>
                   <button
                     onClick={() => setDeleteGroupTarget(null)}
-                    style={{ alignSelf: 'flex-end', padding: '6px 10px', border: 'none', background: 'none', color: '#666', cursor: 'pointer', fontSize: 12 }}
+                    className="text-neutral-500 dark:text-neutral-400" style={{ alignSelf: 'flex-end', padding: '6px 10px', border: 'none', background: 'none', cursor: 'pointer', fontSize: 12 }}
                   >
                     Cancelar
                   </button>

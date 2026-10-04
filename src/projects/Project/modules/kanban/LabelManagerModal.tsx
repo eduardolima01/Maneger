@@ -74,37 +74,34 @@ export default function LabelManagerModal({ isOpen, onClose, labels, cardCounts,
     <>
       <Modal open={isOpen} onClose={onClose}>
         <div style={{ padding: 16, minWidth: 320 }}>
-          <h3 style={{ marginTop: 0 }}>Etiquetas do Kanban</h3>
+          <h3 className="text-neutral-900 dark:text-neutral-100" style={{ marginTop: 0 }}>Etiquetas do Kanban</h3>
 
 
           <button
             onClick={async () => { setFixing(true); await onFixInconsistentGroupLabels(); setFixing(false); }}
             disabled={fixing}
-            style={{ display: 'block', fontSize: 11, color: '#1a73e8', background: 'none', border: 'none', cursor: fixing ? 'default' : 'pointer', padding: '0 0 8px', textAlign: 'left' }}
+            className="text-blue-600 dark:text-blue-400"
+            style={{ display: 'block', fontSize: 11, background: 'none', border: 'none', cursor: fixing ? 'default' : 'pointer', padding: '0 0 8px', textAlign: 'left' }}
           >
             {fixing ? 'Corrigindo...' : '🔧 Corrigir agrupamento de etiquetas antigas'}
           </button>
 
           {labels.length === 0 && !creating && (
-            <p style={{ color: '#999', fontSize: 13 }}>Nenhuma etiqueta criada ainda neste kanban.</p>
+            <p className="text-neutral-400 dark:text-neutral-500" style={{ fontSize: 13 }}>Nenhuma etiqueta criada ainda neste kanban.</p>
           )}
 
           {creating ? (
             <div
-              style={{
-                display: 'flex', alignItems: 'center', gap: 8, padding: '6px 8px',
-                border: '1px solid #eee', borderRadius: 6, marginBottom: 8,
-              }}
+              className="border border-neutral-200 dark:border-neutral-700"
+              style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 8px', borderRadius: 6, marginBottom: 8 }}
             >
               <div style={{ display: 'flex', gap: 3, flexWrap: 'wrap', maxWidth: 90 }}>
                 {LABEL_COLOR_PALETTE.map((c) => (
                   <button
                     key={c}
                     onClick={() => setNewColor(c)}
-                    style={{
-                      width: 16, height: 16, borderRadius: 4, backgroundColor: c, cursor: 'pointer', padding: 0,
-                      border: newColor === c ? '2px solid #000' : '1px solid rgba(0,0,0,0.15)',
-                    }}
+                    className={newColor === c ? 'border-2 border-black dark:border-white' : 'border border-black/15 dark:border-white/25'}
+                    style={{ width: 16, height: 16, borderRadius: 4, backgroundColor: c, cursor: 'pointer', padding: 0 }}
                   />
                 ))}
               </div>
@@ -117,18 +114,20 @@ export default function LabelManagerModal({ isOpen, onClose, labels, cardCounts,
                   if (e.key === 'Enter') submitCreate();
                   if (e.key === 'Escape') setCreating(false);
                 }}
-                style={{ flex: 1, fontSize: 13, padding: 4, border: '1px solid #ddd', borderRadius: 4 }}
+                className="border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 text-neutral-900 dark:text-neutral-100"
+                style={{ flex: 1, fontSize: 13, padding: 4, borderWidth: 1, borderStyle: 'solid', borderRadius: 4 }}
               />
               <label title="Etiqueta de grupo" style={{ display: 'flex', alignItems: 'center', cursor: 'pointer' }}>
                 <input type="checkbox" checked={newIsGroup} onChange={(e) => setNewIsGroup(e.target.checked)} />
               </label>
-              <button onClick={submitCreate} title="Salvar" style={{ border: 'none', background: 'none', cursor: 'pointer', color: '#1a73e8', fontSize: 13 }}>✓</button>
-              <button onClick={() => setCreating(false)} title="Cancelar" style={{ border: 'none', background: 'none', cursor: 'pointer', color: '#999', fontSize: 13 }}>✕</button>
+              <button onClick={submitCreate} title="Salvar" className="text-blue-600 dark:text-blue-400" style={{ border: 'none', background: 'none', cursor: 'pointer', fontSize: 13 }}>✓</button>
+              <button onClick={() => setCreating(false)} title="Cancelar" className="text-neutral-400 dark:text-neutral-500" style={{ border: 'none', background: 'none', cursor: 'pointer', fontSize: 13 }}>✕</button>
             </div>
           ) : (
             <button
               onClick={startCreate}
-              style={{ display: 'block', fontSize: 12, color: '#1a73e8', background: 'none', border: 'none', cursor: 'pointer', padding: '0 0 10px', textAlign: 'left', fontWeight: 600 }}
+              className="text-blue-600 dark:text-blue-400"
+              style={{ display: 'block', fontSize: 12, background: 'none', border: 'none', cursor: 'pointer', padding: '0 0 10px', textAlign: 'left', fontWeight: 600 }}
             >
               + Nova etiqueta
             </button>
@@ -140,10 +139,8 @@ export default function LabelManagerModal({ isOpen, onClose, labels, cardCounts,
               return (
                 <div
                   key={label.name}
-                  style={{
-                    display: 'flex', alignItems: 'center', gap: 8, padding: '6px 8px',
-                    border: '1px solid #eee', borderRadius: 6,
-                  }}
+                  className="border border-neutral-200 dark:border-neutral-700"
+                  style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 8px', borderRadius: 6 }}
                 >
                   {isEditing ? (
                     <>
@@ -152,10 +149,8 @@ export default function LabelManagerModal({ isOpen, onClose, labels, cardCounts,
                           <button
                             key={c}
                             onClick={() => setColorDraft(c)}
-                            style={{
-                              width: 16, height: 16, borderRadius: 4, backgroundColor: c, cursor: 'pointer', padding: 0,
-                              border: colorDraft === c ? '2px solid #000' : '1px solid rgba(0,0,0,0.15)',
-                            }}
+                            className={colorDraft === c ? 'border-2 border-black dark:border-white' : 'border border-black/15 dark:border-white/25'}
+                            style={{ width: 16, height: 16, borderRadius: 4, backgroundColor: c, cursor: 'pointer', padding: 0 }}
                           />
                         ))}
                       </div>
@@ -168,7 +163,8 @@ export default function LabelManagerModal({ isOpen, onClose, labels, cardCounts,
                           if (e.key === 'Enter') submitEdit();
                           if (e.key === 'Escape') setEditingName(null);
                         }}
-                        style={{ flex: 1, fontSize: 13, padding: 4, border: '1px solid #ddd', borderRadius: 4 }}
+                        className="border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 text-neutral-900 dark:text-neutral-100"
+                        style={{ flex: 1, fontSize: 13, padding: 4, borderWidth: 1, borderStyle: 'solid', borderRadius: 4 }}
                       />
                       <label title="Etiqueta de grupo" style={{ display: 'flex', alignItems: 'center', cursor: 'pointer' }}>
                         <input type="checkbox" checked={isGroupDraft} onChange={(e) => setIsGroupDraft(e.target.checked)} />
@@ -176,14 +172,16 @@ export default function LabelManagerModal({ isOpen, onClose, labels, cardCounts,
                       <button
                         onClick={submitEdit}
                         title="Salvar"
-                        style={{ border: 'none', background: 'none', cursor: 'pointer', color: '#1a73e8', fontSize: 13 }}
+                        className="text-blue-600 dark:text-blue-400"
+                        style={{ border: 'none', background: 'none', cursor: 'pointer', fontSize: 13 }}
                       >
                         ✓
                       </button>
                       <button
                         onClick={() => setEditingName(null)}
                         title="Cancelar"
-                        style={{ border: 'none', background: 'none', cursor: 'pointer', color: '#999', fontSize: 13 }}
+                        className="text-neutral-400 dark:text-neutral-500"
+                        style={{ border: 'none', background: 'none', cursor: 'pointer', fontSize: 13 }}
                       >
                         ✕
                       </button>
@@ -193,15 +191,16 @@ export default function LabelManagerModal({ isOpen, onClose, labels, cardCounts,
                       <span style={{ width: 12, height: 12, borderRadius: 3, backgroundColor: label.color, flexShrink: 0 }} />
                       {/* sempre visível: dá pra trocar o ícone sem entrar no modo de edição (✏️) */}
                       <LabelIconPicker value={labelIcons[label.name] ?? null} onChange={(icon) => onSetLabelIcon(label.name, icon)} />
-                      <span style={{ flex: 1, fontSize: 13 }}>{label.name}</span>
+                      <span className="text-neutral-900 dark:text-neutral-100" style={{ flex: 1, fontSize: 13 }}>{label.name}</span>
                       {label.isGroup && <span title="Etiqueta de grupo — agrupa cards na coluna" style={{ fontSize: 11 }}>🏷</span>}
-                      <span style={{ fontSize: 11, color: '#999' }}>
+                      <span className="text-neutral-400 dark:text-neutral-500" style={{ fontSize: 11 }}>
                         {cardCounts[label.name] ?? 0} card{(cardCounts[label.name] ?? 0) !== 1 ? 's' : ''}
                         {(groupCounts[label.name] ?? 0) > 0 && ` · ${groupCounts[label.name]} grupo${groupCounts[label.name] !== 1 ? 's' : ''}`}
                       </span>
                       <button
                         onClick={() => startEdit(label)}
                         title="Editar"
+                        className="text-neutral-700 dark:text-neutral-300"
                         style={{ border: 'none', background: 'none', cursor: 'pointer', fontSize: 13 }}
                       >
                         ✏️
@@ -209,7 +208,8 @@ export default function LabelManagerModal({ isOpen, onClose, labels, cardCounts,
                       <button
                         onClick={() => setDeleteTarget(label.name)}
                         title="Excluir"
-                        style={{ border: 'none', background: 'none', cursor: 'pointer', color: '#c62828', fontSize: 13 }}
+                        className="text-red-600 dark:text-red-400"
+                        style={{ border: 'none', background: 'none', cursor: 'pointer', fontSize: 13 }}
                       >
                         🗑
                       </button>

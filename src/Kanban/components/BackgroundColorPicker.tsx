@@ -47,17 +47,17 @@ function SwatchGrid({ colors, current, onPick }: { colors: string[]; current: st
           key={c}
           onClick={() => onPick(c)}
           title={c}
-          style={{
-            width: 20, height: 20, borderRadius: 4, background: c, cursor: 'pointer', padding: 0,
-            border: current === c ? '2px solid #1a73e8' : '1px solid #ccc',
-          }}
+          className={current === c ? 'border-2 border-blue-600 dark:border-blue-400' : 'border border-neutral-300 dark:border-neutral-600'}
+          style={{ width: 20, height: 20, borderRadius: 4, background: c, cursor: 'pointer', padding: 0 }}
         />
       ))}
     </div>
   );
 }
 
-const smallLabel: React.CSSProperties = { fontSize: 10, color: '#888' };
+const smallLabel: React.CSSProperties = { fontSize: 10 };
+const SMALL_LABEL_CLS = 'text-neutral-500 dark:text-neutral-400';
+const FAINT_CLS = 'text-neutral-400 dark:text-neutral-500';
 
 export default function BackgroundColorPicker({ value, fallbackColor, coverPath, onChange }: BackgroundColorPickerProps) {
   const [draft, setDraft] = useState(value ?? fallbackColor);
@@ -111,13 +111,13 @@ export default function BackgroundColorPicker({ value, fallbackColor, coverPath,
     <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
       {coverPath && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-          <div style={smallLabel}>Cores da capa</div>
-          {coverState.status === 'loading' && <span style={{ fontSize: 11, color: '#999' }}>Lendo cores da capa…</span>}
-          {coverState.status === 'error' && <span style={{ fontSize: 11, color: '#999' }}>Não foi possível ler as cores da capa.</span>}
+          <div className={SMALL_LABEL_CLS} style={smallLabel}>Cores da capa</div>
+          {coverState.status === 'loading' && <span className={FAINT_CLS} style={{ fontSize: 11 }}>Lendo cores da capa…</span>}
+          {coverState.status === 'error' && <span className={FAINT_CLS} style={{ fontSize: 11 }}>Não foi possível ler as cores da capa.</span>}
           {coverState.status === 'ready' && coverState.colors.length > 0 && (
             <>
               <SwatchGrid colors={coverState.colors} current={current} onPick={pickColor} />
-              <div style={smallLabel}>Versão suave (melhor pra ler o texto)</div>
+              <div className={SMALL_LABEL_CLS} style={smallLabel}>Versão suave (melhor pra ler o texto)</div>
               <SwatchGrid
                 colors={coverState.colors.map((c) => tintTowardWhite(c, COVER_TINT_AMOUNT))}
                 current={current}
@@ -125,7 +125,7 @@ export default function BackgroundColorPicker({ value, fallbackColor, coverPath,
               />
             </>
           )}
-          <div style={{ ...smallLabel, marginTop: 2 }}>Paleta</div>
+          <div className={SMALL_LABEL_CLS} style={{ ...smallLabel, marginTop: 2 }}>Paleta</div>
         </div>
       )}
 
@@ -137,16 +137,18 @@ export default function BackgroundColorPicker({ value, fallbackColor, coverPath,
           value={draft}
           onChange={handleCustomChange}
           title="Cor personalizada"
-          style={{ width: 28, height: 22, padding: 0, border: '1px solid #ccc', borderRadius: 4, background: 'none', cursor: 'pointer' }}
+          className="border border-neutral-300 dark:border-neutral-600"
+          style={{ width: 28, height: 22, padding: 0, borderRadius: 4, background: 'none', cursor: 'pointer' }}
         />
-        <span style={{ fontSize: 11, color: '#666', flex: 1 }}>Personalizada</span>
+        <span className="text-neutral-500 dark:text-neutral-400" style={{ fontSize: 11, flex: 1 }}>Personalizada</span>
         <button
           onClick={resetToDefault}
           disabled={value === null}
           title="Voltar à cor padrão"
+          className={value === null ? FAINT_CLS : 'text-blue-600 dark:text-blue-400'}
           style={{
             fontSize: 11, background: 'none', border: 'none', padding: 0,
-            color: value === null ? '#bbb' : '#1a73e8', cursor: value === null ? 'default' : 'pointer',
+            cursor: value === null ? 'default' : 'pointer',
           }}
         >
           Padrão
