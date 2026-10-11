@@ -8,6 +8,7 @@ import KanbanCard from './KanbanCard';
 import type { KanbanCardGroup, KanbanCard as CardType, KanbanDensity, ChecklistProgress, TaskPriority, UpdateKanbanCardGroupInput, CardVisualFieldConfig } from '@/types/kanban.types';
 import { clusterCardsByGroupLabel, ParsedLabel, parseLabel, serializeLabel } from '@/Kanban/utils/kanbanLabels';
 import LabelGroupBlock from '@/Kanban/utils/LabelGroupBlock';
+import { StatusSections } from '@/Kanban/components/StatusGrouping';
 import { DuplicateMultipleMode } from '@/Kanban/components/DuplicateMenu';
 import ContextMenu from '@/components/ui/ContextMenu';
 import ImageUploadField from '@/components/ImageUploadField';
@@ -76,6 +77,9 @@ interface GroupBlockProps {
   collapsedGroupIds?: Set<string>;
   onToggleGroupCollapsed?: (groupId: string) => void;
 }
+
+/** Grupo/subgrupo MAIS INTERNO sob o mouse (um só no app todo) — o Espaço só age nele, não nos grupos-pai. */
+let innermostHoveredGroupId: string | null = null;
 
 const DEFAULT_GROUP_HEIGHT = 320;
 const DEFAULT_SUBGROUP_HEIGHT = 180;
@@ -268,19 +272,28 @@ export default function GroupBlock({
   // toda vez que o mouse passa por cima). É só um estado local + listener global de teclado.
   const [hovering, setHovering] = useState(false);
   useEffect(() => {
-    if (!hovering || collapsed) return;
+    if (!hovering) return;
     function onKeyDown(e: KeyboardEvent) {
       // nunca interceptar atalhos com modificador (Ctrl+C, Cmd+C, etc.) nem se algo já está sendo editado de verdade
       if (e.ctrlKey || e.metaKey || e.altKey) return;
       const active = document.activeElement as HTMLElement | null;
       const typingInField = !!active && (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA' || active.isContentEditable);
       if (typingInField) return;
+      // Espaço: expande/recolhe o grupo ou subgrupo MAIS INTERNO sob o mouse (botão focado mantém o Espaço nativo)
+      if (e.key === ' ') {
+        if (active && (active.tagName === 'BUTTON' || active.tagName === 'A')) return;
+        if (innermostHoveredGroupId !== group.id) return;
+        e.preventDefault();
+        onToggleCollapsed();
+        return;
+      }
+      if (collapsed) return; // as demais teclas só valem com o grupo aberto
       if (e.key === 'c' || e.key === 'C') { e.preventDefault(); setAddingCard(true); }
       if (e.key === 'g' || e.key === 'G') { e.preventDefault(); setAddingSubgroup(true); }
     }
     document.addEventListener('keydown', onKeyDown);
     return () => document.removeEventListener('keydown', onKeyDown);
-  }, [hovering, collapsed]);
+  }, [hovering, collapsed, group.id, onToggleCollapsed]);
 
   // cores de texto que combinam com o fundo REAL do bloco (inclui o azul temporário de "arrastando por cima")
   // Sem cor de fundo custom (ou com o azul temporário de "arrastando por cima"): classes Tailwind com dark:.
@@ -307,8 +320,8 @@ export default function GroupBlock({
     <div ref={setSortableRef} data-group-id={group.id} style={{ ...style, marginBottom: 8 }}>
       <div
         ref={setDroppableRef}
-        onMouseOver={(e) => { e.stopPropagation(); setHovering(true); }}
-        onMouseLeave={() => setHovering(false)}
+        onMouseOver={(e) => { e.stopPropagation(); innermostHoveredGroupId = group.id; setHovering(true); }}
+        onMouseLeave={() => { if (innermostHoveredGroupId === group.id) innermostHoveredGroupId = null; setHovering(false); }}
         className={[
           isOver
             ? 'bg-blue-50 dark:bg-blue-950'
@@ -497,8 +510,8 @@ export default function GroupBlock({
           style={{
             minHeight: 30, height: collapsed ? undefined : contentHeight,
             ...(isHorizontal
-              ? { display: 'flex', flexDirection: 'row', gap: 8, overflowX: 'auto', overflowY: 'hidden', alignItems: 'flex-start' }
-              : { overflowY: 'auto' }),
+              ? { display: 'flex', flexDirection: 'row', gap: 8, overflowX: 'auto', overflowY: 'hidden', overscrollBehaviorX: 'contain', alignItems: 'flex-start' }
+              : { overflowY: 'auto', overscrollBehavior: 'contain' }),
           }}
         >
 
@@ -542,7 +555,7 @@ export default function GroupBlock({
                 </div>
               ))}
 
-              {loose.map((c) => (
+              <StatusSections kanbanId={group.kanbanId} scopeId={`grp:${group.id}`} disabled={isHorizontal} cards={loose} renderCard={(c) => (
                 <div key={`card-wrap:${c.id}`} style={isHorizontal ? { width: HORIZONTAL_ITEM_WIDTH, flexShrink: 0 } : undefined}>
                   <KanbanCard
                     card={c}
@@ -573,7 +586,7 @@ export default function GroupBlock({
                     projectId={projectId}
                   />
                 </div>
-              ))}
+              )} />
             </SortableContext>
           )}
 

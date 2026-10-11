@@ -701,6 +701,15 @@ pub fn run() {
                 .add_migrations(&chat_db_url, chat_migrations)
                 .build(),
         )
+        .plugin(tauri_plugin_drag::init())
+        .setup(|app| {
+            if let Some(window) = app.get_webview_window("main") {
+                if let Some(icon) = app.default_window_icon() {
+                    window.set_icon(icon.clone())?;
+                }
+            }
+            Ok(())
+        })
         .invoke_handler(tauri::generate_handler![
             greet,
             get_db_url,
@@ -727,6 +736,7 @@ pub fn run() {
             rename_path,
             delete_to_trash,
             copy_path,
+            delete_permanently,
             move_path,
             list_trash,
             restore_trash_item,
@@ -785,7 +795,12 @@ pub fn run() {
             //
             load_agenda_events_data,
             save_agenda_events_data,
-            rename_card_file
+            rename_card_file,
+            get_drag_icon_path,
+            load_folder_groups,
+            save_folder_groups,
+            load_explorer_ui_prefs,
+            save_explorer_ui_prefs
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

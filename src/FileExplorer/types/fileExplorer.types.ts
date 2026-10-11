@@ -26,9 +26,13 @@ export interface BreadcrumbSegment {
   path: string;
 }
 
-export interface ClipboardState {
+export interface ClipboardEntry {
   sourcePath: string;
   sourceName: string;
+}
+
+export interface ClipboardState {
+  entries: ClipboardEntry[];
   mode: 'copy' | 'move';
 }
 

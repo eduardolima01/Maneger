@@ -3,6 +3,7 @@ import Button from '@/components/layout/Button';
 import { useTabMeta } from '@/components/layout/tabs/useTabMeta';
 import { useStudySession } from './hooks/useStudySession';
 import MarkdownView from './components/MarkdownView';
+import SpeakButton from './components/SpeakButton';
 import { RATING_LABELS, RATING_COLORS } from './utils/studyRating';
 import type { StudyRating } from './types/study.types';
 
@@ -75,13 +76,26 @@ export default function StudySessionPage() {
       </div>
 
       <div style={{ border: '1px solid #e0e0e0', borderRadius: 8, padding: 24, minHeight: 200 }}>
-        <p style={{ fontSize: 11, color: '#999', textTransform: 'uppercase', marginBottom: 8 }}>Pergunta</p>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+          <p style={{ fontSize: 11, color: '#999', textTransform: 'uppercase', margin: 0 }}>Pergunta</p>
+          {currentCard && <SpeakButton key={`front-${currentCard.id}`} text={currentCard.front} />}
+        </div>
+        {currentCard?.imageUrl && (
+          <img
+            src={currentCard.imageUrl}
+            alt="Imagem de referência do card"
+            style={{ maxWidth: '100%', maxHeight: 260, borderRadius: 6, display: 'block', marginBottom: 12 }}
+          />
+        )}
         {currentCard && <MarkdownView value={currentCard.front} />}
 
         {revealed && currentCard && (
           <>
             <hr style={{ margin: '16px 0', border: 'none', borderTop: '1px solid #eee' }} />
-            <p style={{ fontSize: 11, color: '#999', textTransform: 'uppercase', marginBottom: 8 }}>Resposta</p>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+              <p style={{ fontSize: 11, color: '#999', textTransform: 'uppercase', margin: 0 }}>Resposta</p>
+              <SpeakButton key={`back-${currentCard.id}`} text={currentCard.back} />
+            </div>
             <MarkdownView value={currentCard.back} />
           </>
         )}

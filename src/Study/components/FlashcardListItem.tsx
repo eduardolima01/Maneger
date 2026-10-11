@@ -3,6 +3,7 @@ import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { MdDragIndicator } from 'react-icons/md';
 import MarkdownView from './MarkdownView';
+import SpeakButton from './SpeakButton';
 import type { Flashcard } from '../types/study.types';
 
 interface FlashcardListItemProps {
@@ -48,9 +49,19 @@ export default function FlashcardListItem({ card, index, onEdit, onDuplicate, on
 
       <span style={{ fontSize: 11, color: '#999', minWidth: 20, marginTop: 4 }}>#{index + 1}</span>
 
+      {card.imageUrl && (
+        <img
+          src={card.imageUrl}
+          alt="Imagem de referência"
+          style={{ width: 40, height: 40, objectFit: 'cover', borderRadius: 4, flexShrink: 0 }}
+        />
+      )}
+
       <div style={{ flex: 1, minWidth: 0 }}>
         <MarkdownView value={card.front} />
       </div>
+
+      <SpeakButton text={card.front} label="" />
 
       <div style={{ display: 'flex', gap: 4 }}>
         <button onClick={onEdit} title="Editar" style={iconBtnStyle}>✎</button>

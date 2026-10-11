@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { Fragment, useEffect, useRef, useState } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { open } from '@tauri-apps/plugin-dialog';
 import Modal from '@/components/ui/Modal';
@@ -76,6 +76,18 @@ interface KanbanCardModalProps {
   variant?: 'modal' | 'panel';
 }
 
+/** Par de botões ▲ ▼ pra reordenar um campo na lista de configuração. */
+function MoveButtons({ onUp, onDown }: { onUp?: () => void; onDown?: () => void }) {
+  const cls = 'border border-neutral-300 dark:border-neutral-600 bg-neutral-50 dark:bg-neutral-900 text-neutral-500 dark:text-neutral-400 disabled:opacity-30 disabled:cursor-default';
+  const style: React.CSSProperties = { fontSize: 9, lineHeight: 1, padding: '2px 5px', borderRadius: 3, cursor: 'pointer' };
+  return (
+    <span style={{ display: 'inline-flex', flexDirection: 'column', gap: 2 }}>
+      <button type="button" onClick={onUp} disabled={!onUp} title="Subir" aria-label="Subir" className={cls} style={style}>▲</button>
+      <button type="button" onClick={onDown} disabled={!onDown} title="Descer" aria-label="Descer" className={cls} style={style}>▼</button>
+    </span>
+  );
+}
+
 export default function KanbanCardModal({
   isOpen, onClose, card, columns, groups, cardFieldConfig, onUpdateCardFieldConfig, cardVisualConfig, onUpdateCardVisualConfig, onUpdate, onDuplicate, onArchive, onRequestDelete,
   variant = 'modal',
@@ -102,11 +114,47 @@ export default function KanbanCardModal({
   }
 
   function updateField(key: CardFieldKey, patch: Partial<Pick<CardFieldConfig, 'tab' | 'visible'>>) {
-    onUpdateCardFieldConfig(fields.map((f) => (f.key === key ? { ...f, ...patch } : f)));
+    const next = fields.map((f) => (f.key === key ? { ...f, ...patch } : f));
+    if (patch.tab) {
+      // mudou de aba: vai pro FIM da lista da aba nova (a ordem do array é a ordem de exibição)
+      const moved = next.find((f) => f.key === key)!;
+      onUpdateCardFieldConfig([...next.filter((f) => f.key !== key), moved]);
+      return;
+    }
+    onUpdateCardFieldConfig(next);
+  }
+
+  /** Sobe/desce um campo DENTRO da própria aba (troca de lugar com o vizinho da mesma aba). */
+  function moveField(key: CardFieldKey, dir: -1 | 1) {
+    const f = fields.find((x) => x.key === key);
+    if (!f) return;
+    const sameTab = fields.filter((x) => x.tab === f.tab);
+    const i = sameTab.findIndex((x) => x.key === key);
+    const other = sameTab[i + dir];
+    if (!other) return;
+    const next = [...fields];
+    const a = next.findIndex((x) => x.key === key);
+    const b = next.findIndex((x) => x.key === other.key);
+    [next[a], next[b]] = [next[b], next[a]];
+    onUpdateCardFieldConfig(next);
   }
 
   function updateVisualField(key: CardVisualFieldKey, visible: boolean) {
     onUpdateCardVisualConfig(visualFields.map((f) => (f.key === key ? { ...f, visible } : f)));
+  }
+
+  function moveVisualField(key: CardVisualFieldKey, dir: -1 | 1) {
+    const i = visualFields.findIndex((x) => x.key === key);
+    const j = i + dir;
+    if (i < 0 || j < 0 || j >= visualFields.length) return;
+    const next = [...visualFields];
+    [next[i], next[j]] = [next[j], next[i]];
+    onUpdateCardVisualConfig(next);
+  }
+
+  /** Posição do campo na lista configurada — usada como `order` CSS dentro das linhas lado a lado (datas; prioridade/status/cor). */
+  function orderOf(key: CardFieldKey): number {
+    return fields.findIndex((f) => f.key === key);
   }
 
   useEffect(() => {
@@ -114,9 +162,13 @@ export default function KanbanCardModal({
       setTitle(card.title);
       setDescription(card.description ?? '');
       setNotes(card.notes ?? '');
-      setActiveTab('details');
     }
   }, [isOpen, card]);
+
+  // volta pra aba "Detalhes" só ao abrir OU trocar de card — não a cada edição (senão mexer em Propriedades jogava de volta pra Detalhes)
+  useEffect(() => {
+    if (isOpen) setActiveTab('details');
+  }, [isOpen, card?.id]);
 
   useEffect(() => {
     if (isOpen && card) {
@@ -155,10 +207,16 @@ export default function KanbanCardModal({
     window.addEventListener('keydown', onKeyDown);
     window.addEventListener('keyup', onKeyUp);
     window.addEventListener('wheel', onWheel, { passive: true });
+    // Ctrl + CLIQUE (selecionar cards na árvore) também não é um "toque só no Control"
+    function onPointerDown(e: PointerEvent) {
+      if (e.ctrlKey) ctrlOnlyRef.current = false;
+    }
+    window.addEventListener('pointerdown', onPointerDown, true);
     return () => {
       window.removeEventListener('keydown', onKeyDown);
       window.removeEventListener('keyup', onKeyUp);
       window.removeEventListener('wheel', onWheel);
+      window.removeEventListener('pointerdown', onPointerDown, true);
     };
   }, [isOpen]);
 
@@ -459,7 +517,7 @@ export default function KanbanCardModal({
     return (
       <div key="dates" style={{ display: 'flex', gap: 12 }}>
         {showStart && (
-          <div style={{ flex: 1 }}>
+          <div style={{ flex: 1, order: orderOf('startDate') }}>
             <label className={LABEL_CLS} style={{ fontSize: 12, fontWeight: 600, display: 'block', marginBottom: 4 }}>
               {card!.isPlanTemplate ? 'Início do plano' : 'Data inicial'}
             </label>
@@ -474,7 +532,7 @@ export default function KanbanCardModal({
           </div>
         )}
         {showDue && (
-          <div style={{ flex: 1 }}>
+          <div style={{ flex: 1, order: orderOf('dueDate') }}>
             <label className={LABEL_CLS} style={{ fontSize: 12, fontWeight: 600, display: 'block', marginBottom: 4 }}>
               {card!.isPlanTemplate ? 'Fim do plano' : 'Definir data do card'}
             </label>
@@ -520,7 +578,7 @@ export default function KanbanCardModal({
     return (
       <div key="priority-status-color" style={{ display: 'flex', gap: 12 }}>
         {showPriority && (
-          <div style={{ flex: 1 }}>
+          <div style={{ flex: 1, order: orderOf('priority') }}>
             <label className={LABEL_CLS} style={{ fontSize: 12, fontWeight: 600, display: 'block', marginBottom: 4 }}>Prioridade</label>
             <select
               value={card!.priority ?? ''}
@@ -536,7 +594,7 @@ export default function KanbanCardModal({
           </div>
         )}
         {showStatus && (
-          <div style={{ flex: 1 }}>
+          <div style={{ flex: 1, order: orderOf('status') }}>
             <label className={LABEL_CLS} style={{ fontSize: 12, fontWeight: 600, display: 'block', marginBottom: 4 }}>Status</label>
             <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
               <span
@@ -562,7 +620,7 @@ export default function KanbanCardModal({
           </div>
         )}
         {showColor && (
-          <div style={{ flex: 1 }}>
+          <div style={{ flex: 1, order: orderOf('color') }}>
             <label className={LABEL_CLS} style={{ fontSize: 12, fontWeight: 600, display: 'block', marginBottom: 4 }}>Cor</label>
             <input
               type="color"
@@ -643,23 +701,39 @@ export default function KanbanCardModal({
     );
   }
 
-  /** Renderiza, pra uma aba, todo campo configurado (visível) pra morar nela — nessa ordem fixa. */
+  /**
+   * Renderiza, pra uma aba, todo campo configurado (visível) pra morar nela, NA ORDEM da lista de configuração.
+   * Datas (início/prazo) e prioridade/status/cor são linhas lado a lado: a linha fica na posição do primeiro membro dela
+   * e, dentro da linha, os campos seguem a mesma ordem (CSS `order`).
+   */
   function renderTabFields(tab: CardFieldTab) {
-    return (
-      <>
-        {isVisible(tab, 'convertToPlan') && !card!.isPlanTemplate && renderConvertToPlanButton()}
-        {isVisible(tab, 'description') && renderDescription()}
-        {isVisible(tab, 'notes') && renderNotes()}
-        {isVisible(tab, 'subKanban') && !card!.isPlanTemplate && renderSubKanban()}
-        {isVisible(tab, 'checklist') && renderChecklist()}
-        {isVisible(tab, 'files') && renderFiles()}
-        {renderDates(tab)}
-        {isVisible(tab, 'cover') && renderCover()}
-        {renderPriorityStatusColor(tab)}
-        {isVisible(tab, 'labels') && renderLabels()}
-        {isVisible(tab, 'schedules') && renderSchedules()}
-      </>
-    );
+    const rendered = new Set<string>();
+    const rows: React.ReactNode[] = [];
+    for (const f of fields) {
+      if (f.tab !== tab || !f.visible) continue;
+      let row: string = f.key;
+      if (f.key === 'startDate' || f.key === 'dueDate') row = 'dates';
+      else if (f.key === 'priority' || f.key === 'status' || f.key === 'color') row = 'priority-status-color';
+      if (rendered.has(row)) continue;
+      rendered.add(row);
+
+      let node: React.ReactNode = null;
+      switch (row) {
+        case 'convertToPlan': node = !card!.isPlanTemplate && renderConvertToPlanButton(); break;
+        case 'description': node = renderDescription(); break;
+        case 'notes': node = renderNotes(); break;
+        case 'subKanban': node = !card!.isPlanTemplate && renderSubKanban(); break;
+        case 'checklist': node = renderChecklist(); break;
+        case 'files': node = renderFiles(); break;
+        case 'dates': node = renderDates(tab); break;
+        case 'cover': node = renderCover(); break;
+        case 'priority-status-color': node = renderPriorityStatusColor(tab); break;
+        case 'labels': node = renderLabels(); break;
+        case 'schedules': node = renderSchedules(); break;
+      }
+      rows.push(<Fragment key={row}>{node}</Fragment>);
+    }
+    return <>{rows}</>;
   }
 
   const isPanel = variant === 'panel';
@@ -736,41 +810,58 @@ export default function KanbanCardModal({
         {activeTab === 'config' && (
           <>
             <p className={FAINT_CLS} style={{ fontSize: 12, margin: 0 }}>
-              Vale pra todos os cards deste kanban — escolha em qual aba cada campo aparece, ou oculte o que não usa.
+              Vale pra todos os cards deste kanban — escolha em qual aba cada campo aparece, a ordem dentro da aba (▲ ▼), ou oculte o que não usa.
             </p>
-            {fields.map((f) => (
-              <div
-                key={f.key}
-                className="border border-neutral-200 dark:border-neutral-700"
-                style={{
-                  display: 'flex', alignItems: 'center', gap: 8, padding: '8px 10px',
-                  borderRadius: 6, opacity: f.visible ? 1 : 0.5,
-                }}
-              >
-                <span className="text-neutral-900 dark:text-neutral-100" style={{ flex: 1, fontSize: 13 }}>{CARD_FIELD_LABELS[f.key]}</span>
-                <button
-                  onClick={() => updateField(f.key, { tab: f.tab === 'details' ? 'properties' : 'details' })}
-                  title="Mover pra outra aba"
-                  className="border border-neutral-300 dark:border-neutral-600 bg-neutral-50 dark:bg-neutral-900 text-neutral-500 dark:text-neutral-400"
-                  style={{ fontSize: 11, padding: '4px 8px', borderRadius: 4, cursor: 'pointer', whiteSpace: 'nowrap' }}
-                >
-                  {f.tab === 'details' ? 'Detalhes →' : '← Propriedades'}
-                </button>
-                <button
-                  onClick={() => updateField(f.key, { visible: !f.visible })}
-                  title={f.visible ? 'Ocultar campo' : 'Mostrar campo'}
-                  className={f.visible ? 'bg-blue-600 text-white' : 'bg-neutral-300 dark:bg-neutral-600 text-white'}
-                  style={{ fontSize: 11, padding: '4px 8px', borderRadius: 4, border: 'none', cursor: 'pointer', whiteSpace: 'nowrap' }}
-                >
-                  {f.visible ? 'Visível' : 'Oculto'}
-                </button>
-              </div>
-            ))}
+            {(['details', 'properties'] as CardFieldTab[]).map((tabKey) => {
+              const inTab = fields.filter((f) => f.tab === tabKey);
+              return (
+                <div key={tabKey} style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                  <div className={FAINT_CLS} style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: 0.4 }}>
+                    {tabKey === 'details' ? 'Aba Detalhes' : 'Aba Propriedades'}
+                  </div>
+                  {inTab.length === 0 && <div className={FAINT_CLS} style={{ fontSize: 12, fontStyle: 'italic' }}>Nenhum campo nesta aba.</div>}
+                  {inTab.map((f, idx) => (
+                    <div
+                      key={f.key}
+                      className="border border-neutral-200 dark:border-neutral-700"
+                      style={{
+                        display: 'flex', alignItems: 'center', gap: 8, padding: '8px 10px',
+                        borderRadius: 6, opacity: f.visible ? 1 : 0.5,
+                      }}
+                    >
+                      <MoveButtons
+                        onUp={idx > 0 ? () => moveField(f.key, -1) : undefined}
+                        onDown={idx < inTab.length - 1 ? () => moveField(f.key, 1) : undefined}
+                      />
+                      <span className="text-neutral-900 dark:text-neutral-100" style={{ flex: 1, fontSize: 13 }}>{CARD_FIELD_LABELS[f.key]}</span>
+                      <button
+                        onClick={() => updateField(f.key, { tab: f.tab === 'details' ? 'properties' : 'details' })}
+                        title="Mover pra outra aba (vai pro fim da lista dela)"
+                        className="border border-neutral-300 dark:border-neutral-600 bg-neutral-50 dark:bg-neutral-900 text-neutral-500 dark:text-neutral-400"
+                        style={{ fontSize: 11, padding: '4px 8px', borderRadius: 4, cursor: 'pointer', whiteSpace: 'nowrap' }}
+                      >
+                        {f.tab === 'details' ? 'Detalhes →' : '← Propriedades'}
+                      </button>
+                      <button
+                        onClick={() => updateField(f.key, { visible: !f.visible })}
+                        title={f.visible ? 'Ocultar campo' : 'Mostrar campo'}
+                        className={f.visible ? 'bg-blue-600 text-white' : 'bg-neutral-300 dark:bg-neutral-600 text-white'}
+                        style={{ fontSize: 11, padding: '4px 8px', borderRadius: 4, border: 'none', cursor: 'pointer', whiteSpace: 'nowrap' }}
+                      >
+                        {f.visible ? 'Visível' : 'Oculto'}
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              );
+            })}
 
             <p className={FAINT_CLS} style={{ fontSize: 12, margin: '12px 0 0' }}>
-              Aparência do card dentro do quadro — o que mostra ali sem precisar abrir o card.
+              Aparência do card dentro do quadro — o que mostra ali sem precisar abrir o card, na ordem desta lista (▲ ▼). Os selos do título e os itens
+              de status/etiquetas/prazo seguem a ordem entre si; a linha de status/etiquetas/prazo fica onde estiver o primeiro deles. Notas e o total do
+              cronômetro ficam sempre nos cantos.
             </p>
-            {visualFields.map((f) => (
+            {visualFields.map((f, idx) => (
               <div
                 key={f.key}
                 className="border border-neutral-200 dark:border-neutral-700"
@@ -779,6 +870,10 @@ export default function KanbanCardModal({
                   borderRadius: 6, opacity: f.visible ? 1 : 0.5,
                 }}
               >
+                <MoveButtons
+                  onUp={idx > 0 ? () => moveVisualField(f.key, -1) : undefined}
+                  onDown={idx < visualFields.length - 1 ? () => moveVisualField(f.key, 1) : undefined}
+                />
                 <span className="text-neutral-900 dark:text-neutral-100" style={{ flex: 1, fontSize: 13 }}>{CARD_VISUAL_FIELD_LABELS[f.key]}</span>
                 <button
                   onClick={() => updateVisualField(f.key, !f.visible)}

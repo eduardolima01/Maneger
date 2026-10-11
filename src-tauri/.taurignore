@@ -18,3 +18,8 @@ page-visibility.json
 explorer-prefs.json
 kanban-data.json
 card-files/
+agenda-events.json
+agenda-events.json.tmp
+explorer-groups.json
+explorer-prefs.json
+explorer-ui-prefs.json

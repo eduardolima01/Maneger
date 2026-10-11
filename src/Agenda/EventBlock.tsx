@@ -136,7 +136,7 @@ export default function EventBlock({
 
   const ctrlOnlyRef = useRef(true); // reseta a cada novo "hold" de Control, igual ao toggle do MarkdownField
 
-  // R/F movem o evento SELECIONADO (R sobe, F desce; clique no card; Esc ou clique fora desmarcam). W/A/S/D só navegam entre cards.
+  // E/C movem o evento SELECIONADO (E sobe, C desce; clique no card; Esc ou clique fora desmarcam). W/A/S/D só navegam entre cards. R / Alt+R = desfazer / refazer (Agenda).
   // Sem seleção, vale o card sob o mouse — e ele passa a ficar selecionado.
   const selectedId = useSelectedEventId();
   const isSelected = selectedId === event.id;
@@ -201,15 +201,15 @@ export default function EventBlock({
       if (e.key === 'Control') { ctrlOnlyRef.current = true; return; }
       if (e.ctrlKey) ctrlOnlyRef.current = false; // combo (Ctrl+C, Ctrl+V...) cancela o toque puro
 
-      // R/F: mover (R sobe, F desce). Shift: só uma borda (R = de cima, F = de baixo; Ctrl inverte: encolhe). Alt: passo maior.
-      if ((e.code === 'KeyR' || e.code === 'KeyF') && !e.metaKey) {
-        if (e.ctrlKey && !e.shiftKey) return; // Ctrl+R / Ctrl+F sozinhos são do navegador (recarregar / buscar)
+      // E/C: mover (E sobe, C desce). Shift: só uma borda (E = de cima, C = de baixo; Ctrl inverte: encolhe). Alt: passo maior.
+      if ((e.code === 'KeyE' || e.code === 'KeyC') && !e.metaKey) {
+        if (e.ctrlKey && !e.shiftKey) return; // Ctrl+E / Ctrl+C sozinhos não são nossos (copiar etc.)
         // com um card selecionado na tela, só ele reage; sem seleção, o que está sob o mouse
         const active = getActiveSelectedId();
         const mine = active !== null ? active === event.id : isHovering;
         if (!mine) return;
 
-        const up = e.code === 'KeyR';
+        const up = e.code === 'KeyE';
         const base = pendingRef.current ?? { start, end };
         const durNow = Math.round((base.end.getTime() - base.start.getTime()) / 60000);
         const step = e.altKey ? KEY_STEP_FAST : durNow <= 15 ? 1 : KEY_STEP_FINE;

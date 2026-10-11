@@ -1,14 +1,22 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { StatusSections, GroupByStatusButton } from '@/Kanban/components/StatusGrouping';
+import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import {
   DndContext, DragOverlay, PointerSensor, pointerWithin, useDraggable, useDroppable, useSensor, useSensors,
   type DragEndEvent, type DragMoveEvent, type DragStartEvent,
 } from '@dnd-kit/core';
 import { convertFileSrc } from '@tauri-apps/api/core';
-import type { KanbanCard, KanbanCardGroup, KanbanColumn, ChecklistProgress, UpdateKanbanCardGroupInput, TaskStatus } from '@/types/kanban.types';
+import type { KanbanCard, KanbanCardGroup, KanbanColumn, ChecklistProgress, UpdateKanbanCardGroupInput, TaskStatus, CardVisualFieldConfig } from '@/types/kanban.types';
 import { PRIORITY_COLORS, PRIORITY_LABELS, STATUS_COLORS, STATUS_LABELS } from '@/types/kanban.types';
 import CopyTitleButton from './CopyTitleButton';
-import CardActionsMenu, { type CardActionsHandlers } from './CardActionsMenu';
+import CardActionsMenu, { type CardActionsHandlers, type BulkCardActions } from './CardActionsMenu';
+import CardColorMenu from '@/Kanban/components/CardColorMenu';
+import { StatusPickerMenu, StatusHoverPicker } from '@/Kanban/components/StatusPicker';
+import { formatUpdatedAt, formatUpdatedAtFull } from '@/Kanban/utils/formatUpdatedAt';
+import { useIsCardCut, getCutCardIds, setCutCardIds, clearCutCards } from '@/Kanban/utils/cardClipboard';
+import DueDateMenu from '@/Kanban/components/DueDateMenu';
+import CardMoveMenu from '@/Kanban/components/CardMoveMenu';
+import { useCardMove } from '@/lib/utils/CardMoveContext';
 import ContextMenu from '@/components/ui/ContextMenu';
 import { getRelativeDue } from '@/Kanban/utils/relativeDate';
 import { readableTextColors } from '@/Kanban/utils/readableColors';
@@ -45,9 +53,23 @@ export interface TreeActions {
   onRenameGroup: (groupId: string, name: string) => unknown;
   /** Pede pra desagrupar/excluir o grupo/subgrupo: o quadro abre a mesma confirmação de sempre (manter os cards ou apagar junto). */
   onRequestDeleteGroup: (groupId: string) => void;
+  /**
+   * Arrastar grupo/subgrupo: vira filho de `newParentGroupId` (null = grupo de topo de `columnId`) e `orderedSiblingIds`
+   * é a ordem final dos irmãos no destino, incluindo o próprio grupo.
+   */
+  onMoveGroup: (groupId: string, newParentGroupId: string | null, columnId: string, orderedSiblingIds: string[]) => unknown;
   /** Painel 🎨 da coluna: cor de fundo (null = padrão) e opacidade do fundo (0 a 1). Mesmas preferências do quadro. */
   onUpdateColumnBackground: (columnId: string, color: string | null) => unknown;
   onUpdateColumnOpacity: (columnId: string, opacity: number) => unknown;
+  /** Renomear coluna (dois cliques no nome ou ✎). Sem isso, o nome da coluna não é editável na árvore. */
+  onRenameColumn?: (columnId: string, name: string) => unknown;
+  /** Sobe (-1) ou desce (+1) a coluna na ordem do kanban. */
+  onMoveColumn?: (columnId: string, dir: -1 | 1) => unknown;
+  /** Colunas arquivadas: mostrar/ocultar na árvore, quantas existem, e arquivar/desarquivar uma coluna. */
+  showArchived?: boolean;
+  archivedCount?: number;
+  onToggleShowArchived?: () => void;
+  onToggleColumnArchived?: (columnId: string) => unknown;
 }
 
 interface KanbanTreeViewProps {
@@ -62,6 +84,16 @@ interface KanbanTreeViewProps {
   onCardClick: (cardId: string) => void;
   /** Id do card aberto no painel lateral (a linha dele fica destacada na árvore). */
   selectedCardId?: string | null;
+  /** Cards selecionados (seleção múltipla compartilhada com o quadro) e como mexer nela. Sem isso, não há seleção na árvore. */
+  selectedCardIds?: Set<string>;
+  onToggleSelect?: (cardId: string) => void;
+  /** Seleção por intervalo (Shift + clique): ADICIONA estes cards à seleção. */
+  onSelectRange?: (cardIds: string[]) => void;
+  onClearSelection?: () => void;
+  /** Ações em lote sobre os selecionados (barra "N cards selecionados" e menu ⋮). */
+  bulk?: BulkCardActions;
+  /** Configuração de aparência do card (a ORDEM dela define a ordem de etiquetas, prioridade, checklist e prazo na linha). */
+  visualConfig?: CardVisualFieldConfig[];
   /** Cor de fundo de cada coluna (viewPrefs.columnBackgrounds) e a opacidade dela (viewPrefs.columnBackgroundOpacity). */
   columnBackgrounds?: Record<string, string>;
   columnOpacities?: Record<string, number>;
@@ -143,6 +175,21 @@ function CoverThumb({ path, size }: { path: string; size: number }) {
 }
 
 const COVER_SIZE_PREFIX = 'kanban-tree-cover-size:';
+const GROUP_HEIGHT_PREFIX = 'kanban-tree-group-heights:';
+
+/** groupId -> altura (px) da área de conteúdo, ajustada arrastando a barra no fim do grupo. */
+function readGroupHeights(key: string): Record<string, number> {
+  try {
+    const raw = JSON.parse(localStorage.getItem(key) ?? '{}');
+    const out: Record<string, number> = {};
+    if (raw && typeof raw === 'object') {
+      for (const [id, v] of Object.entries(raw)) if (typeof v === 'number' && v > 0) out[id] = v;
+    }
+    return out;
+  } catch {
+    return {};
+  }
+}
 /** Tamanhos da capa do card na árvore (px do lado). O primeiro é o padrão. */
 const COVER_SIZES: { size: number; label: string }[] = [
   { size: 20, label: 'Pequena' },
@@ -229,7 +276,12 @@ const STATUS_ORDER: TaskStatus[] = ['pendente', 'fazer', 'fazendo', 'revisao', '
  * Estado do card como TEXTO pequeno (na cor do estado) que já é um <select>: trocar o estado não exige abrir o card.
  * Sem `onChange` vira só o rótulo. Os eventos não sobem pra linha — senão o clique abriria o card e o arrasto começaria.
  */
-function StatusSelect({ status, onChange }: { status: TaskStatus | null; onChange?: (status: TaskStatus | null) => void }) {
+function StatusSelect({ status, onChange, bulkCount }: {
+  status: TaskStatus | null;
+  onChange?: (status: TaskStatus | null) => void;
+  /** Se este card está numa seleção de 2+, quantos são: trocar o estado aqui vale pra TODOS eles. */
+  bulkCount?: number;
+}) {
   const color = status ? STATUS_COLORS[status] : null;
   const label = status ? STATUS_LABELS[status] : 'Sem status';
   const pillStyle: React.CSSProperties = {
@@ -243,13 +295,14 @@ function StatusSelect({ status, onChange }: { status: TaskStatus | null; onChang
   }
 
   return (
+    <StatusHoverPicker value={status} onSelect={onChange}>
     <select
       value={status ?? ''}
       onChange={(e) => onChange(e.target.value === '' ? null : (e.target.value as TaskStatus))}
       onClick={(e) => e.stopPropagation()}
       onDoubleClick={(e) => e.stopPropagation()}
       onPointerDown={(e) => e.stopPropagation()}
-      title="Mudar o status do card"
+      title={bulkCount && bulkCount > 1 ? `Mudar o status dos ${bulkCount} cards selecionados` : 'Mudar o status do card'}
       className={color ? 'text-white' : 'text-neutral-400 dark:text-neutral-500 border border-neutral-300 dark:border-neutral-600 bg-transparent'}
       style={{
         ...pillStyle,
@@ -263,6 +316,7 @@ function StatusSelect({ status, onChange }: { status: TaskStatus | null; onChang
         <option key={s} value={s} style={{ fontSize: 12 }} className="bg-white text-black dark:bg-neutral-800 dark:text-neutral-100">{STATUS_LABELS[s]}</option>
       ))}
     </select>
+    </StatusHoverPicker>
   );
 }
 
@@ -280,7 +334,7 @@ interface TreeCardRowProps {
   cardMenu?: CardActionsHandlers;
   canEdit: boolean;
   canDrag: boolean;
-  onClick: (cardId: string) => void;
+  onClick: (cardId: string, e: React.MouseEvent) => void;
   onRename: (cardId: string, title: string) => void;
   /** Grupo com cor de fundo própria: o texto usa estas cores (as classes de tema só servem pro fundo padrão). */
   groupColors?: GroupTextColors;
@@ -288,12 +342,28 @@ interface TreeCardRowProps {
   onUpdateStatus?: (cardId: string, status: TaskStatus | null) => void;
   /** Lado (px) da miniatura da capa do card. */
   coverSize: number;
+  /** Card marcado na seleção múltipla. */
+  checked: boolean;
+  /** Há algum card selecionado: as caixinhas ficam sempre visíveis (senão só aparecem com o mouse sobre a linha). */
+  selectionActive: boolean;
+  /** Marca/desmarca este card. Sem isso, não há caixinha. */
+  onToggleCheck?: (cardId: string) => void;
+  /** Seleção atual + ações em lote: o ⋮ deste card age em todos os selecionados quando ele está entre eles. */
+  bulkIds?: string[];
+  bulkActions?: BulkCardActions;
+  /** Ordem de exibição dos itens à direita do título (vem da ordem de visualConfig). */
+  trailingOrder?: Array<'labels' | 'priority' | 'checklist' | 'due' | 'updated'>;
+  /** Muda (número novo) quando o atalho E pede pra editar o título deste card. */
+  editNonce?: number;
+  /** Item marcado pela navegação por teclado (WASD). */
+  kbFocused?: boolean;
 }
 
-function TreeCardRow({ card, depth, progress, selected, hint, cardMenu, canEdit, canDrag, onClick, onRename, groupColors, onUpdateStatus, coverSize }: TreeCardRowProps) {
+function TreeCardRow({ card, depth, progress, selected, hint, cardMenu, canEdit, canDrag, onClick, onRename, groupColors, onUpdateStatus, coverSize, checked, selectionActive, onToggleCheck, bulkIds, bulkActions, trailingOrder, editNonce, kbFocused }: TreeCardRowProps) {
   const { icons: labelIcons } = useLabelIcons(); // ícones das etiquetas (os mesmos do quadro)
   // linha selecionada tem fundo azul claro: aí as cores calculadas pro fundo do grupo não valem, usa as do tema
-  const colors = selected ? null : groupColors ?? null;
+  const inBulkSelection = checked && !!bulkActions && !!bulkIds && bulkIds.length > 1;
+  const colors = selected || checked ? null : groupColors ?? null; // fundo azul/índigo: as cores calculadas pro fundo do grupo não valem
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(card.title);
   const cancelledRef = useRef(false);
@@ -316,6 +386,11 @@ function TreeCardRow({ card, depth, progress, selected, hint, cardMenu, canEdit,
     setEditing(true);
   }
 
+  useEffect(() => {
+    if (editNonce) startEditing();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editNonce]);
+
   function finishEditing(save: boolean) {
     setEditing(false);
     const title = draft.trim();
@@ -326,24 +401,122 @@ function TreeCardRow({ card, depth, progress, selected, hint, cardMenu, canEdit,
   // barra azul de "vai cair aqui": em cima (antes) ou embaixo (depois) desta linha
   const hintShadow = hint === 'before' ? 'inset 0 2px 0 #1a73e8' : hint === 'after' ? 'inset 0 -2px 0 #1a73e8' : undefined;
 
+  // itens à direita do título; a ordem vem de `trailingOrder` (ordem da lista de aparência do card)
+  const isCut = useIsCardCut(card.id); // recortado (Ctrl+X): esmaecido até colar
+  const trailingNodes: Record<'labels' | 'priority' | 'checklist' | 'due' | 'updated', React.ReactNode> = {
+    labels: !editing && card.labels.length > 0 && (() => {
+        const parsed = card.labels.map(parseLabel);
+        const shown = parsed.slice(0, MAX_LABEL_CHIPS);
+        const extra = parsed.slice(MAX_LABEL_CHIPS);
+        return (
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3, flexShrink: 0 }}>
+            {shown.map((l) => (
+              <span
+                key={l.name}
+                title={l.name}
+                style={{
+                  display: 'inline-flex', alignItems: 'center', gap: 2, fontSize: 9, lineHeight: '13px', borderRadius: 3, padding: '0 4px',
+                  backgroundColor: l.color, color: readableTextColors(l.color).text, maxWidth: 90, overflow: 'hidden', whiteSpace: 'nowrap',
+                }}
+              >
+                <LabelIconBadge icon={labelIcons[l.name]} size={9} />
+                <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{l.name}</span>
+              </span>
+            ))}
+            {extra.length > 0 && (
+              <span
+                title={extra.map((l) => l.name).join(', ')}
+                className={colors ? undefined : 'text-neutral-500 dark:text-neutral-400'}
+                style={{ fontSize: 9, color: colors?.secondary }}
+              >
+                +{extra.length}
+              </span>
+            )}
+          </span>
+        );
+      })(),
+    priority: card.priority && (
+        <span title={`Prioridade: ${PRIORITY_LABELS[card.priority]}`} style={{ width: 8, height: 8, borderRadius: 2, flexShrink: 0, backgroundColor: PRIORITY_COLORS[card.priority] }} />
+      ),
+    checklist: (
+      <>
+        {progress && progress.total > 0 && (
+        <span className={colors ? undefined : 'text-neutral-500 dark:text-neutral-400'} title="Checklist" style={{ fontSize: 10, flexShrink: 0, color: colors?.secondary }}>
+          ✓ {progress.done}/{progress.total}
+        </span>
+      )}
+        {progress && progress.total === 0 && (progress.simpleCount ?? 0) > 0 && (
+        <span className={colors ? undefined : 'text-neutral-500 dark:text-neutral-400'} title="Itens em lista simples (não entram na contagem de tarefas)" style={{ fontSize: 10, flexShrink: 0, color: colors?.secondary }}>
+          ☰ {progress.simpleCount}
+        </span>
+      )}
+      </>
+    ),
+    updated: card.updatedAt ? (
+        <span
+          className={colors ? undefined : 'text-neutral-400 dark:text-neutral-500'}
+          title={`Modificado em ${formatUpdatedAtFull(card.updatedAt)}`}
+          style={{ fontSize: 10, flexShrink: 0, whiteSpace: 'nowrap', color: colors?.muted }}
+        >
+          ✎ {formatUpdatedAt(card.updatedAt)}
+        </span>
+      ) : null,
+    due: due && (
+        <span
+          className={colors ? undefined : overdue ? 'text-red-600 dark:text-red-400' : 'text-neutral-500 dark:text-neutral-400'}
+          title={overdue ? `${due.title} (vencido)` : due.title}
+          style={{ fontSize: 10, flexShrink: 0, whiteSpace: 'nowrap', color: colors ? (overdue ? colors.danger : colors.secondary) : undefined }}
+        >
+          {due.label}
+        </span>
+      ),
+  };
+  const trailing = trailingOrder ?? ['labels', 'priority', 'checklist', 'due'];
+
   return (
     <div
       ref={(node) => { setDragRef(node); setDropRef(node); }}
       data-tree-card-id={card.id}
+      data-tree-node-id={`card:${card.id}`}
       {...attributes}
       {...(canDrag && !editing ? listeners : {})}
-      onClick={() => onClick(card.id)}
+      onClick={(e) => onClick(card.id, e)}
+      onMouseDown={(e) => { if (e.shiftKey) e.preventDefault(); }} // Shift + clique seleciona um intervalo; sem isso o navegador selecionaria o TEXTO
       title={card.title}
-      className={selected
-        ? 'group/row bg-blue-50 dark:bg-blue-950'
-        : colors ? 'group/row hover:bg-black/10' : 'group/row hover:bg-neutral-100 dark:hover:bg-neutral-700'}
+      className={checked
+        ? 'group/row bg-indigo-100 dark:bg-indigo-950'
+        : selected
+          ? 'group/row bg-blue-50 dark:bg-blue-950'
+          : colors ? 'group/row hover:bg-black/10' : 'group/row hover:bg-neutral-100 dark:hover:bg-neutral-700'}
       style={{
         display: 'flex', alignItems: 'center', gap: 6, padding: '3px 6px', paddingLeft: 6 + depth * INDENT_PX + 14,
-        fontSize: 12, cursor: canDrag ? 'grab' : 'pointer', borderRadius: 4, opacity: isDragging ? 0.4 : 1,
+        fontSize: 12, cursor: canDrag ? 'grab' : 'pointer', borderRadius: 4, opacity: isDragging ? 0.4 : isCut ? 0.45 : 1,
         borderLeft: card.color ? `3px solid ${card.color}` : undefined, boxShadow: hintShadow,
+        outline: kbFocused ? '2px solid #1a73e8' : isCut ? '2px dashed #f59e0b' : undefined, outlineOffset: -2,
       }}
     >
-      <StatusSelect status={card.status} onChange={onUpdateStatus ? (s) => onUpdateStatus(card.id, s) : undefined} />
+      {onToggleCheck && (
+        <input
+          type="checkbox"
+          checked={checked}
+          onChange={() => onToggleCheck(card.id)}
+          onClick={(e) => e.stopPropagation()}
+          onPointerDown={(e) => e.stopPropagation()}
+          title="Selecionar (Ctrl + clique também; Shift + clique seleciona um intervalo)"
+          aria-label="Selecionar card"
+          className={checked || selectionActive ? 'opacity-100' : 'opacity-0 group-hover/row:opacity-100 focus-visible:opacity-100'}
+          style={{ flexShrink: 0, margin: 0, width: 12, height: 12, cursor: 'pointer' }}
+        />
+      )}
+      <StatusSelect
+        status={card.status}
+        bulkCount={inBulkSelection ? bulkIds!.length : undefined}
+        onChange={onUpdateStatus ? (s) => {
+          // card dentro de uma seleção de 2+: o novo estado vale pra todos os selecionados (como no menu ⋮ em lote)
+          if (inBulkSelection) bulkActions!.onSetStatus(bulkIds!, s);
+          else onUpdateStatus(card.id, s);
+        } : undefined}
+      />
       {card.coverPath && <CoverThumb path={card.coverPath} size={coverSize} />}
 
       {editing ? (
@@ -395,60 +568,8 @@ function TreeCardRow({ card, depth, progress, selected, hint, cardMenu, canEdit,
         </>
       )}
 
-      {!editing && card.labels.length > 0 && (() => {
-        const parsed = card.labels.map(parseLabel);
-        const shown = parsed.slice(0, MAX_LABEL_CHIPS);
-        const extra = parsed.slice(MAX_LABEL_CHIPS);
-        return (
-          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3, flexShrink: 0 }}>
-            {shown.map((l) => (
-              <span
-                key={l.name}
-                title={l.name}
-                style={{
-                  display: 'inline-flex', alignItems: 'center', gap: 2, fontSize: 9, lineHeight: '13px', borderRadius: 3, padding: '0 4px',
-                  backgroundColor: l.color, color: readableTextColors(l.color).text, maxWidth: 90, overflow: 'hidden', whiteSpace: 'nowrap',
-                }}
-              >
-                <LabelIconBadge icon={labelIcons[l.name]} size={9} />
-                <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{l.name}</span>
-              </span>
-            ))}
-            {extra.length > 0 && (
-              <span
-                title={extra.map((l) => l.name).join(', ')}
-                className={colors ? undefined : 'text-neutral-500 dark:text-neutral-400'}
-                style={{ fontSize: 9, color: colors?.secondary }}
-              >
-                +{extra.length}
-              </span>
-            )}
-          </span>
-        );
-      })()}
-      {card.priority && (
-        <span title={`Prioridade: ${PRIORITY_LABELS[card.priority]}`} style={{ width: 8, height: 8, borderRadius: 2, flexShrink: 0, backgroundColor: PRIORITY_COLORS[card.priority] }} />
-      )}
-      {progress && progress.total > 0 && (
-        <span className={colors ? undefined : 'text-neutral-500 dark:text-neutral-400'} title="Checklist" style={{ fontSize: 10, flexShrink: 0, color: colors?.secondary }}>
-          ✓ {progress.done}/{progress.total}
-        </span>
-      )}
-      {progress && progress.total === 0 && (progress.simpleCount ?? 0) > 0 && (
-        <span className={colors ? undefined : 'text-neutral-500 dark:text-neutral-400'} title="Itens em lista simples (não entram na contagem de tarefas)" style={{ fontSize: 10, flexShrink: 0, color: colors?.secondary }}>
-          ☰ {progress.simpleCount}
-        </span>
-      )}
-      {due && (
-        <span
-          className={colors ? undefined : overdue ? 'text-red-600 dark:text-red-400' : 'text-neutral-500 dark:text-neutral-400'}
-          title={overdue ? `${due.title} (vencido)` : due.title}
-          style={{ fontSize: 10, flexShrink: 0, whiteSpace: 'nowrap', color: colors ? (overdue ? colors.danger : colors.secondary) : undefined }}
-        >
-          {due.label}
-        </span>
-      )}
-      {cardMenu && <CardActionsMenu card={card} {...cardMenu} />}
+      {trailing.map((k) => <Fragment key={k}>{trailingNodes[k]}</Fragment>)}
+      {cardMenu && <CardActionsMenu card={card} {...cardMenu} bulkIds={bulkIds} bulkActions={bulkActions} />}
     </div>
   );
 }
@@ -456,6 +577,77 @@ function TreeCardRow({ card, depth, progress, selected, hint, cardMenu, canEdit,
 /* ---------- painel 🎨 de aparência do grupo ---------- */
 
 const stopBubbling = (e: React.SyntheticEvent) => e.stopPropagation();
+
+const MIN_GROUP_HEIGHT = 80;
+const MAX_GROUP_HEIGHT = 2000;
+
+/**
+ * Conteúdo de um grupo/subgrupo. Com muitos cards ele rola por dentro (altura máxima padrão) e ganha uma barra no fim: arraste pra
+ * aumentar ou diminuir a área (a altura fica salva por grupo); duplo clique na barra volta ao padrão.
+ */
+function ScrollBody({ defaultMaxHeight, customHeight, zoom, onResize, children }: {
+  defaultMaxHeight?: number;
+  customHeight?: number;
+  zoom: number;
+  onResize: (height: number | null) => void;
+  children: React.ReactNode;
+}) {
+  const ref = useRef<HTMLDivElement>(null);
+  const [live, setLive] = useState<number | null>(null); // altura durante o arrasto
+  const maxHeight = live ?? customHeight ?? defaultMaxHeight;
+  const resizable = defaultMaxHeight !== undefined || customHeight !== undefined || live !== null;
+
+  function startResize(e: React.PointerEvent<HTMLDivElement>) {
+    if (e.button !== 0) return;
+    const el = ref.current;
+    if (!el) return;
+    e.preventDefault();
+    e.stopPropagation();
+    const handle = e.currentTarget;
+    handle.setPointerCapture(e.pointerId);
+    const startY = e.clientY;
+    const startH = el.clientHeight;
+    let latest = startH;
+    const move = (ev: PointerEvent) => {
+      latest = Math.min(MAX_GROUP_HEIGHT, Math.max(MIN_GROUP_HEIGHT, startH + (ev.clientY - startY) / zoom)); // o CSS zoom da lista escala o movimento do mouse
+      setLive(latest);
+    };
+    const end = () => {
+      handle.removeEventListener('pointermove', move);
+      handle.removeEventListener('pointerup', end);
+      handle.removeEventListener('pointercancel', end);
+      onResize(Math.round(latest));
+      setLive(null);
+    };
+    handle.addEventListener('pointermove', move);
+    handle.addEventListener('pointerup', end);
+    handle.addEventListener('pointercancel', end);
+  }
+
+  return (
+    <>
+      <div ref={ref} style={maxHeight ? { maxHeight, overflowY: 'auto', overscrollBehavior: 'contain', scrollbarWidth: 'thin' } : undefined}>
+        {children}
+      </div>
+      {resizable && (
+        <div
+          onPointerDown={startResize}
+          onDoubleClick={(e) => { e.stopPropagation(); onResize(null); }}
+          onClick={stopBubbling}
+          title="Arraste para ajustar a altura da área (duplo clique volta ao padrão)"
+          className="hover:bg-blue-500/20"
+          style={{ height: 10, cursor: 'ns-resize', display: 'flex', alignItems: 'center', justifyContent: 'center', touchAction: 'none', borderRadius: 3 }}
+        >
+          <span className="bg-neutral-400 dark:bg-neutral-500" style={{ width: 36, height: 3, borderRadius: 2 }} />
+        </div>
+      )}
+    </>
+  );
+}
+
+/** Grupo/subgrupo com mais cards que isso ganha uma área de cards com rolagem própria (altura máxima abaixo). */
+const GROUP_SCROLL_THRESHOLD = 8;
+const GROUP_SCROLL_MAX_HEIGHT = 340;
 
 /**
  * Mesmo painel do GroupBlock no quadro: capa (com "Remover capa"), descrição, cor de fundo e etiquetas do grupo.
@@ -627,7 +819,109 @@ function EmojiPickerPopup({ x, y, hasEmoji, onPick, onRemove, onClose }: {
   );
 }
 
+/* ---------- barra de ações em lote (vários cards selecionados) ---------- */
+
+function BulkBar({ ids, allLabels, bulk, onClear }: {
+  ids: string[];
+  allLabels: ParsedLabel[];
+  bulk: BulkCardActions;
+  onClear: () => void;
+}) {
+  const cardMove = useCardMove(); // null fora do quadro: "Mover para…" fica desabilitado
+  const [popup, setPopup] = useState<{ kind: 'color' | 'labels' | 'move'; x: number; y: number } | null>(null);
+  const count = ids.length;
+
+  function openPopup(kind: 'color' | 'labels' | 'move', e: React.MouseEvent<HTMLElement>) {
+    const r = e.currentTarget.getBoundingClientRect();
+    setPopup({ kind, x: r.left, y: r.bottom + 4 });
+  }
+
+  const linkCls = 'bg-transparent border-0 p-0 cursor-pointer text-blue-600 dark:text-blue-400 hover:underline';
+
+  return (
+    <div
+      className="bg-indigo-50 dark:bg-indigo-950 border border-indigo-200 dark:border-indigo-800 text-neutral-900 dark:text-neutral-100"
+      style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 12, padding: '4px 8px', borderRadius: 6, marginBottom: 6, fontSize: 11 }}
+    >
+      <span style={{ fontWeight: 600 }}>{count} card{count !== 1 ? 's' : ''} selecionado{count !== 1 ? 's' : ''}</span>
+
+      <select
+        value=""
+        onChange={(e) => {
+          const v = e.target.value;
+          if (v === '__none') bulk.onSetStatus(ids, null);
+          else if (v) bulk.onSetStatus(ids, v as TaskStatus);
+        }}
+        title="Definir o status de todos os selecionados"
+        className="bg-white dark:bg-neutral-900 text-neutral-900 dark:text-neutral-100 border border-neutral-300 dark:border-neutral-600 dark:[color-scheme:dark]"
+        style={{ fontSize: 11, padding: '1px 2px', borderRadius: 4 }}
+      >
+        <option value="">📊 Status…</option>
+        {STATUS_ORDER.map((s) => <option key={s} value={s}>{STATUS_LABELS[s]}</option>)}
+        <option value="__none">Sem status</option>
+      </select>
+      <button className={linkCls} style={{ fontSize: 11 }} onClick={(e) => openPopup('color', e)}>🎨 Cor</button>
+      <button className={linkCls} style={{ fontSize: 11 }} onClick={(e) => openPopup('labels', e)}>🏷 Etiquetas</button>
+      <button
+        className={linkCls}
+        style={{ fontSize: 11, opacity: cardMove ? 1 : 0.5 }}
+        disabled={!cardMove}
+        onClick={(e) => openPopup('move', e)}
+      >
+        📦 Mover para…
+      </button>
+      <button className="bg-transparent border-0 p-0 cursor-pointer text-red-600 dark:text-red-400 hover:underline" style={{ fontSize: 11 }} onClick={bulk.onDelete}>
+        🗑 Excluir
+      </button>
+      <span style={{ flex: 1 }} />
+      <button className={linkCls} style={{ fontSize: 11 }} onClick={onClear} title="Esc também limpa a seleção">Limpar seleção</button>
+
+      {popup && createPortal(
+        <div onClick={stopBubbling} onDoubleClick={stopBubbling} onPointerDown={stopBubbling}>
+          {popup.kind === 'color' && (
+            <CardColorMenu
+              x={popup.x}
+              y={popup.y}
+              value={null}
+              onSave={(value) => bulk.onSetColor(ids, value)}
+              onClose={() => setPopup(null)}
+            />
+          )}
+          {popup.kind === 'labels' && (
+            <CardLabelMenu
+              x={popup.x}
+              y={popup.y}
+              cardLabels={[]}
+              allLabels={allLabels}
+              onToggle={(name, color, isGroup) => bulk.onToggleLabel(ids, name, color, isGroup)}
+              onCreate={(name, color, isGroup) => bulk.onToggleLabel(ids, name, color, isGroup)}
+              onClose={() => setPopup(null)}
+            />
+          )}
+          {popup.kind === 'move' && cardMove && (
+            <CardMoveMenu
+              x={popup.x}
+              y={popup.y}
+              columns={cardMove.columns}
+              groups={cardMove.groups}
+              currentColumnId={null}
+              currentGroupId={null}
+              cardCount={count}
+              onMove={(target) => { setPopup(null); void cardMove.moveCards(ids, target); }}
+              onClose={() => setPopup(null)}
+            />
+          )}
+        </div>,
+        document.body
+      )}
+    </div>
+  );
+}
+
 /* ---------- cabeçalho de coluna / grupo (solta-alvo + botão ＋) ---------- */
+
+/** Ao arrastar um GRUPO por cima do cabeçalho de outro: em cima = vira irmão antes dele; no meio = vira subgrupo; embaixo = irmão depois. */
+type GroupDropZone = 'before' | 'inside' | 'after';
 
 interface TreeHeaderRowProps {
   nodeId: string;
@@ -658,11 +952,26 @@ interface TreeHeaderRowProps {
   onRename?: (name: string) => void;
   /** Desagrupar/excluir (só grupos/subgrupos): o quadro abre a confirmação com as opções (manter ou apagar os cards). */
   onDelete?: () => void;
+  /** Id do grupo, se este cabeçalho puder ser ARRASTADO (grupos e subgrupos; colunas não). */
+  draggableGroupId?: string;
+  /** Marca de "vai cair aqui" enquanto um grupo é arrastado por cima deste cabeçalho. */
+  dropZone?: GroupDropZone | null;
+  /** Item marcado pela navegação por teclado (WASD). */
+  kbFocused?: boolean;
+  /** Mover para cima/baixo (só colunas). Sem onMove*, não mostra os botões; canMove* false = desabilitado (já está na ponta). */
+  onMoveUp?: () => void;
+  onMoveDown?: () => void;
+  canMoveUp?: boolean;
+  canMoveDown?: boolean;
+  /** Coluna arquivada (aparece esmaecida) e o botão de arquivar/desarquivar. */
+  archived?: boolean;
+  onToggleArchived?: () => void;
 }
 
 function TreeHeaderRow({
   nodeId, dropTarget, depth, icon, name, count, bold, hasContent, collapsed, coverPath, coverSize, isDropOver, onToggle, addItems, textColors,
-  onEmojiClick, onAppearanceToggle, appearanceOpen, onRename, onDelete,
+  onEmojiClick, onAppearanceToggle, appearanceOpen, onRename, onDelete, draggableGroupId, dropZone, kbFocused,
+  onMoveUp, onMoveDown, canMoveUp = true, canMoveDown = true, archived, onToggleArchived,
 }: TreeHeaderRowProps) {
   const { setNodeRef } = useDroppable({
     id: `drop-header:${nodeId}`,
@@ -673,6 +982,14 @@ function TreeHeaderRow({
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(name);
   const cancelledRef = useRef(false);
+
+  // Arrastar o grupo pelo cabeçalho (8px de movimento começam o arrasto; clicar continua recolhendo/expandindo)
+  const { attributes, listeners, setNodeRef: setDragRef, isDragging } = useDraggable({
+    id: `group:${draggableGroupId ?? nodeId}`,
+    data: { type: 'group', groupId: draggableGroupId },
+    disabled: !draggableGroupId || editing, // editando o nome: arrastar dentro do campo seleciona texto, não move o grupo
+  });
+  const zoneShadow = dropZone === 'before' ? 'inset 0 2px 0 #1a73e8' : dropZone === 'after' ? 'inset 0 -2px 0 #1a73e8' : undefined;
 
   function startEditing() {
     if (!onRename) return;
@@ -693,13 +1010,17 @@ function TreeHeaderRow({
 
   return (
     <div
-      ref={setNodeRef}
+      ref={(node) => { setNodeRef(node); setDragRef(node); }}
+      data-tree-node-id={nodeId}
+      {...(draggableGroupId ? attributes : {})}
+      {...(draggableGroupId && !editing ? listeners : {})}
       onClick={() => onToggle(nodeId)}
       title={name}
       className={`group/row ${isDropOver ? 'bg-blue-100 dark:bg-blue-950' : textColors ? 'hover:bg-black/10' : 'hover:bg-neutral-100 dark:hover:bg-neutral-700'}`}
       style={{
         display: 'flex', alignItems: 'center', gap: 6, padding: '4px 6px', paddingLeft: 6 + depth * INDENT_PX,
-        fontSize: 12, cursor: 'pointer', borderRadius: 4, boxShadow: isDropOver ? 'inset 0 0 0 2px #1a73e8' : undefined,
+        fontSize: 12, cursor: 'pointer', borderRadius: 4, boxShadow: isDropOver ? 'inset 0 0 0 2px #1a73e8' : zoneShadow,
+        opacity: isDragging ? 0.4 : archived ? 0.6 : 1, outline: kbFocused ? '2px solid #1a73e8' : 'none', outlineOffset: -2,
       }}
     >
       <span className={textColors ? undefined : TOGGLE_CLS} style={{ width: 14, fontSize: 10, textAlign: 'center', flexShrink: 0, visibility: hasContent ? 'visible' : 'hidden', color: textColors?.secondary }}>
@@ -747,11 +1068,53 @@ function TreeHeaderRow({
           {name}
         </span>
       )}
+      {onToggleArchived && !editing && (
+        <button
+          type="button"
+          title={archived ? 'Desarquivar a coluna (volta ao quadro)' : 'Arquivar a coluna'}
+          aria-label={archived ? 'Desarquivar' : 'Arquivar'}
+          onPointerDown={(e) => e.stopPropagation()}
+          onClick={(e) => { e.stopPropagation(); onToggleArchived(); }}
+          className={actionBtnCls(neutralBtnColor)}
+          style={{ fontSize: 11, color: textColors?.secondary }}
+        >
+          {archived ? '📤' : '🗄'}
+        </button>
+      )}
+      {(onMoveUp || onMoveDown) && !editing && (
+        <span style={{ display: 'inline-flex', flexShrink: 0 }}>
+          <button
+            type="button"
+            title="Mover a coluna para cima"
+            aria-label="Mover para cima"
+            disabled={!canMoveUp}
+            onPointerDown={(e) => e.stopPropagation()}
+            onClick={(e) => { e.stopPropagation(); onMoveUp?.(); }}
+            className={actionBtnCls(neutralBtnColor) + ' disabled:cursor-default disabled:opacity-0 group-hover/row:disabled:opacity-30'}
+            style={{ fontSize: 11, padding: '0 2px', color: textColors?.secondary }}
+          >
+            ▲
+          </button>
+          <button
+            type="button"
+            title="Mover a coluna para baixo"
+            aria-label="Mover para baixo"
+            disabled={!canMoveDown}
+            onPointerDown={(e) => e.stopPropagation()}
+            onClick={(e) => { e.stopPropagation(); onMoveDown?.(); }}
+            className={actionBtnCls(neutralBtnColor) + ' disabled:cursor-default disabled:opacity-0 group-hover/row:disabled:opacity-30'}
+            style={{ fontSize: 11, padding: '0 2px', color: textColors?.secondary }}
+          >
+            ▼
+          </button>
+        </span>
+      )}
       {onRename && !editing && (
         <button
           type="button"
           title="Renomear (ou dois cliques no nome)"
           aria-label="Renomear"
+          onPointerDown={(e) => e.stopPropagation()}
           onClick={(e) => { e.stopPropagation(); startEditing(); }}
           className={actionBtnCls(neutralBtnColor)}
           style={{ fontSize: 11, color: textColors?.secondary }}
@@ -764,6 +1127,7 @@ function TreeHeaderRow({
           type="button"
           title="Aparência do grupo (capa, descrição, cor de fundo e etiquetas)"
           aria-label="Aparência do grupo"
+          onPointerDown={(e) => e.stopPropagation()}
           onClick={(e) => { e.stopPropagation(); onAppearanceToggle(); }}
           className={`bg-transparent border-0 p-0 cursor-pointer shrink-0 leading-none ${appearanceOpen ? 'opacity-100' : 'opacity-0 group-hover/row:opacity-100 focus-visible:opacity-100'
             }`}
@@ -777,6 +1141,7 @@ function TreeHeaderRow({
           type="button"
           title="Adicionar (atalhos com o mouse sobre o item: C = card, G = grupo)"
           aria-label="Adicionar"
+          onPointerDown={(e) => e.stopPropagation()}
           onClick={(e) => {
             e.stopPropagation(); // não recolhe/expande
             const r = e.currentTarget.getBoundingClientRect();
@@ -794,6 +1159,7 @@ function TreeHeaderRow({
           type="button"
           title="Desagrupar ou excluir (pergunta o que fazer com os cards)"
           aria-label="Desagrupar ou excluir"
+          onPointerDown={(e) => e.stopPropagation()}
           onClick={(e) => { e.stopPropagation(); onDelete(); }}
           className={actionBtnCls(textColors ? '' : 'text-red-600 dark:text-red-400')}
           style={{ fontSize: 11, color: textColors?.danger }}
@@ -826,15 +1192,27 @@ const LINK_CLS = 'text-blue-600 dark:text-blue-400 bg-transparent border-0 p-0 c
  * Visualização do quadro como árvore recolhível: Coluna > Grupo > Subgrupo (qualquer profundidade) > Card.
  * Clicar no card abre os detalhes; clicar numa coluna/grupo recolhe/expande. Com `treeActions` também dá pra criar
  * cards/grupos/subgrupos (botão ＋ do cabeçalho), renomear o card (dois cliques no título) e arrastar cards entre
- * colunas, grupos e subgrupos (pra cima de um card = vira vizinho dele; pra cima de um cabeçalho = vai pro fim).
+ * colunas, grupos e subgrupos (pra cima de um card = vira vizinho dele; pra cima de um cabeçalho = vai pro fim). Grupos e
+ * subgrupos também se arrastam pelo cabeçalho: em cima do cabeçalho de outro grupo (parte de cima = antes, meio = vira
+ * subgrupo, parte de baixo = depois) ou de uma coluna (vira grupo de topo).
  * Usa os mesmos cards/grupos já filtrados que o quadro recebe do hook.
  * Capas: coluna, grupo/subgrupo e card mostram miniatura (a da coluna e a do grupo substituem o ícone/emoji, como no quadro).
  */
 export default function KanbanTreeView({
-  columns, groups, cardsByGroup, ungroupedCardsByColumn, checklistProgress, onCardClick, selectedCardId, cardMenu, treeActions, columnBackgrounds, columnOpacities, sidePanel, stateKey = 'default',
+  columns, groups, cardsByGroup, ungroupedCardsByColumn, checklistProgress, onCardClick, selectedCardId, cardMenu, treeActions, selectedCardIds, onToggleSelect, onSelectRange, onClearSelection, bulk, visualConfig, columnBackgrounds, columnOpacities, sidePanel, stateKey = 'default',
 }: KanbanTreeViewProps) {
   const { icons: labelIcons } = useLabelIcons(); // ícones das etiquetas, os mesmos dos chips dos grupos no quadro
+  // ordem dos itens à direita do título = ordem deles em visualConfig (a lista da aba ⚙ do card)
+  const trailingOrder = useMemo(() => {
+    const idx = (key: string) => { const i = (visualConfig ?? []).findIndex((c) => c.key === key); return i === -1 ? 999 : i; };
+    const map = { labels: 'labels', priority: 'priority', checklist: 'checklist', due: 'dueDate', updated: 'updatedAt' } as const;
+    const showUpdated = (visualConfig ?? []).find((c) => c.key === 'updatedAt')?.visible !== false; // some quando o usuário oculta o campo
+    const keys: Array<'labels' | 'priority' | 'checklist' | 'due' | 'updated'> = ['labels', 'priority', 'checklist', 'due'];
+    if (showUpdated) keys.push('updated');
+    return keys.sort((a, b) => idx(map[a]) - idx(map[b]));
+  }, [visualConfig]);
   const storageKey = `${STORAGE_PREFIX}${stateKey}`;
+  const statusKanbanId = columns[0]?.kanbanId ?? stateKey; // chave do "agrupar por estado" (a mesma do quadro)
   const [collapsed, setCollapsed] = useState<Set<string>>(() => readCollapsed(storageKey));
 
   // Zoom: Ctrl + roda do mouse (ou pinça do trackpad) com o mouse sobre a árvore. Só a lista dá zoom — a barra do topo fica fixa.
@@ -935,10 +1313,70 @@ export default function KanbanTreeView({
     }
   }
 
+  /* ----- seleção múltipla de cards ----- */
+
+  const cardMove = useCardMove(); // arrastar vários cards: todos vão pro fim do destino (mesma função do "Mover para…")
+  const lastSelectedRef = useRef<string | null>(null); // âncora do Shift + clique
+
+  /** Cards visíveis na ordem em que aparecem na tela (grupos recolhidos escondem os deles) — pra selecionar um intervalo. */
+  function visibleCardOrder(): string[] {
+    const out: string[] = [];
+    const walkGroup = (g: KanbanCardGroup) => {
+      if (collapsed.has(`grp:${g.id}`)) return;
+      for (const c of cardsByGroup.get(g.id) ?? []) out.push(c.id);
+      for (const kid of childrenByParent.get(g.id) ?? []) walkGroup(kid);
+    };
+    for (const col of columns) {
+      if (collapsed.has(`col:${col.id}`)) continue;
+      for (const g of topGroupsByColumn.get(col.id) ?? []) walkGroup(g);
+      for (const c of ungroupedCardsByColumn.get(col.id) ?? []) out.push(c.id);
+    }
+    return out;
+  }
+
+  function handleToggleCheck(cardId: string) {
+    onToggleSelect?.(cardId);
+    lastSelectedRef.current = cardId;
+  }
+
+  function handleRowClick(cardId: string, e: React.MouseEvent) {
+    // Ctrl/Cmd + clique: marca/desmarca o card (não abre)
+    if (onToggleSelect && (e.ctrlKey || e.metaKey)) {
+      handleToggleCheck(cardId);
+      return;
+    }
+    // Shift + clique: seleciona do último card marcado até este
+    if (onSelectRange && e.shiftKey) {
+      const order = visibleCardOrder();
+      const to = order.indexOf(cardId);
+      const from = lastSelectedRef.current ? order.indexOf(lastSelectedRef.current) : -1;
+      if (to >= 0 && from >= 0) {
+        const [start, end] = from < to ? [from, to] : [to, from];
+        onSelectRange(order.slice(start, end + 1));
+      } else {
+        handleToggleCheck(cardId); // sem âncora: começa a seleção por este
+      }
+      return;
+    }
+    lastSelectedRef.current = cardId;
+    onCardClick(cardId); // clique normal: abre o card (o quadro também limpa a seleção)
+  }
+
   /* ----- painel 🎨 de aparência e seletor de emoji dos grupos ----- */
 
   const coverSizeKey = `${COVER_SIZE_PREFIX}${stateKey}`;
   const [coverSize, setCoverSize] = useState<number>(() => readCoverSize(coverSizeKey));
+  const groupHeightsKey = `${GROUP_HEIGHT_PREFIX}${stateKey}`;
+  const [groupHeights, setGroupHeights] = useState<Record<string, number>>(() => readGroupHeights(groupHeightsKey));
+  function changeGroupHeight(groupId: string, height: number | null) {
+    setGroupHeights((prev) => {
+      const next = { ...prev };
+      if (height === null) delete next[groupId]; else next[groupId] = height;
+      try { localStorage.setItem(groupHeightsKey, JSON.stringify(next)); } catch { /* sem espaço/privado: só não lembra */ }
+      return next;
+    });
+  }
+
   function changeCoverSize(size: number) {
     setCoverSize(size);
     try { localStorage.setItem(coverSizeKey, String(size)); } catch { /* sem storage: só não persiste */ }
@@ -961,6 +1399,8 @@ export default function KanbanTreeView({
   const [activeCardId, setActiveCardId] = useState<string | null>(null);
   const [dropHint, setDropHint] = useState<DropHint>(null); // sobre qual linha de card está e se é na metade de baixo
   const [overHeaderId, setOverHeaderId] = useState<string | null>(null);
+  const [activeGroupId, setActiveGroupId] = useState<string | null>(null); // grupo/subgrupo sendo arrastado
+  const [groupHint, setGroupHint] = useState<{ groupId: string; zone: GroupDropZone } | null>(null);
 
   // onde cada card mora hoje (grupo ou coluna) e quem são os vizinhos — pra resolver "antes de quem" ao soltar
   const cardLocation = useMemo(() => {
@@ -975,11 +1415,31 @@ export default function KanbanTreeView({
   }, [cardsByGroup, ungroupedCardsByColumn]);
 
   const activeCard = activeCardId ? cardLocation.get(activeCardId)?.list.find((c) => c.id === activeCardId) ?? null : null;
+  const activeGroup = activeGroupId ? groups.find((g) => g.id === activeGroupId) ?? null : null;
+  const overlayLabel = activeCard
+    ? (selectedCardIds && selectedCardIds.size > 1 && selectedCardIds.has(activeCard.id) ? `${selectedCardIds.size} cards` : activeCard.title)
+    : activeGroup ? `${activeGroup.emoji ?? '🏷️'} ${activeGroup.name}` : null;
 
   function resetDrag() {
     setActiveCardId(null);
+    setActiveGroupId(null);
     setDropHint(null);
+    setGroupHint(null);
     setOverHeaderId(null);
+  }
+
+  /** Todos os subgrupos (qualquer profundidade) de um grupo — um grupo não pode ser solto dentro de si mesmo nem de um deles. */
+  function descendantIdsOf(rootId: string): Set<string> {
+    const out = new Set<string>();
+    const stack = [rootId];
+    while (stack.length > 0) {
+      const id = stack.pop()!;
+      for (const child of childrenByParent.get(id) ?? []) {
+        out.add(child.id);
+        stack.push(child.id);
+      }
+    }
+    return out;
   }
 
   /** O card arrastado está na metade de baixo da linha em que está por cima? (decide antes/depois dela) */
@@ -990,14 +1450,51 @@ export default function KanbanTreeView({
     return translated.top + translated.height / 2 > overRect.top + overRect.height / 2;
   }
 
+  /** Onde o PONTEIRO está dentro do cabeçalho de grupo: 30% de cima = antes, 30% de baixo = depois, o meio = dentro (subgrupo). */
+  function groupZoneOf(event: DragMoveEvent | DragEndEvent): GroupDropZone {
+    const overRect = event.over?.rect;
+    if (!overRect) return 'inside';
+    const origin = event.activatorEvent as MouseEvent | PointerEvent | undefined;
+    const translated = event.active.rect.current.translated;
+    const y = origin && typeof origin.clientY === 'number'
+      ? origin.clientY + event.delta.y
+      : translated ? translated.top + translated.height / 2 : overRect.top + overRect.height / 2;
+    const rel = (y - overRect.top) / Math.max(overRect.height, 1);
+    return rel < 0.3 ? 'before' : rel > 0.7 ? 'after' : 'inside';
+  }
+
   function handleDragStart({ active }: DragStartEvent) {
-    const cardId = active.data.current?.cardId as string | undefined;
-    setActiveCardId(cardId ?? null);
+    const data = active.data.current as { type?: string; cardId?: string; groupId?: string } | undefined;
+    if (data?.type === 'group') {
+      setActiveGroupId(data.groupId ?? null);
+      setActiveCardId(null);
+    } else {
+      setActiveCardId(data?.cardId ?? null);
+      setActiveGroupId(null);
+    }
   }
 
   function handleDragMove(event: DragMoveEvent) {
     const { over } = event;
-    const overData = over?.data.current as { type?: string; cardId?: string } | undefined;
+    const overData = over?.data.current as { type?: string; cardId?: string; target?: TreeMoveTarget | null } | undefined;
+
+    // --- arrastando um GRUPO/SUBGRUPO: só cabeçalhos de coluna/grupo são destino ---
+    if (activeGroupId) {
+      const target = overData?.type === 'header' ? overData.target : null;
+      if (!over || !target) { setGroupHint(null); setOverHeaderId(null); return; }
+      if (target.kind === 'column') { setGroupHint(null); setOverHeaderId(`col:${target.id}`); return; }
+      if (target.id === activeGroupId || descendantIdsOf(activeGroupId).has(target.id)) {
+        setGroupHint(null);
+        setOverHeaderId(null);
+        return; // dentro de si mesmo ou de um subgrupo dele: não deixa
+      }
+      const zone = groupZoneOf(event);
+      setGroupHint({ groupId: target.id, zone });
+      setOverHeaderId(zone === 'inside' ? `grp:${target.id}` : null);
+      return;
+    }
+
+    // --- arrastando um CARD ---
     if (!over || !overData) { setDropHint(null); setOverHeaderId(null); return; }
     if (overData.type === 'card' && overData.cardId && overData.cardId !== activeCardId) {
       setDropHint({ overId: overData.cardId, after: isBelowCenter(event) });
@@ -1013,12 +1510,85 @@ export default function KanbanTreeView({
 
   function handleDragEnd(event: DragEndEvent) {
     const { over } = event;
+    const movedGroupId = activeGroupId;
     const movedId = activeCardId;
     resetDrag();
-    if (!over || !movedId || !treeActions) return;
+    if (!over || !treeActions) return;
     const overData = over.data.current as { type?: string; cardId?: string; target?: TreeMoveTarget | null } | undefined;
     if (!overData) return;
 
+    // --- soltou um GRUPO/SUBGRUPO ---
+    if (movedGroupId) {
+      const target = overData.type === 'header' ? overData.target : null;
+      if (!target) return;
+      const byPosition = (a: KanbanCardGroup, b: KanbanCardGroup) => a.position - b.position;
+
+      let newParentId: string | null;
+      let columnId: string;
+      let siblings: KanbanCardGroup[];
+      let insertAt: number;
+
+      if (target.kind === 'column') {
+        // cabeçalho de coluna: vira grupo de topo, no fim da coluna
+        newParentId = null;
+        columnId = target.id;
+        siblings = groups.filter((g) => !g.parentGroupId && g.columnId === columnId && g.id !== movedGroupId).sort(byPosition);
+        insertAt = siblings.length;
+      } else {
+        const overGroup = groups.find((g) => g.id === target.id);
+        if (!overGroup) return;
+        if (overGroup.id === movedGroupId || descendantIdsOf(movedGroupId).has(overGroup.id)) return;
+        const zone = groupZoneOf(event);
+        if (zone === 'inside') {
+          newParentId = overGroup.id; // vira o ÚLTIMO subgrupo dele
+          columnId = overGroup.columnId;
+          siblings = groups.filter((g) => g.parentGroupId === overGroup.id && g.id !== movedGroupId).sort(byPosition);
+          insertAt = siblings.length;
+        } else {
+          newParentId = overGroup.parentGroupId ?? null; // irmão dele (antes ou depois), no mesmo pai
+          columnId = overGroup.columnId;
+          siblings = groups
+            .filter((g) => (g.parentGroupId ?? null) === newParentId && g.columnId === columnId && g.id !== movedGroupId)
+            .sort(byPosition);
+          const idx = siblings.findIndex((g) => g.id === overGroup.id);
+          insertAt = zone === 'before' ? idx : idx + 1;
+        }
+      }
+
+      const ordered = [...siblings.slice(0, insertAt).map((g) => g.id), movedGroupId, ...siblings.slice(insertAt).map((g) => g.id)];
+
+      // soltou no mesmo lugar: nada a gravar
+      const current = groups.find((g) => g.id === movedGroupId);
+      if (current && (current.parentGroupId ?? null) === newParentId && current.columnId === columnId) {
+        const currentOrder = groups
+          .filter((g) => (g.parentGroupId ?? null) === newParentId && g.columnId === columnId)
+          .sort(byPosition)
+          .map((g) => g.id);
+        if (currentOrder.join('|') === ordered.join('|')) return;
+      }
+
+      if (newParentId && collapsed.has(`grp:${newParentId}`)) {
+        const copy = new Set(collapsed);
+        copy.delete(`grp:${newParentId}`); // o grupo solto dentro de um pai recolhido não pode "sumir"
+        commit(copy);
+      }
+      void treeActions.onMoveGroup(movedGroupId, newParentId, columnId, ordered);
+      return;
+    }
+
+    // --- soltou um CARD ---
+    if (!movedId) return;
+
+    // O card arrastado faz parte de uma seleção de 2+: todos os selecionados vão juntos, pro FIM do destino
+    if (selectedCardIds && selectedCardIds.size > 1 && selectedCardIds.has(movedId) && cardMove) {
+      const dest = overData.type === 'header' ? overData.target
+        : overData.type === 'card' && overData.cardId ? cardLocation.get(overData.cardId)?.target ?? null
+          : null;
+      if (dest) {
+        void cardMove.moveCards(Array.from(selectedCardIds), dest.kind === 'group' ? { kind: 'group', groupId: dest.id } : { kind: 'column', columnId: dest.id });
+      }
+      return;
+    }
     if (overData.type === 'header' && overData.target) {
       // soltou no cabeçalho de uma coluna/grupo: vai pro FIM dele
       void treeActions.onMoveCard(movedId, overData.target, null);
@@ -1043,6 +1613,14 @@ export default function KanbanTreeView({
   /* ----- atalhos de teclado (os mesmos do quadro; valem pro item que está embaixo do mouse) ----- */
 
   const hoverRef = useRef<{ cardId: string | null; groupId: string | null; columnId: string | null }>({ cardId: null, groupId: null, columnId: null });
+  const mouseRef = useRef({ x: 0, y: 0 }); // última posição do mouse: os atalhos de campo abrem o menu ali
+  const cardShortcutNonce = useRef(0);
+  // Cursor da navegação por teclado (WASD): id do nó (`card:ID` / `grp:ID` / `col:ID`). Mexer o mouse tira o cursor e volta a valer o hover.
+  const [kbCursor, setKbCursorState] = useState<string | null>(null);
+  const kbCursorRef = useRef<string | null>(null);
+  function setKbCursor(value: string | null) { kbCursorRef.current = value; setKbCursorState(value); }
+  const [shortcutPopup, setShortcutPopup] = useState<{ kind: 'status' | 'due' | 'color' | 'labels' | 'move'; cardId: string; x: number; y: number } | null>(null);
+  const [editRequest, setEditRequest] = useState<{ cardId: string; nonce: number } | null>(null);
 
   // Guarda qual card/grupo/coluna está embaixo do mouse. Ouvintes NATIVOS no container (e não onMouseLeave do React):
   // o React trata os menus em portal (que ficam no <body>) como "dentro" da árvore, e com um menu aberto os atalhos
@@ -1061,26 +1639,192 @@ export default function KanbanTreeView({
     function onLeave() {
       hoverRef.current = { cardId: null, groupId: null, columnId: null };
     }
+    function onMove(e: MouseEvent) {
+      const prev = mouseRef.current;
+      mouseRef.current = { x: e.clientX, y: e.clientY };
+      // só mexida de verdade conta (rolar a tela por baixo do mouse pode disparar mousemove com a mesma posição)
+      if (kbCursorRef.current && Math.abs(e.clientX - prev.x) + Math.abs(e.clientY - prev.y) > 4) { kbCursorRef.current = null; setKbCursorState(null); }
+    }
     el.addEventListener('mouseover', onOver);
     el.addEventListener('mouseleave', onLeave);
+    el.addEventListener('mousemove', onMove);
     return () => {
       el.removeEventListener('mouseover', onOver);
       el.removeEventListener('mouseleave', onLeave);
+      el.removeEventListener('mousemove', onMove);
     };
   }, []);
 
   // O tratador é recriado a cada render (enxerga o estado de agora) e o ouvinte do documento só chama a versão atual.
   const shortcutRef = useRef<(e: KeyboardEvent) => void>(() => { });
   shortcutRef.current = (e: KeyboardEvent) => {
-    if (!treeActions || e.ctrlKey || e.metaKey || e.altKey || e.repeat) return; // nunca intercepta Ctrl+C etc.
+    if (!treeActions) return;
+    const lowerKey = e.key.toLowerCase();
+    const isCut = (e.ctrlKey || e.metaKey) && !e.altKey && !e.shiftKey && lowerKey === 'x';
+    const isPaste = (e.ctrlKey || e.metaKey) && !e.altKey && !e.shiftKey && lowerKey === 'v';
+    const isAltSelect = e.altKey && !e.ctrlKey && !e.metaKey && e.code === 'KeyS'; // Alt+S (pelo código da tecla: no Mac Alt+S vira "ß")
+    if ((e.ctrlKey || e.metaKey || e.altKey) && !isCut && !isPaste && !isAltSelect) return; // nunca intercepta Ctrl+C etc.
+    if (e.repeat && e.key.toLowerCase() !== 'w' && e.key.toLowerCase() !== 's') return; // segurar W/S continua descendo/subindo; o resto não repete
     const t = e.target as HTMLElement | null;
     if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT' || t.isContentEditable)) return; // digitando
-    const hover = hoverRef.current;
+    if (shortcutPopup) return; // já tem um menu de campo aberto
     const key = e.key.toLowerCase();
 
+    // --- navegação por teclado (WASD) e Espaço: agem no item marcado pelo teclado ou, sem ele, no que está sob o mouse
+    const nodeIdOfHover = (h: { cardId: string | null; groupId: string | null; columnId: string | null }): string | null =>
+      h.cardId ? `card:${h.cardId}` : h.groupId ? `grp:${h.groupId}` : h.columnId ? `col:${h.columnId}` : null;
+    const nodeExists = (id: string) => !!containerRef.current?.querySelector(`[data-tree-node-id="${id}"]`);
+    const curNode = kbCursor && nodeExists(kbCursor) ? kbCursor : null;
+    const hoverNode = nodeIdOfHover(hoverRef.current);
+    const allNodes = (): string[] => {
+      const list: HTMLElement[] = containerRef.current ? Array.from(containerRef.current.querySelectorAll<HTMLElement>('[data-tree-node-id]')) : [];
+      return list.map((n) => n.dataset.treeNodeId as string);
+    };
+    const parentNodeOf = (nodeId: string): string | null => {
+      if (nodeId.startsWith('card:')) {
+        const loc = cardLocation.get(nodeId.slice(5));
+        return loc ? (loc.target.kind === 'group' ? `grp:${loc.target.id}` : `col:${loc.target.id}`) : null;
+      }
+      if (nodeId.startsWith('grp:')) {
+        const g = groups.find((x) => x.id === nodeId.slice(4));
+        return g ? (g.parentGroupId ? `grp:${g.parentGroupId}` : `col:${g.columnId}`) : null;
+      }
+      return null;
+    };
+    const hasChildren = (nodeId: string): boolean => {
+      const id = nodeId.slice(4);
+      if (nodeId.startsWith('grp:')) return (childrenByParent.get(id)?.length ?? 0) > 0 || (cardsByGroup.get(id)?.length ?? 0) > 0;
+      if (nodeId.startsWith('col:')) return (topGroupsByColumn.get(id)?.length ?? 0) > 0 || (ungroupedCardsByColumn.get(id)?.length ?? 0) > 0;
+      return false;
+    };
+    const focusNode = (nodeId: string) => {
+      setKbCursor(nodeId);
+      requestAnimationFrame(() => containerRef.current?.querySelector(`[data-tree-node-id="${nodeId}"]`)?.scrollIntoView({ block: 'nearest' }));
+    };
+
+    // Ctrl+X recorta, Ctrl+V cola (no grupo/coluna do item), Alt+S marca/desmarca o card
+    if (isCut || isPaste || isAltSelect) {
+      const nodeNow = curNode ?? hoverNode;
+      const cardNodeId = nodeNow && nodeNow.startsWith('card:') ? nodeNow.slice(5) : null;
+      if (isAltSelect) {
+        if (!cardNodeId) return;
+        e.preventDefault();
+        handleToggleCheck(cardNodeId);
+        return;
+      }
+      if (isCut) {
+        const sel = selectedCardIds ? Array.from(selectedCardIds) : [];
+        const ids = cardNodeId ? (sel.includes(cardNodeId) ? sel : [cardNodeId]) : sel; // card numa seleção: recorta a seleção toda
+        if (ids.length === 0) return;
+        e.preventDefault();
+        setCutCardIds(ids);
+        onClearSelection?.();
+        return;
+      }
+      // colar
+      const cutIds = getCutCardIds().filter((id) => cardLocation.has(id));
+      if (cutIds.length === 0 || !cardMove || !nodeNow) return;
+      const destNode = nodeNow.startsWith('card:') ? parentNodeOf(nodeNow) : nodeNow;
+      if (!destNode) return;
+      e.preventDefault();
+      const dest = destNode.startsWith('grp:')
+        ? { kind: 'group' as const, groupId: destNode.slice(4) }
+        : { kind: 'column' as const, columnId: destNode.slice(4) };
+      void cardMove.moveCards(cutIds, dest);
+      clearCutCards();
+      return;
+    }
+
+    if (key === 'w' || key === 's') {
+      const nodes = allNodes();
+      if (nodes.length === 0) return;
+      const from = curNode ?? hoverNode;
+      const idx = from ? nodes.indexOf(from) : -1;
+      const next = key === 'w' ? Math.max(idx - 1, 0) : Math.min(idx + 1, nodes.length - 1);
+      e.preventDefault();
+      focusNode(nodes[next]);
+      return;
+    }
+    if (key === 'd') {
+      const from = curNode ?? hoverNode;
+      if (!from) return;
+      e.preventDefault();
+      focusNode(from);
+      if (from.startsWith('card:')) { // D num card: abre no painel lateral
+        const id = from.slice(5);
+        lastSelectedRef.current = id;
+        onCardClick(id);
+      } else if (collapsed.has(from)) {
+        toggle(from); // recolhido: expande
+      } else if (hasChildren(from)) { // expandido: entra (vai pro primeiro filho)
+        const nodes = allNodes();
+        const i = nodes.indexOf(from);
+        if (i >= 0 && i + 1 < nodes.length) focusNode(nodes[i + 1]);
+      }
+      return;
+    }
+    if (key === 'a') {
+      const from = curNode ?? hoverNode;
+      if (!from) return;
+      e.preventDefault();
+      if (!from.startsWith('card:') && !collapsed.has(from) && hasChildren(from)) { focusNode(from); toggle(from); return; } // expandido: recolhe
+      focusNode(parentNodeOf(from) ?? from); // senão: sobe pro grupo/coluna de cima
+      return;
+    }
+    if (e.key === ' ') {
+      if (t && (t.tagName === 'BUTTON' || t.tagName === 'A')) return; // deixa o Espaço ativar o botão focado
+      let node = curNode ?? hoverNode;
+      if (node && node.startsWith('card:')) node = parentNodeOf(node); // sobre um card: age no grupo/coluna dele
+      if (!node) return;
+      e.preventDefault();
+      toggle(node);
+      return;
+    }
+
+    // alvo dos demais atalhos: o item do teclado (se houver) ou o que está sob o mouse
+    const targetOfNode = (nodeId: string): { cardId: string | null; groupId: string | null; columnId: string | null } => {
+      if (nodeId.startsWith('card:')) {
+        const loc = cardLocation.get(nodeId.slice(5));
+        return { cardId: nodeId.slice(5), groupId: loc?.target.kind === 'group' ? loc.target.id : null, columnId: loc?.target.kind === 'column' ? loc.target.id : null };
+      }
+      if (nodeId.startsWith('grp:')) return { cardId: null, groupId: nodeId.slice(4), columnId: null };
+      return { cardId: null, groupId: null, columnId: nodeId.slice(4) };
+    };
+    const hover = curNode ? targetOfNode(curNode) : hoverRef.current;
+    const popupPos = (): { x: number; y: number } => {
+      if (!curNode) return mouseRef.current;
+      const r = containerRef.current?.querySelector(`[data-tree-node-id="${curNode}"]`)?.getBoundingClientRect();
+      return r ? { x: r.left + 40, y: r.bottom + 2 } : mouseRef.current;
+    };
+
+    // Atalhos de campo do card (sob o mouse ou marcado pelo teclado): T status, P prazo, K cor, L etiquetas, M mover, E editar título
+    const fieldKinds: Record<string, 'status' | 'due' | 'color' | 'labels' | 'move'> = { t: 'status', p: 'due', k: 'color', l: 'labels', m: 'move' };
+    if (hover.cardId && (key in fieldKinds || key === 'e')) {
+      if (!cardLocation.has(hover.cardId)) return;
+      if (key === 'e') {
+        e.preventDefault();
+        cardShortcutNonce.current += 1;
+        setEditRequest({ cardId: hover.cardId, nonce: cardShortcutNonce.current });
+        return;
+      }
+      const kind = fieldKinds[key];
+      if (kind === 'move' && !cardMove) return;
+      if (kind !== 'due' && kind !== 'move' && !cardMenu && !bulk) return;
+      e.preventDefault();
+      const pos = popupPos();
+      setShortcutPopup({ kind, cardId: hover.cardId, x: pos.x, y: pos.y });
+      return;
+    }
+
     if (key === 'q') {
-      // Q = excluir o card sob o mouse (pede confirmação, como no quadro)
-      if (!hover.cardId || !cardMenu) return;
+      // Q = excluir o card sob o mouse (pede confirmação, como no quadro); se ele está numa seleção de 2+, exclui todos os selecionados
+      if (!hover.cardId) return;
+      if (bulk && selectedCardIds && selectedCardIds.size > 1 && selectedCardIds.has(hover.cardId)) {
+        e.preventDefault();
+        bulk.onDelete();
+        return;
+      }
+      if (!cardMenu) return;
       const card = cardLocation.get(hover.cardId)?.list.find((c) => c.id === hover.cardId);
       if (!card) return;
       e.preventDefault();
@@ -1168,7 +1912,15 @@ export default function KanbanTreeView({
         cardMenu={cardMenu}
         canEdit={!!treeActions}
         canDrag={!!treeActions}
-        onClick={onCardClick}
+        onClick={handleRowClick}
+        checked={!!selectedCardIds?.has(card.id)}
+        selectionActive={!!selectedCardIds && selectedCardIds.size > 0}
+        onToggleCheck={onToggleSelect ? handleToggleCheck : undefined}
+        bulkIds={selectedCardIds ? Array.from(selectedCardIds) : undefined}
+        bulkActions={bulk}
+        trailingOrder={trailingOrder}
+        kbFocused={kbCursor === `card:${card.id}`}
+        editNonce={editRequest?.cardId === card.id ? editRequest.nonce : undefined}
         onRename={(id, title) => treeActions?.onUpdateCardTitle(id, title)}
         groupColors={groupColors}
         onUpdateStatus={cardMenu?.onUpdateStatus}
@@ -1197,6 +1949,8 @@ export default function KanbanTreeView({
     const isCollapsed = collapsed.has(nodeId);
     const addingHere = !!adding && adding.scope === 'group' && adding.id === g.id;
     const panelOpen = !!treeActions && appearanceOpen.has(g.id);
+    // o conteúdo (cards + subgrupos) rola quando o TOTAL de cards do grupo (o número do cabeçalho, com subgrupos) passa do limite
+    const scrollBody = countGroupCards(g.id) > GROUP_SCROLL_THRESHOLD;
 
     return (
       <div
@@ -1219,6 +1973,7 @@ export default function KanbanTreeView({
       >
         <TreeHeaderRow
           nodeId={nodeId}
+          kbFocused={kbCursor === nodeId}
           dropTarget={treeActions ? { kind: 'group', id: g.id } : null}
           depth={0}
           icon={g.emoji ?? '🏷️'}
@@ -1237,6 +1992,8 @@ export default function KanbanTreeView({
           appearanceOpen={panelOpen}
           onRename={treeActions ? (newName) => treeActions.onRenameGroup(g.id, newName) : undefined}
           onDelete={treeActions ? () => treeActions.onRequestDeleteGroup(g.id) : undefined}
+          draggableGroupId={treeActions ? g.id : undefined}
+          dropZone={groupHint && groupHint.groupId === g.id ? groupHint.zone : null}
           addItems={treeActions ? [
             { label: '＋ Adicionar card', onClick: () => startAdding({ kind: 'card', scope: 'group', id: g.id }) },
             { label: '📁 Adicionar subgrupo', onClick: () => startAdding({ kind: 'group', scope: 'group', id: g.id }) },
@@ -1282,8 +2039,13 @@ export default function KanbanTreeView({
         )}
 
         {!isCollapsed && (
-          <>
-            {groupCards.map((c) => renderCard(c, 1, colors))}
+          <ScrollBody
+            defaultMaxHeight={scrollBody ? GROUP_SCROLL_MAX_HEIGHT : undefined}
+            customHeight={groupHeights[g.id]}
+            zoom={zoom}
+            onResize={(h) => changeGroupHeight(g.id, h)}
+          >
+            <StatusSections kanbanId={statusKanbanId} scopeId={`tree-grp:${g.id}`} cards={groupCards} indent={16} renderCard={(c) => renderCard(c, 1, colors)} />
             {addingHere && adding && (
               <AddInlineInput
                 depth={1}
@@ -1300,7 +2062,7 @@ export default function KanbanTreeView({
                 {kids.map((k) => renderGroup(k, nest + 1))}
               </div>
             )}
-          </>
+          </ScrollBody>
         )}
       </div>
     );
@@ -1337,10 +2099,13 @@ export default function KanbanTreeView({
       >
         <TreeHeaderRow
           nodeId={nodeId}
+          kbFocused={kbCursor === nodeId}
           dropTarget={treeActions ? { kind: 'column', id: col.id } : null}
           depth={0}
           icon={col.icon ?? '🗂'}
-          name={col.name}
+          name={col.visible === false ? `${col.name} (arquivada)` : col.name}
+          archived={col.visible === false}
+          onToggleArchived={treeActions?.onToggleColumnArchived ? () => treeActions.onToggleColumnArchived!(col.id) : undefined}
           count={countColumnCards(col.id)}
           bold
           hasContent={hasContent}
@@ -1352,6 +2117,17 @@ export default function KanbanTreeView({
           textColors={colors}
           onAppearanceToggle={treeActions ? () => toggleAppearance(nodeId) : undefined}
           appearanceOpen={panelOpen}
+          onRename={treeActions?.onRenameColumn ? (newName) => treeActions.onRenameColumn!(col.id, newName.replace(/ \(arquivada\)$/, '')) : undefined}
+          {...(treeActions?.onMoveColumn && col.visible !== false ? (() => {
+            const movable = columns.filter((x) => x.visible !== false);
+            const i = movable.findIndex((x) => x.id === col.id);
+            return {
+              onMoveUp: () => treeActions.onMoveColumn!(col.id, -1),
+              onMoveDown: () => treeActions.onMoveColumn!(col.id, 1),
+              canMoveUp: i > 0,
+              canMoveDown: i >= 0 && i < movable.length - 1,
+            };
+          })() : {})}
           addItems={treeActions ? [
             { label: '＋ Adicionar card', onClick: () => startAdding({ kind: 'card', scope: 'column', id: col.id }) },
             { label: '📁 Adicionar grupo', onClick: () => startAdding({ kind: 'group', scope: 'column', id: col.id }) },
@@ -1369,7 +2145,7 @@ export default function KanbanTreeView({
         {!collapsed.has(nodeId) && (
           <>
             {topGroups.map((g) => renderGroup(g, 0))}
-            {looseCards.map((c) => renderCard(c, 1, colors))}
+            <StatusSections kanbanId={statusKanbanId} scopeId={`tree-col:${col.id}`} cards={looseCards} indent={16} renderCard={(c) => renderCard(c, 1, colors)} />
             {addingHere && adding && (
               <AddInlineInput
                 depth={1}
@@ -1402,13 +2178,19 @@ export default function KanbanTreeView({
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '0 6px 6px' }}>
           <span
             className="text-neutral-500 dark:text-neutral-400"
-            title={treeActions ? 'Atalhos (com o mouse sobre o item): C = novo card · G = novo grupo/subgrupo · Q = excluir o card' : undefined}
+            title={treeActions ? 'Atalhos (com o mouse sobre o item): C = novo card · G = novo grupo/subgrupo · Q = excluir o card. Ctrl + clique seleciona vários cards; Shift + clique seleciona um intervalo.' : undefined}
             style={{ fontSize: 11, flex: 1 }}
           >
             {columns.length} coluna{columns.length !== 1 ? 's' : ''} · {totalCards} card{totalCards !== 1 ? 's' : ''}
           </span>
           <button onClick={expandAll} className={LINK_CLS} style={{ fontSize: 11 }}>Expandir tudo</button>
           <button onClick={collapseAll} className={LINK_CLS} style={{ fontSize: 11 }}>Recolher tudo</button>
+          {treeActions?.onToggleShowArchived && (treeActions.showArchived || (treeActions.archivedCount ?? 0) > 0) && (
+            <button onClick={treeActions.onToggleShowArchived} className={LINK_CLS} style={{ fontSize: 11 }} title="Mostrar ou ocultar as colunas arquivadas na árvore">
+              {treeActions.showArchived ? '🗄 Ocultar arquivadas' : `🗄 Arquivadas (${treeActions.archivedCount ?? 0})`}
+            </button>
+          )}
+          <GroupByStatusButton kanbanId={statusKanbanId} className={LINK_CLS} style={{ fontSize: 11 }} />
           <label className="text-neutral-500 dark:text-neutral-400" title="Tamanho da capa dos cards" style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 11 }}>
             Capa
             <select
@@ -1426,6 +2208,14 @@ export default function KanbanTreeView({
             <button onClick={() => applyZoom(zoom + ZOOM_BUTTON_STEP)} className={LINK_CLS} style={{ fontSize: 14, lineHeight: 1 }} aria-label="Aumentar zoom">+</button>
           </span>
         </div>
+        {bulk && selectedCardIds && selectedCardIds.size > 0 && (
+          <BulkBar
+            ids={Array.from(selectedCardIds)}
+            allLabels={treeActions?.allLabels ?? cardMenu?.allLabels ?? []}
+            bulk={bulk}
+            onClear={() => onClearSelection?.()}
+          />
+        )}
         <div className="border-t border-neutral-200 dark:border-neutral-700" style={{ paddingTop: 6, zoom: zoom === 1 ? undefined : zoom }}>
           {columns.length === 0 && (
             <div className="text-neutral-400 dark:text-neutral-500" style={{ fontSize: 12, padding: 8 }}>
@@ -1444,12 +2234,12 @@ export default function KanbanTreeView({
             {/* O "fantasma" que segue o mouse fica num portal no body: fora do CSS zoom da lista, então acompanha o ponteiro em qualquer zoom */}
             {createPortal(
               <DragOverlay dropAnimation={null}>
-                {activeCard ? (
+                {overlayLabel ? (
                   <div
                     className="bg-white dark:bg-neutral-800 text-neutral-900 dark:text-neutral-100 border border-blue-500 dark:border-blue-400"
                     style={{ padding: '4px 10px', borderRadius: 6, fontSize: 12, boxShadow: '0 4px 12px rgba(0,0,0,0.25)', maxWidth: 320, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}
                   >
-                    {activeCard.title}
+                    {overlayLabel}
                   </div>
                 ) : null}
               </DragOverlay>,
@@ -1458,6 +2248,78 @@ export default function KanbanTreeView({
           </DndContext>
         </div>
       </div>
+      {shortcutPopup && (() => {
+        const loc = cardLocation.get(shortcutPopup.cardId);
+        const card = loc?.list.find((c) => c.id === shortcutPopup.cardId);
+        if (!loc || !card) return null;
+        const inBulk = !!bulk && !!selectedCardIds && selectedCardIds.size > 1 && selectedCardIds.has(card.id);
+        const ids = inBulk ? Array.from(selectedCardIds!) : [card.id];
+        const close = () => setShortcutPopup(null);
+        return createPortal(
+          <div onClick={stopBubbling} onDoubleClick={stopBubbling} onPointerDown={stopBubbling} onContextMenu={stopBubbling}>
+            {shortcutPopup.kind === 'status' && (
+              <StatusPickerMenu
+                x={shortcutPopup.x}
+                y={shortcutPopup.y}
+                value={card.status}
+                onSelect={(value) => { if (inBulk) bulk!.onSetStatus(ids, value); else cardMenu?.onUpdateStatus(card.id, value); }}
+                onClose={close}
+              />
+            )}
+            {shortcutPopup.kind === 'due' && (
+              <DueDateMenu
+                x={shortcutPopup.x}
+                y={shortcutPopup.y}
+                value={card.dueDate}
+                onSave={(value) => cardMenu?.onUpdateDueDate(card.id, value)}
+                onClose={close}
+              />
+            )}
+            {shortcutPopup.kind === 'color' && (
+              <CardColorMenu
+                x={shortcutPopup.x}
+                y={shortcutPopup.y}
+                value={inBulk ? null : card.color}
+                onSave={(value) => { if (inBulk) bulk!.onSetColor(ids, value); else cardMenu?.onUpdateColor(card.id, value); }}
+                onClose={close}
+              />
+            )}
+            {shortcutPopup.kind === 'labels' && (
+              <CardLabelMenu
+                x={shortcutPopup.x}
+                y={shortcutPopup.y}
+                cardLabels={inBulk ? [] : card.labels}
+                allLabels={treeActions?.allLabels ?? []}
+                onToggle={(name, color, isGroup) => {
+                  if (inBulk) { bulk!.onToggleLabel(ids, name, color, isGroup); return; }
+                  const hasIt = card.labels.some((l) => parseLabel(l).name === name);
+                  cardMenu?.onUpdateLabels(card.id, hasIt ? card.labels.filter((l) => parseLabel(l).name !== name) : [...card.labels, serializeLabel(name, color, isGroup)]);
+                }}
+                onCreate={(name, color, isGroup) => {
+                  if (inBulk) { bulk!.onToggleLabel(ids, name, color, isGroup); return; }
+                  if (card.labels.some((l) => parseLabel(l).name === name)) return;
+                  cardMenu?.onUpdateLabels(card.id, [...card.labels, serializeLabel(name, color, isGroup)]);
+                }}
+                onClose={close}
+              />
+            )}
+            {shortcutPopup.kind === 'move' && cardMove && (
+              <CardMoveMenu
+                x={shortcutPopup.x}
+                y={shortcutPopup.y}
+                columns={cardMove.columns}
+                groups={cardMove.groups}
+                currentColumnId={!inBulk && loc.target.kind === 'column' ? loc.target.id : null}
+                currentGroupId={!inBulk && loc.target.kind === 'group' ? loc.target.id : null}
+                cardCount={ids.length}
+                onMove={(target) => { close(); void cardMove.moveCards(ids, target); }}
+                onClose={close}
+              />
+            )}
+          </div>,
+          document.body
+        );
+      })()}
       {emojiFor && treeActions && createPortal(
         <EmojiPickerPopup
           x={emojiFor.x}

@@ -11,6 +11,8 @@ import { useDecks } from './hooks/useDecks';
 import { useFlashcards } from './hooks/useFlashcards';
 import FlashcardListItem from './components/FlashcardListItem';
 import FlashcardFormModal from './components/FlashcardFormModal';
+import ImportCardsModal from './components/ImportCardsModal';
+import { serializeCardsFile, downloadTextFile } from './utils/cardFileFormat';
 import type { Flashcard } from './types/study.types';
 
 export default function DeckPage() {
@@ -18,13 +20,21 @@ export default function DeckPage() {
   const navigate = useNavigate();
 
   const { decks, loading: loadingDecks } = useDecks();
-  const { cards, loading, error, create, update, remove, duplicate, reorder } = useFlashcards(deckId);
+  const { cards, loading, error, create, update, remove, duplicate, reorder, importCards } = useFlashcards(deckId);
 
   const deck = decks.find((d) => d.id === deckId) ?? null;
 
   const [formOpen, setFormOpen] = useState(false);
   const [editingCard, setEditingCard] = useState<Flashcard | null>(null);
   const [deletingCard, setDeletingCard] = useState<Flashcard | null>(null);
+  const [importOpen, setImportOpen] = useState(false);
+
+  const handleExport = () => {
+    if (!deck) return;
+    const content = serializeCardsFile(deck, cards);
+    const safeName = deck.name.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-') || 'deck';
+    downloadTextFile(`${safeName}-cards.txt`, content);
+  };
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
 
@@ -48,7 +58,7 @@ export default function DeckPage() {
   const openCreate = () => { setEditingCard(null); setFormOpen(true); };
   const openEdit = (card: Flashcard) => { setEditingCard(card); setFormOpen(true); };
 
-  const handleSubmit = async (input: { front: string; back: string }) => {
+  const handleSubmit = async (input: { front: string; back: string; imageUrl?: string | null }) => {
     if (editingCard) {
       await update(editingCard.id, input);
     } else {
@@ -74,6 +84,10 @@ export default function DeckPage() {
 
         <div style={{ display: 'flex', gap: 8 }}>
           <Button variant="secondary" onClick={openCreate}>+ Novo card</Button>
+          <Button variant="secondary" onClick={() => setImportOpen(true)}>⬆ Importar</Button>
+          <Button variant="secondary" onClick={handleExport} disabled={cards.length === 0}>
+            ⬇ Exportar
+          </Button>
           <Button
             onClick={() => navigate({ to: '/study/$deckId/session', params: { deckId } })}
             disabled={cards.length === 0}
@@ -90,7 +104,10 @@ export default function DeckPage() {
       ) : cards.length === 0 ? (
         <div style={{ textAlign: 'center', padding: '48px 0', color: '#999' }}>
           <p style={{ fontSize: 14, marginBottom: 12 }}>Este deck ainda não tem cards.</p>
-          <Button onClick={openCreate}>+ Criar o primeiro card</Button>
+          <div style={{ display: 'flex', justifyContent: 'center', gap: 8 }}>
+            <Button onClick={openCreate}>+ Criar o primeiro card</Button>
+            <Button variant="secondary" onClick={() => setImportOpen(true)}>⬆ Importar cards</Button>
+          </div>
         </div>
       ) : (
         <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
@@ -114,6 +131,14 @@ export default function DeckPage() {
         onClose={() => setFormOpen(false)}
         onSubmit={handleSubmit}
         card={editingCard}
+      />
+
+      <ImportCardsModal
+        open={importOpen}
+        onClose={() => setImportOpen(false)}
+        deckName={deck?.name ?? ''}
+        existingCards={cards}
+        onImport={importCards}
       />
 
       <ConfirmDialog

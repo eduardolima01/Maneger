@@ -88,3 +88,43 @@ export async function writeTextFile(path: string, content: string): Promise<void
   await invoke('write_text_file', { path, content });
 }
 
+/** Manifesto inteiro (path da pasta -> path absoluto do arquivo de ícone), carregado uma vez na inicialização. */
+export async function getFolderIcons(): Promise<Record<string, string>> {
+  return invoke<Record<string, string>>('get_folder_icons');
+}
+
+/** `sourceImagePath` vem do diálogo de arquivo do front (@tauri-apps/plugin-dialog). */
+export async function setFolderIconFromPath(folderPath: string, sourceImagePath: string): Promise<string> {
+  return invoke<string>('set_folder_icon_from_path', { folderPath, sourceImagePath });
+}
+
+export async function setFolderIconFromClipboard(folderPath: string): Promise<string> {
+  return invoke<string>('set_folder_icon_from_clipboard', { folderPath });
+}
+
+export async function removeFolderIcon(folderPath: string): Promise<void> {
+  await invoke('remove_folder_icon', { folderPath });
+}
+/** Exclusão PERMANENTE (não passa pela lixeira). A confirmação é feita na UI (Alt+Q). */
+export function deletePermanently(path: string): Promise<void> {
+  return invoke('delete_permanently', { path });
+}
+/** PNG pequeno (embutido no binário) usado como ícone do arraste pra fora do app. */
+export async function getDragIconPath(): Promise<string> {
+  return invoke<string>('get_drag_icon_path');
+}
+/** Grupos de pastas da sidebar (JSON salvo como texto em explorer-groups.json). */
+export async function loadFolderGroups(): Promise<string> {
+  return invoke<string>('load_folder_groups');
+}
+export async function saveFolderGroups(data: string): Promise<void> {
+  await invoke('save_folder_groups', { data });
+}
+/** Preferências de interface do Explorador (JSON como texto em explorer-ui-prefs.json). */
+export async function loadExplorerUiPrefs(): Promise<string> {
+  return invoke<string>('load_explorer_ui_prefs');
+}
+
+export async function saveExplorerUiPrefs(data: string): Promise<void> {
+  await invoke('save_explorer_ui_prefs', { data });
+}

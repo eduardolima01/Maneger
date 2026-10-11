@@ -10,6 +10,7 @@ import BackgroundOpacitySlider from '@/Kanban/components/BackgroundOpacitySlider
 import { withAlpha, blendOverSurface, currentSurfaceHex } from '@/Kanban/utils/colorAlpha';
 import { readableTextColors } from '@/Kanban/utils/readableColors';
 import KanbanCard from './KanbanCard';
+import { StatusSections, GroupByStatusButton } from '@/Kanban/components/StatusGrouping';
 
 import type {
   KanbanColumn as ColumnType,
@@ -207,7 +208,7 @@ export default function KanbanColumn({
   }
 
   return (
-    <div ref={setSortableRef} style={style}>
+    <div ref={setSortableRef} data-column-id={column.id} style={style}>
       <div
         className={hasCustomBg ? undefined : 'bg-white dark:bg-neutral-800'}
         style={{ display: 'flex', flexDirection: 'column', height: '100%', ...(hasCustomBg ? { backgroundColor: backgroundCss } : {}), borderRadius: 8, padding: 8 }}
@@ -347,6 +348,7 @@ export default function KanbanColumn({
 
         <div className={textClass(overLimit ? 'danger' : 'secondary')} style={{ fontSize: 11, color: textColor(overLimit ? 'danger' : 'secondary'), marginBottom: 6, display: 'flex', gap: 8 }}>
           <span>{cards.length} card{cards.length !== 1 ? 's' : ''}</span>
+          <GroupByStatusButton kanbanId={column.kanbanId} />
           {column.wipLimit !== null && <span>WIP: {cards.length}/{column.wipLimit}</span>}
         </div>
 
@@ -360,7 +362,7 @@ export default function KanbanColumn({
                 // foco: coluna única ocupando a largura toda (cards de cada grupo continuam em lista vertical,
                 // só o bloco do grupo em si passa a ocupar 100% da largura); alignItems 'start' pra cada bloco ter a própria altura
                 ? { display: 'grid', gridTemplateColumns: '1fr', gap: 12, alignItems: 'start' }
-                : { overflowY: 'auto' }),
+                : { overflowY: 'auto', overscrollBehavior: 'contain' }),
             }}
           >
             <SortableContext
@@ -379,6 +381,8 @@ export default function KanbanColumn({
                   cardsWithFiles={cardsWithFiles}
                   collapsed={collapsedGroupIds.has(g.id)}
                   onToggleCollapsed={() => onToggleGroupCollapsed(g.id)}
+                  collapsedGroupIds={collapsedGroupIds}
+                  onToggleGroupCollapsed={onToggleGroupCollapsed}
                   onCardClick={onCardClick}
                   onCardDuplicate={onCardDuplicate}
                   onCardRequestDelete={onCardRequestDelete}
@@ -448,7 +452,7 @@ export default function KanbanColumn({
                 />
               ))}
 
-              {loose.map((c) => (
+              <StatusSections kanbanId={column.kanbanId} scopeId={`col:${column.id}`} cards={loose} renderCard={(c) => (
                 <KanbanCard
                   key={c.id}
                   card={c}
@@ -478,7 +482,7 @@ export default function KanbanColumn({
                   onUpdateCoverPath={onUpdateCoverPath}
                   projectId={projectId}
                 />
-              ))}
+              )} />
             </SortableContext>
           </div>
         )}

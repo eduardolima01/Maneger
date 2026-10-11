@@ -150,11 +150,8 @@ export async function materializePlanOccurrence(planId: string, date: string, oc
   return createCard({ ...shared, kanbanId: plan.kanbanId, columnId: plan.planTargetColumnId });
 }
 
-export async function updateCard(id: string, input: UpdateKanbanCardInput): Promise<void> {
-  const data = await loadKanbanData();
-  const card = data.cards.find((c) => c.id === id);
-  if (!card) return;
-
+/** Aplica os campos de `input` no card (em memória). Devolve true se mudou algo. Compartilhada por updateCard e updateCards. */
+function applyCardUpdate(card: KanbanCard, input: UpdateKanbanCardInput): boolean {
   let changed = false;
   if (input.title !== undefined) { card.title = input.title; changed = true; }
   if (input.description !== undefined) { card.description = input.description; changed = true; }
@@ -177,10 +174,44 @@ export async function updateCard(id: string, input: UpdateKanbanCardInput): Prom
   if (input.planTimesPerDay !== undefined) { card.planTimesPerDay = input.planTimesPerDay; changed = true; }
   if (input.planTargetColumnId !== undefined) { card.planTargetColumnId = input.planTargetColumnId; changed = true; }
   if (input.planTargetGroupId !== undefined) { card.planTargetGroupId = input.planTargetGroupId; changed = true; }
-  if (!changed) return;
+  if (changed) card.updatedAt = toLocalISO(new Date());
+  return changed;
+}
 
-  card.updatedAt = toLocalISO(new Date());
+export async function updateCard(id: string, input: UpdateKanbanCardInput): Promise<void> {
+  const data = await loadKanbanData();
+  const card = data.cards.find((c) => c.id === id);
+  if (!card) return;
+  if (!applyCardUpdate(card, input)) return;
   await saveKanbanData(data);
+}
+
+/**
+ * Atualiza VÁRIOS cards numa única leitura + única gravação do JSON. Não dá pra fazer `Promise.all(ids.map(updateCard))`:
+ * o kanban é um blob único, e cada updateCard lê o arquivo inteiro, muda UM card e regrava tudo — chamadas simultâneas
+ * se atropelam (a última gravação apaga as anteriores) e só parte dos cards muda.
+ */
+export async function updateCards(updates: Array<{ id: string; input: UpdateKanbanCardInput }>): Promise<void> {
+  if (updates.length === 0) return;
+  const data = await loadKanbanData();
+  const byId = new Map(data.cards.map((c) => [c.id, c]));
+  let any = false;
+  for (const { id, input } of updates) {
+    const card = byId.get(id);
+    if (card && applyCardUpdate(card, input)) any = true;
+  }
+  if (any) await saveKanbanData(data);
+}
+
+/** Exclui vários cards de uma vez (mesmo motivo de updateCards: uma leitura, uma gravação). */
+export async function deleteCards(ids: string[]): Promise<void> {
+  if (ids.length === 0) return;
+  const idSet = new Set(ids);
+  const data = await loadKanbanData();
+  data.checklistItems = data.checklistItems.filter((item) => !idSet.has(item.cardId));
+  data.cards = data.cards.filter((c) => !idSet.has(c.id));
+  await saveKanbanData(data);
+  await Promise.all(ids.map((id) => deleteCardFilesDir(id).catch(() => { })));
 }
 
 /** Cascade manual: apaga também os checklist items e a pasta de arquivos do card (antes era ON DELETE CASCADE). */

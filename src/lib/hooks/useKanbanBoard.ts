@@ -297,17 +297,17 @@ export function useKanbanBoard(kanban: Kanban) {
   }, [cards, bulkMoveCards]);
 
   const bulkDeleteCards = useCallback(async (cardIds: string[]) => {
-    await Promise.all(cardIds.map((id) => cardsApi.deleteCard(id)));
+    await cardsApi.deleteCards(cardIds);
     await reload();
   }, [reload]);
 
   const bulkSetColor = useCallback(async (cardIds: string[], color: string | null) => {
-    await Promise.all(cardIds.map((id) => cardsApi.updateCard(id, { color })));
+    await cardsApi.updateCards(cardIds.map((id) => ({ id, input: { color } })));
     await reload();
   }, [reload]);
 
   const bulkSetStatus = useCallback(async (cardIds: string[], status: import('@/types/kanban.types').TaskStatus | null) => {
-    await Promise.all(cardIds.map((id) => cardsApi.updateCard(id, { status })));
+    await cardsApi.updateCards(cardIds.map((id) => ({ id, input: { status } })));
     await reload();
   }, [reload]);
 
@@ -316,12 +316,12 @@ export function useKanbanBoard(kanban: Kanban) {
     // (mesmo critério de checkbox "indeterminado" usado em UIs de seleção múltipla)
     const targets = cardIds.map((id) => cards.find((c) => c.id === id)).filter((c): c is KanbanCard => !!c);
     const someHaveIt = targets.some((c) => c.labels.some((l) => parseLabel(l).name === name));
-    await Promise.all(targets.map((c) => {
+    await cardsApi.updateCards(targets.map((c) => {
       const hasIt = c.labels.some((l) => parseLabel(l).name === name);
       const nextLabels = someHaveIt
         ? c.labels.filter((l) => parseLabel(l).name !== name)
         : hasIt ? c.labels : [...c.labels, serializeLabel(name, color, isGroup)];
-      return cardsApi.updateCard(c.id, { labels: nextLabels });
+      return { id: c.id, input: { labels: nextLabels } };
     }));
     await reload();
   }, [cards, reload]);

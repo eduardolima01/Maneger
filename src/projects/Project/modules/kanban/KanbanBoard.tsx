@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState, useEffect, useCallback } from 'react';
+import { useMemo, useRef, useState, useEffect, useCallback, type ReactNode } from 'react';
 import {
   DndContext, PointerSensor, useSensor, useSensors, closestCorners,
   type DragEndEvent,
@@ -20,7 +20,12 @@ import type { Kanban, CardFieldConfig, CardVisualFieldConfig } from '@/types/kan
 import { mergeCardFieldConfig, mergeCardVisualConfig } from '@/types/kanban.types';
 import { clearGroupLabels, ParsedLabel, parseLabel, setSingleGroupLabel } from '@/Kanban/utils/kanbanLabels';
 import LabelManagerModal from './LabelManagerModal';
-import Button from '@/components/layout/Button';
+import ShortcutsHelpModal from '@/Kanban/components/ShortcutsHelpModal';
+import KanbanHistoryModal from '@/Kanban/components/KanbanHistoryModal';
+import { openWorkMode, closeWorkMode, isWorkModeOpen, listenWorkModeState } from '@/Kanban/utils/workMode';
+import { listenKanbanChanges } from '@/Kanban/utils/kanbanSync';
+import { undoOne, redoOne, subscribeHistory } from '@/Kanban/api/kanbanHistory';
+import { getCutCardIds, setCutCardIds, clearCutCards } from '@/Kanban/utils/cardClipboard';
 import KanbanGenerateCardsModal from '@/Kanban/components/KanbanGenerateCardsModal';
 import ColumnOutline from '@/Kanban/components/ColumnOutline';
 import { CardMoveContext } from '@/lib/utils/CardMoveContext';
@@ -103,6 +108,102 @@ export default function KanbanBoard({ kanban }: KanbanBoardProps) {
   const [bulkDeleteConfirm, setBulkDeleteConfirm] = useState(false);
   const [calendarCollapsed, setCalendarCollapsed] = useState(false);
   const [viewMode, setViewMode] = useState<BoardViewMode>(() => readViewMode(kanban.id));
+  const [helpOpen, setHelpOpen] = useState(false);
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const [historyToast, setHistoryToast] = useState<{ text: string; key: number } | null>(null);
+  const historyBusyRef = useRef(false);
+  const helpAnchorRef = useRef<HTMLSpanElement>(null); // se este quadro está na tela (e não escondido/montado em outro lugar)
+
+  // "?" (ou F1) abre/fecha o painel de atalhos — ignorado enquanto se digita num campo
+  useEffect(() => {
+    function onKeyDown(e: KeyboardEvent) {
+      if (e.ctrlKey || e.metaKey || e.altKey) return;
+      if (e.key !== '?' && e.key !== 'F1') return;
+      if (e.defaultPrevented) return; // outra instância do quadro já tratou esta tecla
+      if (!helpAnchorRef.current || helpAnchorRef.current.getClientRects().length === 0) return; // este quadro está escondido
+      const t = e.target as HTMLElement | null;
+      if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT' || t.isContentEditable)) return;
+      e.preventDefault();
+      setHelpOpen((v) => !v);
+    }
+    document.addEventListener('keydown', onKeyDown);
+    return () => document.removeEventListener('keydown', onKeyDown);
+  }, []);
+
+  // ---- Histórico (desfazer/refazer): R desfaz, Alt+R refaz (também Ctrl+Z / Ctrl+Shift+Z / Ctrl+Y), H abre a lista
+  const reloadBoardRef = useRef<() => unknown>(() => { });
+  reloadBoardRef.current = () => board.reload();
+  useEffect(() => subscribeHistory((kind) => { if (kind === 'applied') void reloadBoardRef.current(); }), []); // desfez/refez: recarrega o quadro
+  // outra janela (modo trabalho) gravou: recarrega o quadro
+  useEffect(() => listenKanbanChanges(() => { void reloadBoardRef.current(); }), []);
+
+  // o botão do modo trabalho reflete se a janela DESTE kanban está aberta
+  const [workOpen, setWorkOpen] = useState(false);
+  const [moreOpen, setMoreOpen] = useState(false);
+  useEffect(() => {
+    let alive = true;
+    setWorkOpen(false);
+    void isWorkModeOpen(kanban.id).then((open) => { if (alive) setWorkOpen(open); });
+    const off = listenWorkModeState((s) => { if (s.kanbanId === kanban.id) setWorkOpen(s.open); });
+    return () => { alive = false; off(); };
+  }, [kanban.id]);
+
+  async function handleOpenWorkMode() {
+    try {
+      if (await isWorkModeOpen(kanban.id)) {
+        await closeWorkMode(kanban.id); // já aberto: o botão fecha
+        setWorkOpen(false);
+        return;
+      }
+      await openWorkMode(kanban.id);
+      setWorkOpen(true);
+    } catch (err) {
+      console.error('Modo trabalho:', err);
+      showHistoryToast('Não consegui abrir o modo trabalho (veja as permissões do Tauri)');
+    }
+  }
+
+  function showHistoryToast(text: string) {
+    setHistoryToast({ text, key: Date.now() });
+  }
+  useEffect(() => {
+    if (!historyToast) return;
+    const t = setTimeout(() => setHistoryToast(null), 2600);
+    return () => clearTimeout(t);
+  }, [historyToast]);
+
+  async function runHistory(kind: 'undo' | 'redo') {
+    if (historyBusyRef.current) return;
+    historyBusyRef.current = true;
+    try {
+      const entry = kind === 'undo' ? await undoOne(kanban.id) : await redoOne(kanban.id);
+      showHistoryToast(entry ? `${kind === 'undo' ? '↶ Desfeito' : '↷ Refeito'}: ${entry.desc}` : kind === 'undo' ? 'Nada para desfazer' : 'Nada para refazer');
+    } catch (err) {
+      console.error('Histórico do kanban:', err);
+      showHistoryToast('Não consegui aplicar o histórico');
+    } finally {
+      historyBusyRef.current = false;
+    }
+  }
+  const historyKeysRef = useRef<(e: KeyboardEvent) => void>(() => { });
+  historyKeysRef.current = (e: KeyboardEvent) => {
+    if (e.defaultPrevented || e.repeat) return;
+    if (!helpAnchorRef.current || helpAnchorRef.current.getClientRects().length === 0) return; // este quadro está escondido
+    const t = e.target as HTMLElement | null;
+    if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT' || t.isContentEditable)) return;
+    const k = e.key.toLowerCase();
+    const mod = e.ctrlKey || e.metaKey;
+    if (!mod && !e.altKey && !e.shiftKey && k === 'r') { e.preventDefault(); void runHistory('undo'); return; }
+    if (!mod && e.altKey && !e.shiftKey && e.code === 'KeyR') { e.preventDefault(); void runHistory('redo'); return; }
+    if (mod && !e.altKey && k === 'z') { e.preventDefault(); void runHistory(e.shiftKey ? 'redo' : 'undo'); return; }
+    if (mod && !e.altKey && !e.shiftKey && k === 'y') { e.preventDefault(); void runHistory('redo'); return; }
+    if (!mod && !e.altKey && !e.shiftKey && k === 'h') { e.preventDefault(); setHistoryOpen((v) => !v); }
+  };
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => historyKeysRef.current(e);
+    document.addEventListener('keydown', onKeyDown);
+    return () => document.removeEventListener('keydown', onKeyDown);
+  }, []);
 
   // Grava só quando o usuário troca a visão (e não num efeito sobre `viewMode`): se o componente for reaproveitado
   // por outro kanban, um efeito de gravação escreveria a visão do kanban antigo na chave do novo.
@@ -638,6 +739,64 @@ export default function KanbanBoard({ kanban }: KanbanBoardProps) {
     return () => window.removeEventListener('keydown', onEscape);
   }, [selectedCardIds.size]);
 
+  // Quadro: Ctrl+X recorta o card sob o mouse (ou os selecionados), Ctrl+V cola no grupo/coluna sob o mouse, Alt+S marca/desmarca o card.
+  // (Na árvore quem trata essas teclas é a própria árvore.) Esc cancela um recorte pendente.
+  const boardKeysRef = useRef<(e: KeyboardEvent) => void>(() => { });
+  const boardHoverRef = useRef<{ cardId: string | null; groupId: string | null; columnId: string | null }>({ cardId: null, groupId: null, columnId: null });
+  boardKeysRef.current = (e: KeyboardEvent) => {
+    if (e.key === 'Escape') { clearCutCards(); return; }
+    if (viewMode !== 'board' || e.defaultPrevented) return;
+    if (!helpAnchorRef.current || helpAnchorRef.current.getClientRects().length === 0) return; // este quadro está escondido
+    const t = e.target as HTMLElement | null;
+    if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT' || t.isContentEditable)) return;
+    const k = e.key.toLowerCase();
+    const mod = (e.ctrlKey || e.metaKey) && !e.altKey && !e.shiftKey;
+    const hover = boardHoverRef.current;
+    if (e.altKey && !e.ctrlKey && !e.metaKey && e.code === 'KeyS') {
+      if (!hover.cardId) return;
+      e.preventDefault();
+      toggleCardSelection(hover.cardId);
+      return;
+    }
+    if (mod && k === 'x') {
+      const sel = Array.from(selectedCardIds);
+      const ids = hover.cardId ? (sel.includes(hover.cardId) ? sel : [hover.cardId]) : sel;
+      if (ids.length === 0) return;
+      e.preventDefault();
+      setCutCardIds(ids);
+      setSelectedCardIds(new Set());
+      return;
+    }
+    if (mod && k === 'v') {
+      const ids = getCutCardIds();
+      if (ids.length === 0) return;
+      const target = hover.groupId
+        ? { kind: 'group' as const, groupId: hover.groupId }
+        : hover.columnId ? { kind: 'column' as const, columnId: hover.columnId } : null;
+      if (!target) return;
+      e.preventDefault(); // impede também o "colar imagem de capa" do card
+      void board.moveCardsTo(ids, target);
+      clearCutCards();
+    }
+  };
+  useEffect(() => {
+    function onOver(e: MouseEvent) {
+      const t = e.target as HTMLElement | null;
+      boardHoverRef.current = {
+        cardId: t?.closest<HTMLElement>('[data-kanban-card]')?.dataset.kanbanCard ?? null,
+        groupId: t?.closest<HTMLElement>('[data-group-id]')?.dataset.groupId ?? null,
+        columnId: t?.closest<HTMLElement>('[data-column-id]')?.dataset.columnId ?? null,
+      };
+    }
+    const onKeyDown = (e: KeyboardEvent) => boardKeysRef.current(e);
+    document.addEventListener('mouseover', onOver);
+    document.addEventListener('keydown', onKeyDown);
+    return () => {
+      document.removeEventListener('mouseover', onOver);
+      document.removeEventListener('keydown', onKeyDown);
+    };
+  }, []);
+
   const cardMoveValue = useMemo(() => ({
     columns: board.columns.filter((c) => c.visible),
     groups: board.groups,
@@ -664,35 +823,102 @@ export default function KanbanBoard({ kanban }: KanbanBoardProps) {
                   : {}),
             }}
           >
-            <div className="bg-white dark:bg-neutral-800 text-neutral-900 dark:text-neutral-100" style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8, padding: 8, borderRadius: 8 }}>
-              <div style={{ flex: 1 }}>
-                <KanbanToolbar
-                  search={board.search}
-                  onSearchChange={board.setSearch}
-                  filters={board.filters}
-                  onFiltersChange={board.setFilters}
-                  filtersActive={board.filtersActive}
-                  availableLabels={allLabels}
-                  density={board.viewPrefs.density}
-                  onDensityChange={(density) => board.saveViewPrefs({ density })}
-                  onOpenColumnSettings={() => setColumnSettingsOpen(true)}
-                  onOpenLabelManager={() => setLabelManagerOpen(true)}
-                />
+            <div className="bg-white dark:bg-neutral-800 text-neutral-900 dark:text-neutral-100 border border-neutral-200 dark:border-neutral-700" style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 8, padding: '10px 12px', borderRadius: 10, boxShadow: '0 1px 2px rgba(0,0,0,0.06)' }}>
+              {/* Linha 1: busca, filtros e densidade (KanbanToolbar) + alternador quadro/árvore */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <KanbanToolbar
+                    search={board.search}
+                    onSearchChange={board.setSearch}
+                    filters={board.filters}
+                    onFiltersChange={board.setFilters}
+                    filtersActive={board.filtersActive}
+                    availableLabels={allLabels}
+                    density={board.viewPrefs.density}
+                    onDensityChange={(density) => board.saveViewPrefs({ density })}
+                    onOpenColumnSettings={() => setColumnSettingsOpen(true)}
+                    onOpenLabelManager={() => setLabelManagerOpen(true)}
+                  />
+                </div>
+                <div role="tablist" aria-label="Modo de visualização" className="bg-neutral-100 dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-700" style={{ display: 'inline-flex', padding: 2, borderRadius: 8, flexShrink: 0 }}>
+                  {([['board', '🗂', 'Quadro'], ['tree', '🌳', 'Árvore']] as const).map(([mode, icon, label]) => (
+                    <button
+                      key={mode}
+                      type="button"
+                      role="tab"
+                      aria-selected={viewMode === mode}
+                      onClick={() => viewMode !== mode && changeViewMode(mode)}
+                      className={viewMode === mode
+                        ? 'bg-white dark:bg-neutral-700 text-neutral-900 dark:text-neutral-100 shadow-sm'
+                        : 'text-neutral-500 dark:text-neutral-400 hover:text-neutral-800 dark:hover:text-neutral-200'}
+                      style={{ border: 'none', cursor: 'pointer', fontSize: 12, fontWeight: 600, padding: '4px 10px', borderRadius: 6, display: 'inline-flex', alignItems: 'center', gap: 4 }}
+                    >
+                      <span>{icon}</span>{label}
+                    </button>
+                  ))}
+                </div>
               </div>
-              <Button variant="secondary" onClick={() => changeViewMode(viewMode === 'tree' ? 'board' : 'tree')}>
-                {viewMode === 'tree' ? '🗂 Ver quadro' : '🌳 Ver árvore'}
-              </Button>
-              <Button variant="secondary" onClick={() => setUpcomingPanelOpen((v) => !v)}>
-                {upcomingPanelOpen ? '🕐 Ocultar próximos' : '🕐 Mais próximos'}
-              </Button>
-              <Button variant="secondary" onClick={() => setCalendarCollapsed((v) => !v)}>
-                {calendarCollapsed ? '📅 Mostrar calendário' : '📅 Recolher calendário'}
-              </Button>
-              <Button variant="secondary" onClick={() => setShowArchivedColumns((v) => !v)}>
-                {showArchivedColumns ? '🗄 Ocultar arquivadas' : `🗄 Arquivadas${archivedColumns.length > 0 ? ` (${archivedColumns.length})` : ''}`}
-              </Button>
-              <Button variant="secondary" onClick={() => setBackgroundModalOpen(true)}>🎨 Fundo</Button>
-              <Button variant="secondary" onClick={() => setGenerateModalOpen(true)}>+ Gerar cards</Button>
+
+              {/* Linha 2: ações agrupadas */}
+              <div className="border-t border-neutral-100 dark:border-neutral-700" style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', paddingTop: 8 }}>
+                <HeaderGroup label="Painéis">
+                  <HeaderBtn active={upcomingPanelOpen} onClick={() => setUpcomingPanelOpen((v) => !v)} title={upcomingPanelOpen ? 'Ocultar o painel de próximos' : 'Mostrar os cards mais próximos'}>🕐 Próximos</HeaderBtn>
+                  <HeaderBtn active={!calendarCollapsed} onClick={() => setCalendarCollapsed((v) => !v)} title={calendarCollapsed ? 'Mostrar o calendário' : 'Recolher o calendário'}>📅 Calendário</HeaderBtn>
+                </HeaderGroup>
+                <HeaderSep />
+                <HeaderGroup label="Ferramentas">
+                  <span ref={helpAnchorRef} style={{ display: 'inline-flex' }}>
+                    <HeaderBtn onClick={() => setHelpOpen(true)} title="Atalhos de teclado (? ou F1)">⌨ Atalhos</HeaderBtn>
+                  </span>
+                  <HeaderBtn onClick={() => setHistoryOpen(true)} title="Histórico de alterações (H)">🕘 Histórico</HeaderBtn>
+                  <HeaderBtn active={workOpen} activeTone="green" onClick={handleOpenWorkMode} title={workOpen ? 'Fechar a janelinha do modo trabalho' : 'Abrir este kanban numa janelinha sempre por cima'}>
+                    {workOpen ? '✕ Fechar modo trabalho' : '🖥 Modo trabalho'}
+                  </HeaderBtn>
+                </HeaderGroup>
+                {helpOpen && <ShortcutsHelpModal isOpen onClose={() => setHelpOpen(false)} inTree={viewMode === 'tree'} />}
+                {historyOpen && <KanbanHistoryModal isOpen onClose={() => setHistoryOpen(false)} kanbanId={kanban.id} />}
+                {historyToast && (
+                  <div
+                    key={historyToast.key}
+                    role="status"
+                    style={{
+                      position: 'fixed', left: '50%', bottom: 24, transform: 'translateX(-50%)', zIndex: 100001,
+                      maxWidth: '80vw', padding: '8px 14px', borderRadius: 8, fontSize: 13,
+                      background: 'rgba(23,23,23,0.92)', color: '#fff', boxShadow: '0 4px 14px rgba(0,0,0,0.35)', pointerEvents: 'none',
+                    }}
+                  >
+                    {historyToast.text}
+                  </div>
+                )}
+
+                <div style={{ flex: 1 }} />
+
+                <div style={{ position: 'relative' }}>
+                  <HeaderBtn active={moreOpen || showArchivedColumns} onClick={() => setMoreOpen((v) => !v)} title="Mais opções">⋯ Mais</HeaderBtn>
+                  {moreOpen && (
+                    <>
+                      <div onClick={() => setMoreOpen(false)} style={{ position: 'fixed', inset: 0, zIndex: 40 }} />
+                      <div
+                        className="bg-white dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-600"
+                        style={{ position: 'absolute', right: 0, top: 'calc(100% + 4px)', zIndex: 41, minWidth: 210, padding: 4, borderRadius: 8, boxShadow: '0 8px 24px rgba(0,0,0,0.18)' }}
+                      >
+                        <MenuItem onClick={() => { setShowArchivedColumns((v) => !v); setMoreOpen(false); }}>
+                          {showArchivedColumns ? '🗄 Ocultar colunas arquivadas' : `🗄 Colunas arquivadas${archivedColumns.length > 0 ? ` (${archivedColumns.length})` : ''}`}
+                        </MenuItem>
+                        <MenuItem onClick={() => { setBackgroundModalOpen(true); setMoreOpen(false); }}>🎨 Fundo do kanban</MenuItem>
+                      </div>
+                    </>
+                  )}
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setGenerateModalOpen(true)}
+                  className="bg-blue-600 hover:bg-blue-700 text-white"
+                  style={{ border: 'none', cursor: 'pointer', fontSize: 12, fontWeight: 600, padding: '5px 12px', borderRadius: 6 }}
+                >
+                  + Gerar cards
+                </button>
+              </div>
             </div>
 
             <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>
@@ -717,8 +943,35 @@ export default function KanbanBoard({ kanban }: KanbanBoardProps) {
                       allLabels: allParsedLabels,
                       onRenameGroup: board.renameGroup,
                       onRequestDeleteGroup: (groupId) => setDeleteGroupTarget(groupId),
+                      onMoveGroup: board.placeGroup,
                       onUpdateColumnBackground: updateColumnBackground,
                       onUpdateColumnOpacity: updateColumnOpacity,
+                      onRenameColumn: (columnId, name) => board.updateColumn(columnId, { name }),
+                      showArchived: showArchivedColumns,
+                      archivedCount: archivedColumns.length,
+                      onToggleShowArchived: () => setShowArchivedColumns((v) => !v),
+                      onToggleColumnArchived: (columnId) => {
+                        const col = board.columns.find((x) => x.id === columnId);
+                        if (col) board.updateColumn(columnId, { visible: !col.visible });
+                      },
+                      onMoveColumn: (columnId, dir) => {
+                        const ids = visibleColumns.map((x) => x.id);
+                        const from = ids.indexOf(columnId);
+                        const to = from + dir;
+                        if (from === -1 || to < 0 || to >= ids.length) return;
+                        board.reorderColumns(arrayMove(ids, from, to));
+                      },
+                    }}
+                    visualConfig={cardVisualConfig}
+                    selectedCardIds={selectedCardIds}
+                    onToggleSelect={toggleCardSelection}
+                    onSelectRange={(ids) => setSelectedCardIds((prev) => new Set([...prev, ...ids]))}
+                    onClearSelection={() => setSelectedCardIds(new Set())}
+                    bulk={{
+                      onSetColor: board.bulkSetColor,
+                      onSetStatus: board.bulkSetStatus,
+                      onToggleLabel: board.bulkToggleLabel,
+                      onDelete: () => setBulkDeleteConfirm(true), // a confirmação "Excluir N cards?" do quadro
                     }}
                     columnBackgrounds={board.viewPrefs.columnBackgrounds ?? {}}
                     columnOpacities={board.viewPrefs.columnBackgroundOpacity ?? {}}
@@ -1235,5 +1488,47 @@ export default function KanbanBoard({ kanban }: KanbanBoardProps) {
         </GroupLayoutContext.Provider>
       </LabelIconContext.Provider>
     </CardMoveContext.Provider>
+  );
+}
+
+/* ---------- peças do cabeçalho do quadro ---------- */
+function HeaderGroup({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <div style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+      <span className="text-neutral-400 dark:text-neutral-500" style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.4, marginRight: 2 }}>{label}</span>
+      {children}
+    </div>
+  );
+}
+
+function HeaderSep() {
+  return <span className="bg-neutral-200 dark:bg-neutral-600" style={{ width: 1, alignSelf: 'stretch', margin: '2px 6px' }} />;
+}
+
+function HeaderBtn({ children, onClick, title, active, activeTone }: {
+  children: ReactNode; onClick: () => void; title?: string; active?: boolean; activeTone?: 'green';
+}) {
+  const cls = active
+    ? (activeTone === 'green'
+      ? 'bg-green-50 dark:bg-green-950 text-green-700 dark:text-green-300 border-green-300 dark:border-green-700'
+      : 'bg-blue-50 dark:bg-blue-950 text-blue-700 dark:text-blue-300 border-blue-300 dark:border-blue-700')
+    : 'bg-transparent text-neutral-700 dark:text-neutral-200 border-neutral-200 dark:border-neutral-600 hover:bg-neutral-100 dark:hover:bg-neutral-700';
+  return (
+    <button type="button" onClick={onClick} title={title} className={`border ${cls}`} style={{ cursor: 'pointer', fontSize: 12, fontWeight: 500, padding: '4px 9px', borderRadius: 6, whiteSpace: 'nowrap' }}>
+      {children}
+    </button>
+  );
+}
+
+function MenuItem({ children, onClick }: { children: ReactNode; onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="text-neutral-800 dark:text-neutral-100 hover:bg-neutral-100 dark:hover:bg-neutral-700"
+      style={{ display: 'block', width: '100%', textAlign: 'left', border: 'none', background: 'none', cursor: 'pointer', fontSize: 13, padding: '6px 10px', borderRadius: 6 }}
+    >
+      {children}
+    </button>
   );
 }

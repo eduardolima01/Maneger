@@ -43,6 +43,12 @@ export function useFlashcards(deckId: string) {
     await reload();
   }, [reload]);
 
+  const importCards = useCallback(async (items: api.ImportCardItem[]) => {
+    const result = await api.importCards(deckId, items);
+    await reload();
+    return result;
+  }, [deckId, reload]);
+
   const reorderLocally = useCallback((orderedIds: string[]) => {
     setCards((prev) => {
       const map = new Map(prev.map((c) => [c.id, c]));
@@ -59,5 +65,5 @@ export function useFlashcards(deckId: string) {
     }
   }, [deckId, reorderLocally, reload]);
 
-  return { cards, loading, error, reload, create, update, remove, duplicate, reorder };
+  return { cards, loading, error, reload, create, update, remove, duplicate, reorder, importCards };
 }

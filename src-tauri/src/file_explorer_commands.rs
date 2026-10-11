@@ -32,6 +32,23 @@ fn get_home_dir() -> Result<PathBuf, String> {
     Ok(PathBuf::from(home))
 }
 
+/// No Windows, `fs::canonicalize` devolve caminhos "verbatim" (`\\?\C:\Users\...`), que
+/// quebram breadcrumb, comparação com a Home, `convertFileSrc` e os escopos `$HOME/**`.
+/// Tira o prefixo (e converte `\\?\UNC\srv\share` em `\\srv\share`). Em Unix é no-op.
+fn strip_verbatim_str(s: &str) -> String {
+    if let Some(rest) = s.strip_prefix(r"\\?\UNC\") {
+        return format!(r"\\{}", rest);
+    }
+    if let Some(rest) = s.strip_prefix(r"\\?\") {
+        return rest.to_string();
+    }
+    s.to_string()
+}
+
+fn strip_verbatim_prefix(path: PathBuf) -> PathBuf {
+    PathBuf::from(strip_verbatim_str(&path.to_string_lossy()))
+}
+
 /// Único ponto de checagem de escopo: todo comando que recebe um path do front
 /// passa por aqui antes de tocar no disco. Escopo = Home do usuário e subpastas
 /// (decisão explícita do usuário, por segurança — ver README do módulo).
@@ -41,10 +58,11 @@ fn ensure_within_home(path: &str) -> Result<PathBuf, String> {
     let canonical_home = fs::canonicalize(&home).map_err(|e| e.to_string())?;
     let canonical_target =
         fs::canonicalize(path).map_err(|e| format!("Caminho inválido: {}", e))?;
+    // comparação sempre entre as duas formas canônicas; só o resultado devolvido perde o prefixo
     if !canonical_target.starts_with(&canonical_home) {
         return Err("Acesso negado: fora da pasta do usuário.".to_string());
     }
-    Ok(canonical_target)
+    Ok(strip_verbatim_prefix(canonical_target))
 }
 
 fn system_time_to_iso(t: std::time::SystemTime) -> Option<String> {
@@ -157,6 +175,98 @@ pub fn delete_to_trash(path: String) -> Result<(), String> {
     trash::delete(&target).map_err(|e| e.to_string())
 }
 
+/// Preferências de interface do Explorador (hoje: tamanho dos ícones): JSON global na raiz do app.
+/// Mesmo padrão dos grupos: grava num .tmp e renomeia por cima.
+#[tauri::command]
+pub fn load_explorer_ui_prefs() -> Result<String, String> {
+    let dir = std::env::current_dir().map_err(|e| e.to_string())?;
+    let path = dir.join("explorer-ui-prefs.json");
+    if !path.exists() {
+        return Ok("{}".to_string());
+    }
+    fs::read_to_string(&path).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn save_explorer_ui_prefs(data: String) -> Result<(), String> {
+    let dir = std::env::current_dir().map_err(|e| e.to_string())?;
+    let path = dir.join("explorer-ui-prefs.json");
+    let tmp = dir.join("explorer-ui-prefs.json.tmp");
+    fs::write(&tmp, data).map_err(|e| e.to_string())?;
+    fs::rename(&tmp, &path).map_err(|e| e.to_string())
+}
+
+/// Grupos de pastas da sidebar do Explorador: JSON global na raiz do app, igual aos outros prefs.
+/// Grava num .tmp e renomeia por cima, pra um crash no meio da escrita não deixar o arquivo truncado.
+#[tauri::command]
+pub fn load_folder_groups() -> Result<String, String> {
+    let dir = std::env::current_dir().map_err(|e| e.to_string())?;
+    let path = dir.join("explorer-groups.json");
+    if !path.exists() {
+        return Ok("{}".to_string());
+    }
+    fs::read_to_string(&path).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn save_folder_groups(data: String) -> Result<(), String> {
+    let dir = std::env::current_dir().map_err(|e| e.to_string())?;
+    let path = dir.join("explorer-groups.json");
+    let tmp = dir.join("explorer-groups.json.tmp");
+    fs::write(&tmp, data).map_err(|e| e.to_string())?;
+    fs::rename(&tmp, &path).map_err(|e| e.to_string())
+}
+
+/// Caminho de um PNG pequeno usado como ícone de pré-visualização quando o usuário arrasta arquivos
+/// pra fora do app (plugin `tauri-plugin-drag` exige um arquivo de imagem). O PNG vem embutido no
+/// binário e é gravado uma vez na pasta temporária.
+#[tauri::command]
+pub fn get_drag_icon_path() -> Result<String, String> {
+    const ICON: &[u8] = include_bytes!("../icons/32x32.png");
+    let path = std::env::temp_dir().join("manager-drag-icon.png");
+    let up_to_date = fs::metadata(&path)
+        .map(|m| m.len() == ICON.len() as u64)
+        .unwrap_or(false);
+    if !up_to_date {
+        fs::write(&path, ICON).map_err(|e| e.to_string())?;
+    }
+    Ok(path.to_string_lossy().to_string())
+}
+
+/// Exclusão PERMANENTE (não passa pela lixeira). Mesma checagem de escopo dos demais comandos,
+/// mais duas travas: nunca apaga a própria Home e, se o item for um link simbólico, remove só o
+/// link (nunca o conteúdo pra onde ele aponta — `canonicalize` seguiria o link).
+#[tauri::command]
+pub fn delete_permanently(path: String) -> Result<(), String> {
+    let raw = PathBuf::from(&path);
+    let is_link = fs::symlink_metadata(&raw)
+        .map(|m| m.file_type().is_symlink())
+        .unwrap_or(false);
+    if is_link {
+        let parent = raw
+            .parent()
+            .ok_or_else(|| "Caminho inválido.".to_string())?;
+        ensure_within_home(&parent.to_string_lossy())?;
+        // link pra arquivo: remove_file; link pra pasta no Windows: remove_dir
+        return fs::remove_file(&raw)
+            .or_else(|_| fs::remove_dir(&raw))
+            .map_err(|e| e.to_string());
+    }
+
+    let target = ensure_within_home(&path)?;
+    let home = strip_verbatim_prefix(
+        fs::canonicalize(get_home_dir()?).map_err(|e| e.to_string())?,
+    );
+    if target == home {
+        return Err("Não é possível excluir a pasta do usuário.".to_string());
+    }
+    if target.is_dir() {
+        fs::remove_dir_all(&target).map_err(|e| e.to_string())
+    } else {
+        fs::remove_file(&target).map_err(|e| e.to_string())
+    }
+}
+
 fn copy_recursive(from: &Path, to: &Path) -> Result<(), String> {
     if from.is_dir() {
         fs::create_dir_all(to).map_err(|e| e.to_string())?;
@@ -216,6 +326,30 @@ pub fn move_path(source_path: String, dest_dir_path: String) -> Result<FsEntry, 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn strip_verbatim_handles_all_forms() {
+        assert_eq!(strip_verbatim_str(r"\\?\C:\Users\x\Docs"), r"C:\Users\x\Docs");
+        assert_eq!(strip_verbatim_str(r"\\?\UNC\srv\share\a"), r"\\srv\share\a");
+        assert_eq!(strip_verbatim_str(r"C:\Users\x"), r"C:\Users\x");
+        assert_eq!(strip_verbatim_str("/home/x/docs"), "/home/x/docs");
+    }
+
+    #[test]
+    fn delete_permanently_removes_and_protects_home() {
+        let home = get_home_dir().unwrap();
+        let base = home.join("fx_test_delperm");
+        let _ = fs::remove_dir_all(&base);
+        fs::create_dir_all(base.join("sub")).unwrap();
+        fs::write(base.join("sub/a.txt"), b"x").unwrap();
+
+        delete_permanently(base.join("sub").to_string_lossy().to_string()).unwrap();
+        assert!(!base.join("sub").exists());
+        assert!(delete_permanently(home.to_string_lossy().to_string()).is_err());
+        assert!(delete_permanently("/etc/hostname".to_string()).is_err());
+
+        fs::remove_dir_all(&base).unwrap();
+    }
 
     #[test]
     fn home_scoping_blocks_outside_paths() {
@@ -376,7 +510,12 @@ fn load_folder_icons_manifest(app: &AppHandle) -> Result<HashMap<String, String>
     if content.trim().is_empty() {
         return Ok(HashMap::new());
     }
-    serde_json::from_str(&content).map_err(|e| e.to_string())
+    let raw: HashMap<String, String> = serde_json::from_str(&content).map_err(|e| e.to_string())?;
+    // chaves salvas antes da correção do prefixo `\\?\` passam a casar com os paths atuais
+    Ok(raw
+        .into_iter()
+        .map(|(k, v)| (strip_verbatim_str(&k), v))
+        .collect())
 }
 
 fn save_folder_icons_manifest(

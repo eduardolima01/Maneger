@@ -352,6 +352,49 @@ function DraggableMonthChip({
   );
 }
 
+/** Coluna de um dia na visão de semana — alvo onde soltar um card pra mudar a data dele (id = a data 'YYYY-MM-DD'). */
+function DroppableWeekDay({ id, isToday, children }: { id: string; isToday: boolean; children: React.ReactNode }) {
+  const { setNodeRef, isOver } = useDroppable({ id });
+  return (
+    <div
+      ref={setNodeRef}
+      className={[
+        isOver ? 'bg-blue-50 dark:bg-blue-950' : 'bg-white dark:bg-neutral-800',
+        'outline',
+        isToday
+          ? 'outline-2 outline-blue-600 dark:outline-blue-400'
+          : (isOver ? 'outline-2 outline-dashed outline-blue-600 dark:outline-blue-400' : 'outline-1 outline-neutral-200 dark:outline-neutral-700'),
+      ].join(' ')}
+      style={{ borderRadius: 8, padding: 8, minHeight: 200, minWidth: 0, outlineOffset: -2 }}
+    >
+      {children}
+    </div>
+  );
+}
+
+/** Deixa o card detalhado da visão de semana arrastável pra outro dia. Ocorrência virtual de plano não arrasta (só clica). */
+function DraggableDetail({ card, children }: { card: KanbanCard; children: React.ReactNode }) {
+  const virtual = isVirtualCard(card);
+  const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({ id: card.id, disabled: virtual });
+  return (
+    <div
+      ref={setNodeRef}
+      {...(virtual ? {} : attributes)}
+      {...(virtual ? {} : listeners)}
+      style={{
+        transform: CSS.Translate.toString(transform),
+        position: transform ? 'relative' : undefined,
+        zIndex: isDragging ? 50 : undefined,
+        opacity: isDragging ? 0.45 : 1,
+        cursor: virtual ? undefined : 'grab',
+        touchAction: virtual ? undefined : 'none',
+      }}
+    >
+      {children}
+    </div>
+  );
+}
+
 /** Linha de detalhe usada nas visões de semana e dia — bem mais informação que o chip compacto do mês. */
 function CardDetailCard({
   card, column, groupCoverPath, checklistProgress, isVirtual, onClick,
@@ -776,49 +819,43 @@ export default function KanbanCalendarView({
       )}
 
       {granularity === 'week' && (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, minmax(0, 1fr))', gap: 8 }}>
-          {weekDays.map((d) => {
-            const key = dateKeyFromDate(d);
-            const dayCards = cardsByDate.get(key) ?? [];
-            const isToday = key === todayKey;
-            return (
-              <div
-                key={key}
-                className={[
-                  'bg-white dark:bg-neutral-800 outline',
-                  isToday
-                    ? 'outline-2 outline-blue-600 dark:outline-blue-400'
-                    : 'outline-1 outline-neutral-200 dark:outline-neutral-700',
-                ].join(' ')}
-                style={{ borderRadius: 8, padding: 8, minHeight: 200, minWidth: 0, outlineOffset: -2 }}
-              >
-                <div
-                  className={isToday ? 'text-blue-600 dark:text-blue-400' : 'text-neutral-500 dark:text-neutral-400'}
-                  style={{ fontSize: 11, fontWeight: 600, marginBottom: 6, textAlign: 'center' }}
-                >
-                  {WEEKDAY_LABELS[d.getDay()]} {d.getDate()}
-                </div>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                  {dayCards.map((card) => {
-                    const columnId = resolveColumnId(card, groups);
-                    const column = columnId ? columnById.get(columnId) : undefined;
-                    return (
-                      <CardDetailCard
-                        key={card.id}
-                        card={card}
-                        column={column}
-                        groupCoverPath={resolveGroupCoverPath(card, groups)}
-                        checklistProgress={checklistProgress?.[card.id]}
-                        isVirtual={isVirtualCard(card)}
-                        onClick={() => handleCardClick(card)}
-                      />
-                    );
-                  })}
-                </div>
-              </div>
-            );
-          })}
-        </div>
+        <DndContext sensors={sensors} onDragEnd={handleCalendarDragEnd}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, minmax(0, 1fr))', gap: 8 }}>
+            {weekDays.map((d) => {
+              const key = dateKeyFromDate(d);
+              const dayCards = cardsByDate.get(key) ?? [];
+              const isToday = key === todayKey;
+              return (
+                <DroppableWeekDay key={key} id={key} isToday={isToday}>
+                  <div
+                    className={isToday ? 'text-blue-600 dark:text-blue-400' : 'text-neutral-500 dark:text-neutral-400'}
+                    style={{ fontSize: 11, fontWeight: 600, marginBottom: 6, textAlign: 'center' }}
+                  >
+                    {WEEKDAY_LABELS[d.getDay()]} {d.getDate()}
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                    {dayCards.map((card) => {
+                      const columnId = resolveColumnId(card, groups);
+                      const column = columnId ? columnById.get(columnId) : undefined;
+                      return (
+                        <DraggableDetail key={card.id} card={card}>
+                          <CardDetailCard
+                            card={card}
+                            column={column}
+                            groupCoverPath={resolveGroupCoverPath(card, groups)}
+                            checklistProgress={checklistProgress?.[card.id]}
+                            isVirtual={isVirtualCard(card)}
+                            onClick={() => handleCardClick(card)}
+                          />
+                        </DraggableDetail>
+                      );
+                    })}
+                  </div>
+                </DroppableWeekDay>
+              );
+            })}
+          </div>
+        </DndContext>
       )}
 
       {granularity === 'day' && (() => {

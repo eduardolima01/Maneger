@@ -10,9 +10,15 @@ interface ExplorerThumbnailProps {
   entry: FsEntry;
   /** Tamanho do quadrado da thumbnail em px (fallback de emoji usa ~60% disso como fontSize). */
   size?: number;
+  /**
+   * Path absoluto (no disco, fora da pasta do usuário) de um ícone customizado pra essa pasta,
+   * vindo de `folderIcons[entry.path]` no Store. Só faz sentido pra `entry.isDir`; ignorado
+   * pra arquivos (que já têm preview real de imagem/vídeo/áudio via `kind`).
+   */
+  customIconPath?: string;
 }
 
-export default function ExplorerThumbnail({ entry, size = 64 }: ExplorerThumbnailProps) {
+export default function ExplorerThumbnail({ entry, size = 64, customIconPath }: ExplorerThumbnailProps) {
   const kind = getMediaKind(entry);
   const [playing, setPlaying] = useState(false);
   const [started, setStarted] = useState(false); // já deu play alguma vez -> barra fica visível mesmo pausado
@@ -31,6 +37,18 @@ export default function ExplorerThumbnail({ entry, size = 64 }: ExplorerThumbnai
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  if (entry.isDir && customIconPath) {
+    return (
+      <img
+        src={convertFileSrc(customIconPath)}
+        alt={entry.name}
+        loading="lazy"
+        className="rounded-md object-cover"
+        style={{ width: size, height: size }}
+      />
+    );
+  }
 
   if (!kind) {
     return <span style={{ fontSize: Math.round(size * 0.6), lineHeight: 1 }}>{getFileIcon(entry)}</span>;
@@ -52,7 +70,7 @@ export default function ExplorerThumbnail({ entry, size = 64 }: ExplorerThumbnai
     const el = getEl();
     if (!el) return;
     if (playing) el.pause();
-    else el.play().catch(() => {});
+    else el.play().catch(() => { });
   };
 
   const handleSeek = (e: ChangeEvent<HTMLInputElement>) => {
@@ -68,7 +86,8 @@ export default function ExplorerThumbnail({ entry, size = 64 }: ExplorerThumbnai
         src={src}
         alt={entry.name}
         loading="lazy"
-        style={{ width: size, height: size, objectFit: 'cover', borderRadius: 6 }}
+        className="rounded-md object-cover"
+        style={{ width: size, height: size }}
       />
     );
   }
@@ -76,17 +95,15 @@ export default function ExplorerThumbnail({ entry, size = 64 }: ExplorerThumbnai
   // vídeo ou áudio: preview + ícone de play flutuante + barra de progresso (aparece após o 1º play)
   return (
     <div
-      style={{
-        position: 'relative', width: size, height: size, borderRadius: 6, overflow: 'hidden',
-        background: '#e8e8e8', display: 'flex', alignItems: 'center', justifyContent: 'center',
-      }}
+      className="relative flex items-center justify-center overflow-hidden rounded-md bg-zinc-200 dark:bg-zinc-700"
+      style={{ width: size, height: size }}
     >
       {kind === 'video' ? (
         <video
           ref={videoRef}
           src={src}
           preload="metadata"
-          style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+          className="h-full w-full object-cover"
           onPlay={handlePlay}
           onPause={handlePause}
           onEnded={handlePause}
@@ -111,12 +128,7 @@ export default function ExplorerThumbnail({ entry, size = 64 }: ExplorerThumbnai
       <button
         onClick={togglePlay}
         title={playing ? 'Pausar' : 'Reproduzir'}
-        style={{
-          position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)',
-          width: 28, height: 28, borderRadius: '50%', border: 'none',
-          background: 'rgba(0,0,0,0.55)', color: '#fff', cursor: 'pointer',
-          display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1,
-        }}
+        className="absolute left-1/2 top-1/2 z-[1] flex h-7 w-7 -translate-x-1/2 -translate-y-1/2 cursor-pointer items-center justify-center rounded-full border-none bg-black/[0.55] text-white"
       >
         {playing ? <MdPause size={16} /> : <MdPlayArrow size={16} />}
       </button>
@@ -132,10 +144,7 @@ export default function ExplorerThumbnail({ entry, size = 64 }: ExplorerThumbnai
           onClick={(e) => e.stopPropagation()}
           onDoubleClick={(e) => e.stopPropagation()}
           title="Navegar na linha do tempo"
-          style={{
-            position: 'absolute', bottom: 2, left: 2, right: 2, width: 'calc(100% - 4px)',
-            height: 4, margin: 0, cursor: 'pointer', accentColor: '#1a73e8', zIndex: 1,
-          }}
+          className="absolute bottom-0.5 left-0.5 right-0.5 z-[1] m-0 h-1 w-[calc(100%-4px)] cursor-pointer accent-blue-600 dark:accent-blue-400"
         />
       )}
     </div>

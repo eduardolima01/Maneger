@@ -43,17 +43,23 @@ export interface Flashcard {
   createdAt: string;
   updatedAt: string;
   srs?: FlashcardSrsState;
+  /** Imagem de referência opcional, guardada como data URL (base64) dentro do próprio
+   * blob JSON — sem endpoint/arquivo separado, pra não sair do padrão de persistência
+   * do módulo. Redimensionada/comprimida no cliente antes de salvar (ver utils/imageResize.ts). */
+  imageUrl?: string | null;
 }
 
 export interface CreateFlashcardInput {
   deckId: string;
   front: string;
   back: string;
+  imageUrl?: string | null;
 }
 
 export type UpdateFlashcardInput = Partial<{
   front: string;
   back: string;
+  imageUrl: string | null;
 }>;
 
 /** Resultado de uma revisão no modo de estudo: Errei / Difícil / Fácil. */

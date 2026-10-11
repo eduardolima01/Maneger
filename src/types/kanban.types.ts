@@ -268,11 +268,18 @@ export const CARD_FIELD_LABELS: Record<CardFieldKey, string> = {
   files: 'Arquivos',
 };
 
+/**
+ * A ORDEM deste array é a ordem em que os campos aparecem (dentro de cada aba). O padrão abaixo reproduz a ordem em que o
+ * modal sempre desenhou os campos, então quem nunca mexeu na ordem não vê diferença.
+ */
 export function defaultCardFieldConfig(): CardFieldConfig[] {
   return [
+    { key: 'convertToPlan', tab: 'details', visible: true },
     { key: 'description', tab: 'details', visible: true },
+    { key: 'notes', tab: 'details', visible: true },
     { key: 'subKanban', tab: 'details', visible: true },
     { key: 'checklist', tab: 'details', visible: true },
+    { key: 'files', tab: 'details', visible: true },
     { key: 'startDate', tab: 'details', visible: true },
     { key: 'dueDate', tab: 'details', visible: true },
     { key: 'cover', tab: 'properties', visible: true },
@@ -281,10 +288,38 @@ export function defaultCardFieldConfig(): CardFieldConfig[] {
     { key: 'color', tab: 'properties', visible: true },
     { key: 'labels', tab: 'properties', visible: true },
     { key: 'schedules', tab: 'details', visible: true },
-    { key: 'notes', tab: 'details', visible: true },
-    { key: 'convertToPlan', tab: 'details', visible: true },
-    { key: 'files', tab: 'details', visible: true },
   ];
+}
+
+/** Ordem em que o array era salvo ANTES de a ordem passar a valer (naquela época ela não afetava nada na tela). */
+const LEGACY_CARD_FIELD_ORDER: string[] = [
+  'description', 'subKanban', 'checklist', 'startDate', 'dueDate', 'cover', 'priority', 'status', 'color', 'labels',
+  'schedules', 'notes', 'convertToPlan', 'files',
+];
+const LEGACY_CARD_VISUAL_ORDER: string[] = [
+  'cover', 'description', 'labels', 'dueDate', 'status', 'priority', 'schedules', 'notes',
+  'checklist', 'timer', 'subKanbanBadge', 'planBadge', 'filesButton', 'expandToggle',
+];
+
+/**
+ * Junta a config salva com o padrão PRESERVANDO a ordem salva (a ordem do array é a ordem de exibição). Chaves novas que
+ * a config salva não tem entram no fim. Se a ordem salva é a antiga (de quando a ordem não valia pra nada), usa a ordem
+ * padrão nova — assim ninguém vê o layout mudar sozinho —, mantendo os valores (visível/aba) já configurados.
+ */
+function mergeKeepingOrder<T extends { key: string }>(config: T[] | undefined, base: T[], legacyOrder: string[]): T[] {
+  if (!config) return base;
+  const known = new Set(base.map((b) => b.key));
+  const seen = new Set<string>();
+  const saved: T[] = [];
+  for (const c of config) {
+    if (!known.has(c.key) || seen.has(c.key)) continue;
+    seen.add(c.key);
+    saved.push(c);
+  }
+  const legacyFiltered = legacyOrder.filter((k) => seen.has(k));
+  const isLegacy = saved.length === legacyFiltered.length && saved.every((c, i) => c.key === legacyFiltered[i]);
+  if (isLegacy) return base.map((def) => saved.find((c) => c.key === def.key) ?? def);
+  return [...saved, ...base.filter((def) => !seen.has(def.key))];
 }
 
 /**
@@ -293,9 +328,7 @@ export function defaultCardFieldConfig(): CardFieldConfig[] {
  * chave nova — usa o padrão pra preencher o que faltar, sem apagar o que o usuário já configurou.
  */
 export function mergeCardFieldConfig(config: CardFieldConfig[] | undefined): CardFieldConfig[] {
-  const base = defaultCardFieldConfig();
-  if (!config) return base;
-  return base.map((def) => config.find((c) => c.key === def.key) ?? def);
+  return mergeKeepingOrder(config, defaultCardFieldConfig(), LEGACY_CARD_FIELD_ORDER);
 }
 
 /**
@@ -305,7 +338,7 @@ export function mergeCardFieldConfig(config: CardFieldConfig[] | undefined): Car
  */
 export type CardVisualFieldKey =
   | 'cover' | 'description' | 'labels' | 'dueDate' | 'status' | 'priority' | 'schedules' | 'notes'
-  | 'checklist' | 'timer' | 'subKanbanBadge' | 'planBadge' | 'filesButton' | 'expandToggle';
+  | 'checklist' | 'timer' | 'subKanbanBadge' | 'planBadge' | 'filesButton' | 'expandToggle' | 'updatedAt';
 
 export interface CardVisualFieldConfig {
   key: CardVisualFieldKey;
@@ -327,32 +360,37 @@ export const CARD_VISUAL_FIELD_LABELS: Record<CardVisualFieldKey, string> = {
   planBadge: 'Selo de plano',
   filesButton: 'Botão de abrir arquivos',
   expandToggle: 'Botão de expandir detalhes no card',
+  updatedAt: 'Data de modificação',
 };
 
+/**
+ * A ORDEM deste array é a ordem de exibição: os blocos do card (capa, descrição, linha de status/etiquetas/prazo, checklist,
+ * expandir) na ordem em que aparecem; os selos do título e os itens da linha de status/etiquetas/prazo entre si. A linha de
+ * status/etiquetas/prazo fica na posição do primeiro desses itens. Notas e o total do cronômetro flutuam nos cantos.
+ */
 export function defaultCardVisualConfig(): CardVisualFieldConfig[] {
   return [
     { key: 'cover', visible: true },
+    { key: 'subKanbanBadge', visible: true },
+    { key: 'filesButton', visible: true },
+    { key: 'planBadge', visible: true },
+    { key: 'priority', visible: true },
     { key: 'description', visible: true },
+    { key: 'status', visible: true },
     { key: 'labels', visible: true },
     { key: 'dueDate', visible: true },
-    { key: 'status', visible: true },
-    { key: 'priority', visible: true },
     { key: 'schedules', visible: true },
-    { key: 'notes', visible: true },
-    { key: 'checklist', visible: true },
     { key: 'timer', visible: true },
-    { key: 'subKanbanBadge', visible: true },
-    { key: 'planBadge', visible: true },
-    { key: 'filesButton', visible: true },
+    { key: 'updatedAt', visible: true },
+    { key: 'checklist', visible: true },
     { key: 'expandToggle', visible: true },
+    { key: 'notes', visible: true },
   ];
 }
 
 /** Mesmo padrão de mergeCardFieldConfig: preenche com default o que faltar, sem apagar o que o usuário já configurou. */
 export function mergeCardVisualConfig(config: CardVisualFieldConfig[] | undefined): CardVisualFieldConfig[] {
-  const base = defaultCardVisualConfig();
-  if (!config) return base;
-  return base.map((def) => config.find((c) => c.key === def.key) ?? def);
+  return mergeKeepingOrder(config, defaultCardVisualConfig(), LEGACY_CARD_VISUAL_ORDER);
 }
 
 export interface KanbanFilters {

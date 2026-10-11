@@ -1,4 +1,4 @@
-import { useState, type CSSProperties } from 'react';
+import { useState } from 'react';
 import { MdArrowBack, MdArrowForward, MdArrowUpward, MdSearch, MdMoreVert, MdRefresh, MdGridView, MdViewList, MdViewColumn } from 'react-icons/md';
 import Tooltip from '@/components/ui/Tooltip';
 import ContextMenu, { type ContextMenuItem } from '@/components/ui/ContextMenu';
@@ -33,38 +33,34 @@ export default function ExplorerToolbar({ store }: ExplorerToolbarProps) {
     },
   ];
 
-  function viewBtnStyle(active: boolean): CSSProperties {
-    return {
-      border: 'none',
-      cursor: 'pointer',
-      padding: 6,
-      borderRadius: 6,
-      display: 'flex',
-      alignItems: 'center',
-      background: active ? '#e8f0fe' : 'transparent',
-      color: active ? '#1a73e8' : '#333',
-    };
+  // Tema claro/escuro por classes Tailwind (`dark:` exige a classe `dark` num ancestral)
+  function viewBtnClass(active: boolean): string {
+    return `flex cursor-pointer items-center rounded-md border-none p-1.5 ${
+      active
+        ? 'bg-blue-100 text-blue-600 dark:bg-blue-500/25 dark:text-blue-300'
+        : 'bg-transparent text-zinc-700 hover:bg-zinc-100 dark:text-zinc-200 dark:hover:bg-zinc-800'
+    }`;
   }
 
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 12px', borderBottom: '1px solid #e0e0e0' }}>
+    <div className="flex items-center gap-1.5 border-b border-zinc-200 px-3 py-2 dark:border-zinc-700">
       <Tooltip content="Voltar" side="bottom">
-        <button onClick={goBack} disabled={!canGoBack} style={iconBtnStyle(canGoBack)}>
+        <button onClick={goBack} disabled={!canGoBack} className={iconBtnClass(canGoBack)}>
           <MdArrowBack size={18} />
         </button>
       </Tooltip>
       <Tooltip content="Avançar" side="bottom">
-        <button onClick={goForward} disabled={!canGoForward} style={iconBtnStyle(canGoForward)}>
+        <button onClick={goForward} disabled={!canGoForward} className={iconBtnClass(canGoForward)}>
           <MdArrowForward size={18} />
         </button>
       </Tooltip>
       <Tooltip content="Pasta pai" side="bottom">
-        <button onClick={goUp} disabled={!canGoUp} style={iconBtnStyle(canGoUp)}>
+        <button onClick={goUp} disabled={!canGoUp} className={iconBtnClass(canGoUp)}>
           <MdArrowUpward size={18} />
         </button>
       </Tooltip>
       <Tooltip content="Atualizar" side="bottom">
-        <button onClick={refresh} style={iconBtnStyle(true)}>
+        <button onClick={refresh} className={iconBtnClass(true)}>
           <MdRefresh size={18} />
         </button>
       </Tooltip>
@@ -77,32 +73,32 @@ export default function ExplorerToolbar({ store }: ExplorerToolbarProps) {
         value={previewSize}
         onChange={(e) => setPreviewSize(Number(e.target.value))}
         title="Tamanho do preview"
-        style={{ width: 80, cursor: 'pointer' }}
+        className="w-20 cursor-pointer accent-blue-600 dark:accent-blue-400"
       />
 
-      <button onClick={(e) => setMenuAnchor({ x: e.clientX, y: e.clientY })} style={iconBtnStyle(true)}>
+      <button onClick={(e) => setMenuAnchor({ x: e.clientX, y: e.clientY })} className={iconBtnClass(true)}>
         <MdMoreVert size={18} />
       </button>
 
       <Tooltip content="Atualizar" side="bottom">
-        <button onClick={refresh} style={iconBtnStyle(true)}>
+        <button onClick={refresh} className={iconBtnClass(true)}>
           <MdRefresh size={18} />
         </button>
       </Tooltip>
 
-      <div style={{ display: 'flex', gap: 2, marginLeft: 4, borderLeft: '1px solid #e0e0e0', paddingLeft: 6 }}>
+      <div className="ml-1 flex gap-0.5 border-l border-zinc-200 pl-1.5 dark:border-zinc-700">
         <Tooltip content="Ícones" side="bottom">
-          <button onClick={() => setViewMode('icons')} style={viewBtnStyle(viewMode === 'icons')}>
+          <button onClick={() => setViewMode('icons')} className={viewBtnClass(viewMode === 'icons')}>
             <MdGridView size={16} />
           </button>
         </Tooltip>
         <Tooltip content="Lista" side="bottom">
-          <button onClick={() => setViewMode('list')} style={viewBtnStyle(viewMode === 'list')}>
+          <button onClick={() => setViewMode('list')} className={viewBtnClass(viewMode === 'list')}>
             <MdViewList size={16} />
           </button>
         </Tooltip>
         <Tooltip content="Colunas" side="bottom">
-          <button onClick={() => setViewMode('columns')} style={viewBtnStyle(viewMode === 'columns')}>
+          <button onClick={() => setViewMode('columns')} className={viewBtnClass(viewMode === 'columns')}>
             <MdViewColumn size={16} />
           </button>
         </Tooltip>
@@ -116,13 +112,13 @@ export default function ExplorerToolbar({ store }: ExplorerToolbarProps) {
           onClose={() => setMenuAnchor(null)}
         />
       )}
-      <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 6, background: '#f2f2f2', borderRadius: 6, padding: '6px 10px', marginLeft: 8 }}>
-        <MdSearch size={16} color="#999" />
+      <div className="ml-2 flex flex-1 items-center gap-1.5 rounded-md bg-zinc-100 px-2.5 py-1.5 dark:bg-zinc-800">
+        <MdSearch size={16} className="text-zinc-400" />
         <input
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           placeholder="Pesquisar nesta pasta"
-          style={{ border: 'none', outline: 'none', background: 'transparent', fontSize: 13, flex: 1 }}
+          className="flex-1 border-none bg-transparent text-[13px] text-zinc-900 outline-none placeholder:text-zinc-400 dark:text-zinc-100"
         />
       </div>
 
@@ -130,16 +126,8 @@ export default function ExplorerToolbar({ store }: ExplorerToolbarProps) {
   );
 }
 
-function iconBtnStyle(enabled: boolean): CSSProperties {
-  return {
-    border: 'none',
-    background: 'none',
-    cursor: enabled ? 'pointer' : 'default',
-    opacity: enabled ? 1 : 0.35,
-    padding: 6,
-    borderRadius: 6,
-    display: 'flex',
-    alignItems: 'center',
-    color: '#333',
-  };
+function iconBtnClass(enabled: boolean): string {
+  return `flex items-center rounded-md border-none bg-transparent p-1.5 text-zinc-700 dark:text-zinc-200 ${
+    enabled ? 'cursor-pointer hover:bg-zinc-100 dark:hover:bg-zinc-800' : 'cursor-default opacity-[0.35]'
+  }`;
 }

@@ -27,8 +27,20 @@ export interface CardActionsHandlers {
   onRequestDelete: (cardId: string, title: string) => void;
 }
 
+/** Ações em LOTE (vários cards selecionados). O quadro liga cada uma na mesma função que já usa na seleção múltipla. */
+export interface BulkCardActions {
+  onSetColor: (ids: string[], color: string | null) => void;
+  onSetStatus: (ids: string[], status: TaskStatus | null) => void;
+  onToggleLabel: (ids: string[], name: string, color: string, isGroup: boolean) => void;
+  /** Pede a exclusão dos cards selecionados (o quadro abre a confirmação "Excluir N cards?"). */
+  onDelete: () => void;
+}
+
 interface CardActionsMenuProps extends CardActionsHandlers {
   card: KanbanCard;
+  /** Cards selecionados + ações em lote. Com 2+ cards selecionados e ESTE entre eles, o menu age em todos (como no quadro). */
+  bulkIds?: string[];
+  bulkActions?: BulkCardActions;
 }
 
 type SubMenuKind = 'label' | 'due' | 'color' | 'status' | 'move' | 'duplicate' | 'timer';
@@ -58,8 +70,10 @@ function daysAgoLabel(dateStr: string): string {
  */
 export default function CardActionsMenu({
   card, allLabels, projectId, onUpdateLabels, onUpdateDueDate, onUpdateColor, onUpdateStatus,
-  onDuplicate, onDuplicateMultiple, onRequestDelete,
+  onDuplicate, onDuplicateMultiple, onRequestDelete, bulkIds, bulkActions,
 }: CardActionsMenuProps) {
+  const isBulk = !!bulkActions && !!bulkIds && bulkIds.length > 1 && bulkIds.includes(card.id);
+  const targetIds = isBulk ? bulkIds! : [card.id];
   const cardMove = useCardMove(); // null fora do KanbanBoard — "Mover para…" fica desabilitado
   const [menu, setMenu] = useState<Pos | null>(null);
   const [sub, setSub] = useState<{ kind: SubMenuKind } & Pos | null>(null);
@@ -117,6 +131,56 @@ export default function CardActionsMenu({
 
   const hoverHandlers = { onMouseEnter: cancelClose, onMouseLeave: scheduleClose };
 
+  type MenuItem = { label: string; onClick: () => void; disabled?: boolean; danger?: boolean; onHoverStart?: (rect: DOMRect) => void };
+
+  // Menu de LOTE (card dentro de uma seleção de 2+): só o que faz sentido pra vários — etiquetas, cor, status, mover, excluir
+  const bulkMenuItems: MenuItem[] = isBulk ? [
+    { label: `${bulkIds!.length} cards selecionados`, onClick: () => { }, disabled: true },
+    { label: '🏷 Etiquetas', onClick: () => openSub('label', menu!), onHoverStart: (rect: DOMRect) => openSub('label', { x: rect.right + 4, y: rect.top }) },
+    { label: '🎨 Cor', onClick: () => openSub('color', menu!), onHoverStart: (rect: DOMRect) => openSub('color', { x: rect.right + 4, y: rect.top }) },
+    { label: '📊 Definir status', onClick: () => openSub('status', menu!), onHoverStart: (rect: DOMRect) => openSub('status', { x: rect.right + 4, y: rect.top }) },
+    { label: '📦 Mover para…', disabled: !cardMove, onClick: () => openSub('move', menu!), onHoverStart: (rect: DOMRect) => openSub('move', { x: rect.right + 4, y: rect.top }) },
+    { label: '🗑 Excluir todos', onClick: () => { closeAll(); bulkActions!.onDelete(); }, danger: true },
+  ] : [];
+
+  const menuItems: MenuItem[] = isBulk ? bulkMenuItems : [
+    { label: `🕒 Criado há ${daysAgoLabel(card.createdAt)}`, onClick: () => { }, disabled: true },
+    { label: `✏️ Atualizado há ${daysAgoLabel(card.updatedAt)}`, onClick: () => { }, disabled: true },
+    {
+      label: card.dueDate ? `📅 ${getRelativeDue(card.dueDate).label}` : '📅 Definir data do card',
+      onClick: () => openSub('due', menu!),
+      onHoverStart: (rect: DOMRect) => openSub('due', { x: rect.right + 4, y: rect.top }),
+    },
+    {
+      label: '🏷 Etiquetas',
+      onClick: () => openSub('label', menu!),
+      onHoverStart: (rect: DOMRect) => openSub('label', { x: rect.right + 4, y: rect.top }),
+    },
+    {
+      label: '🎨 Cor',
+      onClick: () => openSub('color', menu!),
+      onHoverStart: (rect: DOMRect) => openSub('color', { x: rect.right + 4, y: rect.top }),
+    },
+    {
+      label: card.status ? `📊 ${STATUS_LABELS[card.status]}` : '📊 Definir status',
+      onClick: () => openSub('status', menu!),
+      onHoverStart: (rect: DOMRect) => openSub('status', { x: rect.right + 4, y: rect.top }),
+    },
+    {
+      label: '📦 Mover para…',
+      disabled: !cardMove,
+      onClick: () => openSub('move', menu!),
+      onHoverStart: (rect: DOMRect) => openSub('move', { x: rect.right + 4, y: rect.top }),
+    },
+    {
+      label: '⧉ Duplicar',
+      onClick: () => { closeAll(); onDuplicate(card.id); },
+      onHoverStart: (rect: DOMRect) => openSub('duplicate', { x: rect.right + 4, y: rect.top }),
+    },
+    { label: '⏱ Cronômetro', onClick: () => openSub('timer', menu!) },
+    { label: '🗑 Excluir', onClick: () => { closeAll(); onRequestDelete(card.id, card.title); }, danger: true },
+  ];
+
   return (
     <>
       <button
@@ -162,43 +226,7 @@ export default function CardActionsMenu({
               onClose={() => setMenu(null)}
               onMouseEnter={cancelClose}
               onMouseLeave={scheduleClose}
-              items={[
-                { label: `🕒 Criado há ${daysAgoLabel(card.createdAt)}`, onClick: () => { }, disabled: true },
-                { label: `✏️ Atualizado há ${daysAgoLabel(card.updatedAt)}`, onClick: () => { }, disabled: true },
-                {
-                  label: card.dueDate ? `📅 ${getRelativeDue(card.dueDate).label}` : '📅 Definir data do card',
-                  onClick: () => openSub('due', menu),
-                  onHoverStart: (rect) => openSub('due', { x: rect.right + 4, y: rect.top }),
-                },
-                {
-                  label: '🏷 Etiquetas',
-                  onClick: () => openSub('label', menu),
-                  onHoverStart: (rect) => openSub('label', { x: rect.right + 4, y: rect.top }),
-                },
-                {
-                  label: '🎨 Cor',
-                  onClick: () => openSub('color', menu),
-                  onHoverStart: (rect) => openSub('color', { x: rect.right + 4, y: rect.top }),
-                },
-                {
-                  label: card.status ? `📊 ${STATUS_LABELS[card.status]}` : '📊 Definir status',
-                  onClick: () => openSub('status', menu),
-                  onHoverStart: (rect) => openSub('status', { x: rect.right + 4, y: rect.top }),
-                },
-                {
-                  label: '📦 Mover para…',
-                  disabled: !cardMove,
-                  onClick: () => openSub('move', menu),
-                  onHoverStart: (rect) => openSub('move', { x: rect.right + 4, y: rect.top }),
-                },
-                {
-                  label: '⧉ Duplicar',
-                  onClick: () => { closeAll(); onDuplicate(card.id); },
-                  onHoverStart: (rect) => openSub('duplicate', { x: rect.right + 4, y: rect.top }),
-                },
-                { label: '⏱ Cronômetro', onClick: () => openSub('timer', menu) },
-                { label: '🗑 Excluir', onClick: () => { closeAll(); onRequestDelete(card.id, card.title); }, danger: true },
-              ]}
+              items={menuItems}
             />
           )}
 
@@ -206,12 +234,12 @@ export default function CardActionsMenu({
             <CardLabelMenu
               x={sub.x}
               y={sub.y}
-              cardLabels={card.labels}
+              cardLabels={isBulk ? [] : card.labels}
               allLabels={allLabels}
-              onToggle={handleToggleLabel}
-              onCreate={handleCreateLabel}
+              onToggle={isBulk ? (name, color, isGroup) => bulkActions!.onToggleLabel(targetIds, name, color, isGroup) : handleToggleLabel}
+              onCreate={isBulk ? (name, color, isGroup) => bulkActions!.onToggleLabel(targetIds, name, color, isGroup) : handleCreateLabel}
               onClose={() => setSub(null)}
-              onReorder={handleReorderLabels}
+              onReorder={isBulk ? undefined : handleReorderLabels}
               {...hoverHandlers}
             />
           )}
@@ -231,8 +259,8 @@ export default function CardActionsMenu({
             <CardColorMenu
               x={sub.x}
               y={sub.y}
-              value={card.color}
-              onSave={(value) => onUpdateColor(card.id, value)}
+              value={isBulk ? null : card.color}
+              onSave={(value) => (isBulk ? bulkActions!.onSetColor(targetIds, value) : onUpdateColor(card.id, value))}
               onClose={() => setSub(null)}
               {...hoverHandlers}
             />
@@ -242,8 +270,8 @@ export default function CardActionsMenu({
             <CardStatusMenu
               x={sub.x}
               y={sub.y}
-              value={card.status}
-              onSave={(value) => onUpdateStatus(card.id, value)}
+              value={isBulk ? null : card.status}
+              onSave={(value) => (isBulk ? bulkActions!.onSetStatus(targetIds, value) : onUpdateStatus(card.id, value))}
               onClose={() => setSub(null)}
               {...hoverHandlers}
             />
@@ -255,12 +283,12 @@ export default function CardActionsMenu({
               y={sub.y}
               columns={cardMove.columns}
               groups={cardMove.groups}
-              currentColumnId={card.cardGroupId ? null : card.columnId}
-              currentGroupId={card.cardGroupId}
-              cardCount={1}
+              currentColumnId={isBulk ? null : card.cardGroupId ? null : card.columnId}
+              currentGroupId={isBulk ? null : card.cardGroupId}
+              cardCount={targetIds.length}
               onMove={(target) => {
                 closeAll();
-                void cardMove.moveCards([card.id], target);
+                void cardMove.moveCards(targetIds, target);
               }}
               onClose={() => setSub(null)}
               {...hoverHandlers}

@@ -9,27 +9,25 @@ export default function ExplorerBreadcrumb({ path, onNavigate }: ExplorerBreadcr
   const segments = getBreadcrumbSegments(path);
 
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '10px 16px', fontSize: 13, flexWrap: 'wrap' }}>
-      {segments.map((segment, i) => (
-        <span key={segment.path} style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-          <button
-            onClick={() => onNavigate(segment.path)}
-            style={{
-              border: 'none',
-              background: 'none',
-              cursor: 'pointer',
-              padding: '2px 4px',
-              borderRadius: 4,
-              fontSize: 13,
-              fontWeight: i === segments.length - 1 ? 600 : 400,
-              color: i === segments.length - 1 ? '#000' : '#1a73e8',
-            }}
-          >
-            {segment.label}
-          </button>
-          {i < segments.length - 1 && <span style={{ color: '#999' }}>/</span>}
-        </span>
-      ))}
+    <div className="flex flex-wrap items-center gap-1 px-4 py-2.5 text-[13px]">
+      {segments.map((segment, i) => {
+        const isLast = i === segments.length - 1;
+        return (
+          <span key={segment.path} className="flex items-center gap-1">
+            <button
+              onClick={() => onNavigate(segment.path)}
+              // alvo de soltar: arrastar itens selecionados até um segmento move pra aquela pasta
+              data-drop-path={segment.path}
+              className={`cursor-pointer rounded border-none bg-transparent px-1 py-0.5 text-[13px] hover:bg-zinc-100 dark:hover:bg-zinc-800 ${
+                isLast ? 'font-semibold text-zinc-900 dark:text-zinc-100' : 'font-normal text-blue-600 dark:text-blue-400'
+              }`}
+            >
+              {segment.label}
+            </button>
+            {!isLast && <span className="text-zinc-400">/</span>}
+          </span>
+        );
+      })}
     </div>
   );
 }

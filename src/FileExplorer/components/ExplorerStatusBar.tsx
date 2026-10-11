@@ -7,10 +7,7 @@ interface ExplorerStatusBarProps {
 
 export default function ExplorerStatusBar({ itemCount, totalSize }: ExplorerStatusBarProps) {
   return (
-    <div style={{
-      display: 'flex', justifyContent: 'space-between', padding: '6px 16px',
-      borderTop: '1px solid #e0e0e0', fontSize: 12, color: '#666',
-    }}>
+    <div className="flex justify-between border-t border-zinc-200 px-4 py-1.5 text-xs text-zinc-500 dark:border-zinc-700 dark:text-zinc-400">
       <span>{itemCount} {itemCount === 1 ? 'item' : 'itens'}</span>
       <span>{formatBytes(totalSize)}</span>
     </div>

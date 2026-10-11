@@ -23,7 +23,7 @@ import EventStatsPanel from './components/EventStatsPanel';
 import EventInfoPopup from './components/EventInfoPopup';
 import QuickCreateEventMenu from './components/QuickCreateEventMenu';
 import EventHistoryModal from './components/EventHistoryModal';
-import { getEventDetails, createEventDetail } from './api/eventDetails';
+import { useEventHistory } from './hooks/useEventHistory';
 
 function isViewMode(v: unknown): v is AgendaViewMode {
   return v === 'day' || v === 'week' || v === 'month';
@@ -103,7 +103,50 @@ export default function Agenda() {
     return { rangeStart: start, rangeEnd: end, days: [], label: anchor.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' }) };
   }, [view, anchor]);
 
-  const { events, create, update, remove } = useEvents(toLocalISO(rangeStart), toLocalISO(rangeEnd));
+  const { events, create: createRaw, update: updateRaw, remove: removeRaw } = useEvents(toLocalISO(rangeStart), toLocalISO(rangeEnd));
+
+  // histórico de alterações (desfazer/refazer): create/update/remove abaixo já são as versões rastreadas
+  const [toast, setToast] = useState<string | null>(null);
+  const toastTimer = useRef<number | undefined>(undefined);
+  const history = useEventHistory({
+    events,
+    create: createRaw,
+    update: updateRaw,
+    remove: removeRaw,
+    onNotify: (message) => {
+      setToast(message);
+      window.clearTimeout(toastTimer.current);
+      toastTimer.current = window.setTimeout(() => setToast(null), 2200);
+    },
+  });
+  const { create, update, remove } = history;
+  const historyRef = useRef(history);
+  historyRef.current = history;
+
+  // R = desfazer · Alt+R = refazer (também Ctrl+Z / Ctrl+Shift+Z / Ctrl+Y). Não vale digitando nem com outro modal aberto.
+  useEffect(() => {
+    function onKeyDown(e: KeyboardEvent) {
+      if (e.metaKey || e.repeat) return;
+      const plainR = e.code === 'KeyR' && !e.ctrlKey && !e.shiftKey;
+      const isUndo = (plainR && !e.altKey) || (e.code === 'KeyZ' && e.ctrlKey && !e.shiftKey && !e.altKey);
+      const isRedo =
+        (plainR && e.altKey) ||
+        (e.code === 'KeyZ' && e.ctrlKey && e.shiftKey && !e.altKey) ||
+        (e.code === 'KeyY' && e.ctrlKey && !e.shiftKey && !e.altKey);
+      if (!isUndo && !isRedo) return;
+
+      const el = e.target as HTMLElement | null;
+      const typing = !!el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.tagName === 'SELECT' || el.isContentEditable);
+      const overlayOpen =
+        modalOpen || quickOpen || infoPopup !== null || historyEvent !== null || deleteTarget !== null || statsEvent !== null || quickViewOpen;
+      if (typing || overlayOpen) return;
+
+      e.preventDefault();
+      void (isUndo ? historyRef.current.undo() : historyRef.current.redo());
+    }
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [modalOpen, quickOpen, infoPopup, historyEvent, deleteTarget, statsEvent, quickViewOpen]);
   const { resolveEventImages, invalidateProject, hasAmbiguousAutoCover } = useEventGalleryCovers(events);
 
   function goPrev() {
@@ -202,33 +245,12 @@ export default function Agenda() {
   }
 
   async function handleDuplicateEvent(sourceEvent: Event, startAt: string, endAt: string) {
-    const created: unknown = await create({
-      title: sourceEvent.title,
-      project_id: sourceEvent.project_id,
-      start_at: startAt,
-      end_at: endAt,
-    });
-
-    // copia o detalhamento (linha do tempo) para o novo evento — a duração é a mesma, então os offsets valem como estão
-    const newId = typeof created === 'string' ? created : (created as { id?: string } | null | undefined)?.id;
-    if (!newId) {
-      console.warn('[Agenda] duplicar: create() não devolveu o id do novo evento; detalhamento não foi copiado.');
-      return;
-    }
-    try {
-      const details = await getEventDetails(sourceEvent.id);
-      const sorted = [...details].sort((a, b) => a.position - b.position);
-      const durationMin = Math.max(0, Math.round((new Date(sourceEvent.end_at).getTime() - new Date(sourceEvent.start_at).getTime()) / 60000));
-      for (const d of sorted) {
-        await createEventDetail(newId, {
-          start_offset: d.start_offset ?? 0,
-          end_offset: d.end_offset ?? durationMin,
-          content: d.content,
-        });
-      }
-    } catch (err) {
-      console.error('[Agenda] duplicar: falha ao copiar o detalhamento', err);
-    }
+    // o detalhamento (linha do tempo) vai junto: a duração é a mesma, então os offsets valem como estão
+    const details = await history.snapshotDetails(sourceEvent);
+    await create(
+      { title: sourceEvent.title, project_id: sourceEvent.project_id, start_at: startAt, end_at: endAt },
+      { label: 'duplicar', details },
+    );
   }
 
   function handleQuickAssignProject(eventId: string, projectId: string | null) {
@@ -394,6 +416,15 @@ export default function Agenda() {
         cover={infoPopup?.cover ?? null}
         onDescriptionChange={handleDescriptionChange}
       />
+
+      {toast && (
+        <div
+          className="rounded-md bg-gray-900 px-3 py-1.5 text-sm text-white shadow-lg dark:bg-gray-100 dark:text-gray-900"
+          style={{ position: 'fixed', left: '50%', bottom: 24, transform: 'translateX(-50%)', zIndex: 120, pointerEvents: 'none', maxWidth: '90vw' }}
+        >
+          {toast}
+        </div>
+      )}
     </div>
   );
 }
