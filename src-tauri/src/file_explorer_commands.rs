@@ -150,6 +150,28 @@ pub fn create_folder(parent_path: String, name: String) -> Result<FsEntry, Strin
 }
 
 #[tauri::command]
+pub fn create_file(parent_path: String, name: String) -> Result<FsEntry, String> {
+    let parent = ensure_within_home(&parent_path)?;
+    if name.trim().is_empty() || name.contains(['/', '\\']) {
+        return Err("Nome de arquivo inválido.".to_string());
+    }
+    let new_path = parent.join(&name);
+    // create_new falha se já existir (nunca sobrescreve um arquivo existente)
+    fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(&new_path)
+        .map_err(|e| {
+            if e.kind() == std::io::ErrorKind::AlreadyExists {
+                "Já existe um item com esse nome nesta pasta.".to_string()
+            } else {
+                e.to_string()
+            }
+        })?;
+    entry_from_path(&new_path)
+}
+
+#[tauri::command]
 pub fn rename_path(path: String, new_name: String) -> Result<FsEntry, String> {
     let target = ensure_within_home(&path)?;
     if new_name.trim().is_empty() || new_name.contains(['/', '\\']) {
@@ -169,10 +191,63 @@ pub fn rename_path(path: String, new_name: String) -> Result<FsEntry, String> {
 /// Envia pra lixeira/reciclagem do SO (crate `trash`) em vez de apagar permanentemente —
 /// decisão explícita do usuário, diferente do padrão do resto do app (covers/modifications
 /// usam fs::remove direto) porque aqui são arquivos reais do usuário, não dados internos do Manager.
+///
+/// É `async` + `spawn_blocking` de propósito: comando síncrono roda na thread principal do Tauri, e no
+/// Windows a operação da lixeira (COM/IFileOperation) ali dentro competia com as janelas do app e falhava com
+/// "Some operations were aborted". Numa thread própria ela roda isolada; se ainda assim vier "aborted"
+/// (arquivo travado por um instante), tenta de novo algumas vezes antes de desistir.
 #[tauri::command]
-pub fn delete_to_trash(path: String) -> Result<(), String> {
+pub async fn delete_to_trash(path: String) -> Result<(), String> {
     let target = ensure_within_home(&path)?;
-    trash::delete(&target).map_err(|e| e.to_string())
+    let result = tauri::async_runtime::spawn_blocking(move || {
+        let mut last_error = String::new();
+        for attempt in 0..3 {
+            match trash::delete(&target) {
+                Ok(()) => return Ok(()),
+                Err(e) => {
+                    last_error = e.to_string();
+                    if !last_error.contains("aborted") {
+                        break;
+                    }
+                    if attempt < 2 {
+                        std::thread::sleep(std::time::Duration::from_millis(250));
+                    }
+                }
+            }
+        }
+        if last_error.contains("aborted") {
+            Err("O sistema não conseguiu mover pra lixeira (o item pode estar aberto em outro programa ou janela).".to_string())
+        } else {
+            Err(last_error)
+        }
+    })
+    .await
+    .map_err(|e| e.to_string())?;
+    result
+}
+
+/// Abre um arquivo ou pasta com o programa padrão do sistema (pasta = janela do explorador de arquivos).
+/// Comando próprio (em vez do `openPath` do plugin opener) pra funcionar em QUALQUER janela do app —
+/// o plugin só vale nas janelas listadas nas capabilities, e a janela separada do Explorador é criada
+/// com nome novo a cada vez. Mesma trava de escopo dos demais comandos: só dentro da Home.
+#[tauri::command]
+pub fn open_path_in_system(path: String) -> Result<(), String> {
+    let target = ensure_within_home(&path)?;
+    #[cfg(target_os = "windows")]
+    let mut command = std::process::Command::new("explorer");
+    #[cfg(target_os = "macos")]
+    let mut command = std::process::Command::new("open");
+    #[cfg(all(unix, not(target_os = "macos")))]
+    let mut command = std::process::Command::new("xdg-open");
+    command.arg(&target);
+    let mut child = command
+        .spawn()
+        .map_err(|e| format!("Não foi possível abrir: {e}"))?;
+    // espera o processo terminar numa thread à parte só pra não deixar processo zumbi
+    std::thread::spawn(move || {
+        let _ = child.wait();
+    });
+    Ok(())
 }
 
 /// Preferências de interface do Explorador (hoje: tamanho dos ícones): JSON global na raiz do app.

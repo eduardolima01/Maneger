@@ -56,6 +56,10 @@ export interface KanbanCard {
   planTargetGroupId: string | null;
   planParentId: string | null;
   planOccurrenceIndex: number | null;
+  /** Plano acompanhado NO PRÓPRIO card (gráfico de contribuições + relatório) em vez de gerar um card por ocorrência. Ausente = false. */
+  planTrackOnly?: boolean;
+  /** Tarefas feitas em cada dia do plano: { 'YYYY-MM-DD': [ids dos itens da checklist] }. Usado quando `planTrackOnly`. */
+  planDayChecks?: Record<string, string[]>;
   createdAt: string;
   updatedAt: string;
 }
@@ -109,6 +113,8 @@ export type UpdateKanbanCardInput = Partial<{
   planTimesPerDay: number;
   planTargetColumnId: string | null;
   planTargetGroupId: string | null;
+  planTrackOnly: boolean;
+  planDayChecks: Record<string, string[]>;
 }>;
 
 export type KanbanDensity = 'compact' | 'normal' | 'expanded';
@@ -139,6 +145,12 @@ export interface KanbanViewPrefs {
   collapsedColumnIds: string[];
   collapsedGroupIds: string[];
   savedFilters: KanbanSavedFilter[];
+  /** Estados extras criados pelo usuário (além dos 5 de fábrica). Kanbans antigos não têm o campo: ler com `?? []`. */
+  customStatuses?: CustomStatus[];
+  /** Grupos/subgrupos arquivados (somem da coluna; os cards de dentro somem junto, sem serem arquivados). Ler com `?? []`. */
+  archivedGroupIds?: string[];
+  /** Colunas em que o botão "ver arquivados" está ligado (mostra cards e grupos arquivados dela, esmaecidos). Ler com `?? []`. */
+  columnsShowArchived?: string[];
 }
 
 export function defaultViewPrefs(): KanbanViewPrefs {
@@ -216,8 +228,19 @@ export const PRIORITY_COLORS: Record<TaskPriority, string> = {
   urgent: '#c62828',
 };
 
-export type TaskStatus = 'pendente' | 'fazer' | 'fazendo' | 'revisao' | 'feito';
+/** Id do estado: 'pendente' | 'fazer' | 'fazendo' | 'revisao' | 'feito' (de fábrica) ou o id de um estado criado pelo usuário. */
+export type TaskStatus = string;
 
+/** Estado criado pelo usuário (guardado em viewPrefs.customStatuses do kanban). */
+export interface CustomStatus {
+  id: string;
+  label: string;
+  color: string;
+  /** Letra de atalho nos menus de estado (minúscula). */
+  key?: string;
+}
+
+/** Rótulos/cores. Os estados criados pelo usuário são injetados aqui por `registerCustomStatuses` (utils/customStatuses). */
 export const STATUS_LABELS: Record<TaskStatus, string> = {
   pendente: 'Pendente',
   fazer: 'Fazer',

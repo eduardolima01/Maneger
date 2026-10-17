@@ -1,5 +1,4 @@
 # Logs
-logs
 *.log
 npm-debug.log*
 yarn-debug.log*
@@ -23,6 +22,29 @@ dist-ssr
 *.sln
 *.sw?
 
-temp.md
 /project.html
+# /temp
+/p.md
+/src-tauri/covers
+/src-tauri/kanban-overview-prefs.json
+/src-tauri/tabs-state.json
 /temp
+/src-tauri/canvas-assets
+/src-tauri/feed-assets
+/src-tauri/canvas-assets
+/src-tauri/aside-collapsed.json
+/src-tauri/canvas.json
+/src-tauri/chat.db
+/src-tauri/feed.json
+/src-tauri/page-visibility.json
+/src-tauri/app.db
+/src-tauri/app.db-shm
+/src-tauri/app.db-wal
+/src-tauri/chat.db-shm
+/src-tauri/chat.db-wal
+/src-tauri/explorer-prefs.json
+/src-tauri/study-data.json
+/src-tauri/kanban-data.json
+/src-tauri/agenda-events.json
+/src-tauri/explorer-groups.json
+/src-tauri/explorer-ui-prefs.json

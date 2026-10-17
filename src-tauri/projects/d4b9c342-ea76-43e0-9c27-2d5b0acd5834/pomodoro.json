@@ -1,0 +1,95 @@
+{
+  "settings": {
+    "workMinutes": 20,
+    "shortBreakMinutes": 5,
+    "longBreakMinutes": 15,
+    "sessionsUntilLongBreak": 4
+  },
+  "sessions": [
+    {
+      "id": "8f637517-2272-45c3-b01e-1567acbe9d57",
+      "type": "short_break",
+      "startedAt": "2026-08-04T12:28:14",
+      "completedAt": "2026-08-04T12:33:14",
+      "durationMinutes": 5
+    },
+    {
+      "id": "11d742c3-be80-4ce1-aaf3-716f7565ccde",
+      "type": "work",
+      "startedAt": "2026-08-04T12:07:30",
+      "completedAt": "2026-08-04T12:27:30",
+      "durationMinutes": 20,
+      "description": "clip 02 - \"Deus não manda dinheiro só pra você\""
+    },
+    {
+      "id": "d37f4d9d-dabe-4bf5-9f42-ffc7c37156bb",
+      "type": "short_break",
+      "startedAt": "2026-08-03T12:24:23",
+      "completedAt": "2026-08-03T12:29:23",
+      "durationMinutes": 5
+    },
+    {
+      "id": "d6498c36-2201-4f9f-a204-95c9077a3ce1",
+      "type": "work",
+      "startedAt": "2026-08-03T12:03:12",
+      "completedAt": "2026-08-03T12:23:12",
+      "durationMinutes": 20
+    },
+    {
+      "id": "a64c8794-4aa5-436a-93ec-edeb49102e7a",
+      "type": "long_break",
+      "startedAt": "2026-08-03T11:39:08",
+      "completedAt": "2026-08-03T11:54:08",
+      "durationMinutes": 15
+    },
+    {
+      "id": "9c9f5a07-0e10-4e04-9a18-00d5cf9c3363",
+      "type": "work",
+      "startedAt": "2026-08-03T11:18:37",
+      "completedAt": "2026-08-03T11:38:37",
+      "durationMinutes": 20
+    },
+    {
+      "id": "2534d82c-406e-4a7f-916b-f290f916b5b1",
+      "type": "short_break",
+      "startedAt": "2026-08-03T10:57:23",
+      "completedAt": "2026-08-03T11:02:23",
+      "durationMinutes": 5
+    },
+    {
+      "id": "6b5b3709-d449-4ec4-bbdd-fa6d3161c210",
+      "type": "work",
+      "startedAt": "2026-08-03T10:35:12",
+      "completedAt": "2026-08-03T10:55:12",
+      "durationMinutes": 20
+    },
+    {
+      "id": "5688f00a-3d06-43f3-b542-356da40d578e",
+      "type": "short_break",
+      "startedAt": "2026-08-03T10:29:28",
+      "completedAt": "2026-08-03T10:34:28",
+      "durationMinutes": 5
+    },
+    {
+      "id": "758b13fc-fde9-44eb-9617-fa658d5d0317",
+      "type": "work",
+      "startedAt": "2026-08-03T10:05:21",
+      "completedAt": "2026-08-03T10:25:21",
+      "durationMinutes": 20
+    },
+    {
+      "id": "41684867-bcf3-41f5-97ab-320eee3ea5a5",
+      "type": "short_break",
+      "startedAt": "2026-08-03T09:52:48",
+      "completedAt": "2026-08-03T09:57:48",
+      "durationMinutes": 5
+    },
+    {
+      "id": "018a558a-2a20-4acd-849c-b6c8b7158197",
+      "type": "work",
+      "startedAt": "2026-08-03T09:32:33",
+      "completedAt": "2026-08-03T09:52:33",
+      "durationMinutes": 20
+    }
+  ]
+}

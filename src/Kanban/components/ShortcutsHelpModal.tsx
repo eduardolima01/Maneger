@@ -19,7 +19,7 @@ const SHORTCUT_GROUPS: ShortcutGroup[] = [
     title: 'Card',
     hint: 'Valem pro card sob o mouse (na árvore, também pro item marcado pelo teclado). Com vários cards selecionados, agem em todos.',
     items: [
-      { keys: ['T'], text: 'Status (no menu: W/S navegam, D escolhe, A ou Esc fecham; ou a letra: P pendente · Z fazer · N fazendo · R revisão · F feito · X sem status)' },
+      { keys: ['T'], text: 'Status (no menu: W/S navegam, D escolhe, A ou Esc fecham; ou a letra mostrada ao lado de cada estado: P pendente · Z fazer · N fazendo · R revisão · F feito · X sem status; + cria um estado novo)' },
       { keys: ['P'], text: 'Prazo' },
       { keys: ['K'], text: 'Cor' },
       { keys: ['L'], text: 'Etiquetas' },

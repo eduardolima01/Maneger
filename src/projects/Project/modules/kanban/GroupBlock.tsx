@@ -19,6 +19,7 @@ import LabelIconBadge from '@/Kanban/components/LabelIconBadge';
 import { readableTextColors } from '@/Kanban/utils/readableColors';
 import { useLabelIcons } from '@/Kanban/hooks/Labeliconcontext';
 import { useGroupLayout } from '@/Kanban/components/GroupLayoutContext';
+import { useArchive } from '@/Kanban/utils/archiveContext';
 
 const LOGO_SIZE = 60;
 const SUBGROUP_LOGO_SIZE = 32;
@@ -134,6 +135,8 @@ export default function GroupBlock({
   const [labelMenu, setLabelMenu] = useState<{ x: number; y: number } | null>(null);
   const { icons: labelIcons } = useLabelIcons();
   const { horizontalIds, toggleHorizontal } = useGroupLayout();
+  const archive = useArchive();
+  const groupArchived = archive?.isGroupArchived(group.id) ?? false;
   const isHorizontal = horizontalIds.has(group.id);
   const [localCollapsedChildren, setLocalCollapsedChildren] = useState<Set<string>>(() => new Set());
   function isChildCollapsed(id: string): boolean {
@@ -230,7 +233,7 @@ export default function GroupBlock({
   const style: React.CSSProperties = {
     transform: CSS.Transform.toString(transform),
     transition,
-    opacity: isDragging ? 0.5 : 1,
+    opacity: isDragging ? 0.5 : groupArchived ? 0.55 : 1,
     position: 'relative',
   };
 
@@ -434,6 +437,15 @@ export default function GroupBlock({
               className={textClass('secondary')} style={{ border: 'none', background: 'none', cursor: 'pointer', color: textColor('secondary'), fontSize: 13, fontWeight: 600 }}
             >
               +
+            </button>
+          )}
+          {archive && (
+            <button
+              onClick={(e) => { e.stopPropagation(); archive.archiveGroup(group.id, !groupArchived); }}
+              title={groupArchived ? 'Desarquivar o grupo' : 'Arquivar o grupo (some da coluna junto com os cards de dentro; dá pra ver pelo botão "arquivados" da coluna)'}
+              className={textClass('secondary')} style={{ border: 'none', background: 'none', cursor: 'pointer', color: textColor('secondary'), fontSize: 11 }}
+            >
+              {groupArchived ? '📤' : '🗄'}
             </button>
           )}
           <button onClick={() => onRequestDeleteGroup(group.id)} title="Desagrupar" className={textClass('danger')} style={{ border: 'none', background: 'none', cursor: 'pointer', color: textColor('danger'), fontSize: 11 }}>✕</button>

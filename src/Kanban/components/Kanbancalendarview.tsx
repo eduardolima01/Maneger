@@ -568,7 +568,7 @@ export default function KanbanCalendarView({
   const virtualOccurrences = useMemo(() => {
     const list: KanbanCard[] = [];
     for (const plan of planTemplates) {
-      if (!plan.planActive || !plan.startDate || !plan.dueDate) continue;
+      if (!plan.planActive || plan.planTrackOnly || !plan.startDate || !plan.dueDate) continue; // planTrackOnly: acompanhado no próprio card, não gera ocorrências
       const weekdays = plan.planWeekdays.length > 0 ? plan.planWeekdays : [0, 1, 2, 3, 4, 5, 6];
       const timesPerDay = Math.max(1, plan.planTimesPerDay);
       const materializedKeys = materializedKeysByPlan.get(plan.id) ?? new Set<string>();

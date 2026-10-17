@@ -27,10 +27,16 @@ import { getCardFilesDir } from '@/Kanban/api/kanbanCardAssets';
 import { openPath } from '@tauri-apps/plugin-opener';
 import CardFilesSection from '@/Kanban/components/Cardfilessection';
 import { useCardMove } from '@/lib/utils/CardMoveContext';
+import { useArchive } from '@/Kanban/utils/archiveContext';
 import { useLabelIcons } from '@/Kanban/hooks/Labeliconcontext';
 import LabelIconBadge from '@/Kanban/components/LabelIconBadge';
+import PlanBadge from '@/Kanban/components/PlanBadge';
+import PlanDistributionBar from '@/Kanban/components/PlanDistributionBar';
 import CopyTitleButton from '@/Kanban/components/CopyTitleButton';
 import { getRelativeDue } from '@/Kanban/utils/relativeDate';
+
+/** Card sob o mouse AGORA (um só no app inteiro): evita que dois cards respondam ao mesmo atalho de teclado. */
+let hoveredCardKey: symbol | null = null;
 
 interface KanbanCardProps {
   card: CardType;
@@ -132,6 +138,8 @@ export default function KanbanCard({
   const [labelMenu, setLabelMenu] = useState<{ x: number; y: number } | null>(null);
   const [hovering, setHovering] = useState(false);
   const isCut = useIsCardCut(card.id); // recortado (Ctrl+X): esmaecido até colar
+  const hoverKeyRef = useRef<symbol>(Symbol('card-hover'));
+  const archiveActions = useArchive();
   const lastMouseRef = useRef({ x: 0, y: 0 }); // posição do mouse sobre o card: onde os atalhos de campo abrem o menu
   const [dueDateMenu, setDueDateMenu] = useState<{ x: number; y: number } | null>(null);
   const [colorMenu, setColorMenu] = useState<{ x: number; y: number } | null>(null);
@@ -211,6 +219,7 @@ export default function KanbanCard({
   useEffect(() => {
     if (!hovering) return;
     function handleKeyDown(e: KeyboardEvent) {
+      if (hoveredCardKey !== hoverKeyRef.current) return; // outro card é o que está sob o mouse
       const target = e.target as HTMLElement | null;
       const typingInField = !!target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable);
       if ((e.key === 'q' || e.key === 'Q') && !typingInField && !contextMenu && !labelMenu) {
@@ -389,109 +398,90 @@ export default function KanbanCard({
   // selos da linha do título (ordenados por visualConfig)
   const badgeNodes: Record<string, React.ReactNode> = {
     subKanbanBadge: isVisualVisible('subKanbanBadge') && hasSubKanban && (
-      <span title="Tem sub-kanban" style={{ fontSize: 11 }}>📋</span>
-    ),
+            <span title="Tem sub-kanban" style={{ fontSize: 11 }}>📋</span>
+          ),
     filesButton: isVisualVisible('filesButton') && hasFiles && (
-      <span
-        onClick={handleOpenFilesFolder}
-        onPointerDown={(e) => e.stopPropagation()}
-        title="Abrir pasta de arquivos"
-        style={{ fontSize: 11, cursor: 'pointer' }}
-      >
-        📂
-      </span>
-    ),
-    planBadge: isVisualVisible('planBadge') && card.isPlanTemplate && (
-      <span
-        title={card.planActive ? 'Plano ativo' : 'Plano inativo'}
-        className={card.planActive
-          ? 'bg-violet-100 text-violet-700 dark:bg-violet-900/40 dark:text-violet-300'
-          : 'bg-neutral-100 text-neutral-500 dark:bg-neutral-700 dark:text-neutral-400'}
-        style={{
-          fontSize: 10,
-          fontWeight: 600,
-          padding: '1px 5px',
-          borderRadius: 3,
-          display: 'inline-flex',
-          alignItems: 'center',
-          gap: 2,
-          flexShrink: 0,
-        }}
-      >
-        🔁 {card.planActive ? 'Ativo' : 'Inativo'}
-      </span>
-    ),
+            <span
+              onClick={handleOpenFilesFolder}
+              onPointerDown={(e) => e.stopPropagation()}
+              title="Abrir pasta de arquivos"
+              style={{ fontSize: 11, cursor: 'pointer' }}
+            >
+              📂
+            </span>
+          ),
+    planBadge: isVisualVisible('planBadge') && card.isPlanTemplate && <PlanBadge card={card} />,
     timer: isVisualVisible('timer') && hasOpenTimer && (
-      <span
-        title={globalTimer.running ? 'Cronômetro rodando' : 'Cronômetro pausado, sessão em aberto'}
-        className={globalTimer.running ? 'text-green-700 dark:text-green-400' : 'text-orange-700 dark:text-orange-400'}
-        style={{ fontSize: 11 }}
-      >
-        {globalTimer.running ? '⏱' : '⏸'}
-      </span>
-    ),
+            <span
+              title={globalTimer.running ? 'Cronômetro rodando' : 'Cronômetro pausado, sessão em aberto'}
+              className={globalTimer.running ? 'text-green-700 dark:text-green-400' : 'text-orange-700 dark:text-orange-400'}
+              style={{ fontSize: 11 }}
+            >
+              {globalTimer.running ? '⏱' : '⏸'}
+            </span>
+          ),
     priority: isVisualVisible('priority') && card.priority && (
-      <span
-        title={PRIORITY_LABELS[card.priority]}
-        style={{ width: 8, height: 8, borderRadius: '50%', backgroundColor: PRIORITY_COLORS[card.priority], flexShrink: 0 }}
-      />
-    ),
+            <span
+              title={PRIORITY_LABELS[card.priority]}
+              style={{ width: 8, height: 8, borderRadius: '50%', backgroundColor: PRIORITY_COLORS[card.priority], flexShrink: 0 }}
+            />
+          ),
   };
   const badgeOrder = sortByVisualOrder(['subKanbanBadge', 'filesButton', 'planBadge', 'timer', 'priority'], (k) => k as CardVisualFieldKey);
 
   // itens da linha de status / etiquetas / prazo / horários / cronômetro (ordenados por visualConfig)
   const chipNodes: Record<string, React.ReactNode> = {
     status: isVisualVisible('status') && card.status && (
-      <StatusHoverPicker
-        value={card.status}
-        onSelect={(value) => isBulkTarget ? onBulkSetStatus(Array.from(selectedCardIds), value) : onUpdateStatus(card.id, value)}
-      >
-        <span className="text-neutral-500 dark:text-neutral-400" style={{ display: 'inline-flex', alignItems: 'center', gap: 3, fontWeight: 500 }}>
-          <span style={{ width: 6, height: 6, borderRadius: '50%', backgroundColor: STATUS_COLORS[card.status], flexShrink: 0 }} />
-          {STATUS_LABELS[card.status]}
-        </span>
-      </StatusHoverPicker>
-    ),
+                <StatusHoverPicker
+                  value={card.status}
+                  onSelect={(value) => isBulkTarget ? onBulkSetStatus(Array.from(selectedCardIds), value) : onUpdateStatus(card.id, value)}
+                >
+                  <span className="text-neutral-500 dark:text-neutral-400" style={{ display: 'inline-flex', alignItems: 'center', gap: 3, fontWeight: 500 }}>
+                    <span style={{ width: 6, height: 6, borderRadius: '50%', backgroundColor: STATUS_COLORS[card.status], flexShrink: 0 }} />
+                    {STATUS_LABELS[card.status]}
+                  </span>
+                </StatusHoverPicker>
+              ),
     labels: isVisualVisible('labels') && card.labels.map((raw) => {
-      const { name, color } = parseLabel(raw);
-      return (
-        <span key={raw} style={{ display: 'inline-flex', alignItems: 'center', gap: 3, backgroundColor: color, color: '#fff', borderRadius: 3, padding: '1px 5px' }}>
-          <LabelIconBadge icon={labelIcons[name]} size={11} />
-          {name}
-        </span>
-      );
-    }),
+                const { name, color } = parseLabel(raw);
+                return (
+                  <span key={raw} style={{ display: 'inline-flex', alignItems: 'center', gap: 3, backgroundColor: color, color: '#fff', borderRadius: 3, padding: '1px 5px' }}>
+                    <LabelIconBadge icon={labelIcons[name]} size={11} />
+                    {name}
+                  </span>
+                );
+              }),
     updatedAt: isVisualVisible('updatedAt') && card.updatedAt && (
-      <span className="text-neutral-400 dark:text-neutral-500" title={`Modificado em ${formatUpdatedAtFull(card.updatedAt)}`} style={{ whiteSpace: 'nowrap' }}>
-        ✎ {formatUpdatedAt(card.updatedAt)}
-      </span>
-    ),
+                <span className="text-neutral-400 dark:text-neutral-500" title={`Modificado em ${formatUpdatedAtFull(card.updatedAt)}`} style={{ whiteSpace: 'nowrap' }}>
+                  ✎ {formatUpdatedAt(card.updatedAt)}
+                </span>
+              ),
     dueDate: isVisualVisible('dueDate') && card.dueDate && (() => {
-      const info = getDueDateInfo(card.dueDate);
-      const neutral = info.color === '#666'; // "sem urgência" — cor neutra do tema; as urgentes (laranja) ficam fixas
-      return (
-        <span
-          title={info.title}
-          className={neutral ? 'text-neutral-500 dark:text-neutral-400' : 'dark:brightness-125'}
-          style={{ color: neutral ? undefined : info.color, fontWeight: neutral ? 400 : 600 }}
-        >
-          📅 {info.label}
-        </span>
-      );
-    })(),
+                const info = getDueDateInfo(card.dueDate);
+                const neutral = info.color === '#666'; // "sem urgência" — cor neutra do tema; as urgentes (laranja) ficam fixas
+                return (
+                  <span
+                    title={info.title}
+                    className={neutral ? 'text-neutral-500 dark:text-neutral-400' : 'dark:brightness-125'}
+                    style={{ color: neutral ? undefined : info.color, fontWeight: neutral ? 400 : 600 }}
+                  >
+                    📅 {info.label}
+                  </span>
+                );
+              })(),
     schedules: isVisualVisible('schedules') && (card.schedules ?? []).length > 0 && (
-      <span
-        title={card.schedules.map((s) => (s.title ? `${s.time} ${s.title}` : s.time)).join('\n')}
-        className="text-neutral-500 dark:text-neutral-400"
-      >
-        🕐 {card.schedules.map((s) => s.time).join(', ')}
-      </span>
-    ),
+                <span
+                  title={card.schedules.map((s) => (s.title ? `${s.time} ${s.title}` : s.time)).join('\n')}
+                  className="text-neutral-500 dark:text-neutral-400"
+                >
+                  🕐 {card.schedules.map((s) => s.time).join(', ')}
+                </span>
+              ),
     timer: isVisualVisible('timer') && displayedTimerSeconds > 0 && (
-      <span className={hasOpenTimer && globalTimer.running ? 'text-green-700 dark:text-green-400' : 'text-neutral-500 dark:text-neutral-400'}>
-        ⏱ {formatCardTimerTotal(displayedTimerSeconds)}
-      </span>
-    ),
+                <span className={hasOpenTimer && globalTimer.running ? 'text-green-700 dark:text-green-400' : 'text-neutral-500 dark:text-neutral-400'}>
+                  ⏱ {formatCardTimerTotal(displayedTimerSeconds)}
+                </span>
+              ),
   };
   const chipOrder = sortByVisualOrder(['status', 'labels', 'dueDate', 'schedules', 'timer', 'updatedAt'], (k) => k as CardVisualFieldKey);
 
@@ -544,140 +534,140 @@ export default function KanbanCard({
   );
 
   const coverBlock = !compact && isVisualVisible('cover') && card.coverPath
-    // && (card.labels.length > 0 || card.dueDate || displayedTimerSeconds > 0) 
-    && (
-      <div
-        onClick={(e) => { e.stopPropagation(); setCoverZoomOpen(true); }}
-        onPointerDown={(e) => e.stopPropagation()}
-        className="bg-neutral-100 dark:bg-neutral-700"
-        style={{
-          width: '100%', height: 80, borderRadius: 4, marginBottom: 6,
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          overflow: 'hidden', cursor: 'zoom-in',
-        }}
-      >
-        <img
-          src={convertFileSrc(card.coverPath)}
-          style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }}
-        />
-      </div>
-    );
+          // && (card.labels.length > 0 || card.dueDate || displayedTimerSeconds > 0) 
+          && (
+            <div
+              onClick={(e) => { e.stopPropagation(); setCoverZoomOpen(true); }}
+              onPointerDown={(e) => e.stopPropagation()}
+              className="bg-neutral-100 dark:bg-neutral-700"
+              style={{
+                width: '100%', height: 80, borderRadius: 4, marginBottom: 6,
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                overflow: 'hidden', cursor: 'zoom-in',
+              }}
+            >
+              <img
+                src={convertFileSrc(card.coverPath)}
+                style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }}
+              />
+            </div>
+          );
   const descriptionBlock = !compact && isVisualVisible('description') && card.description && (
-    <p className="text-neutral-500 dark:text-neutral-400" style={{ fontSize: 11, margin: '0 0 6px', overflow: 'hidden', textOverflow: 'ellipsis', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}>
-      {card.description}
-    </p>
-  );
+          <p className="text-neutral-500 dark:text-neutral-400" style={{ fontSize: 11, margin: '0 0 6px', overflow: 'hidden', textOverflow: 'ellipsis', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}>
+            {card.description}
+          </p>
+        );
   const chipsBlock = !compact && (
-    (isVisualVisible('labels') && card.labels.length > 0) ||
-    (isVisualVisible('dueDate') && card.dueDate) ||
-    (isVisualVisible('status') && card.status) ||
-    (isVisualVisible('schedules') && (card.schedules ?? []).length > 0) ||
-    (isVisualVisible('timer') && displayedTimerSeconds > 0) ||
-    (isVisualVisible('updatedAt') && card.updatedAt)
-  ) && (
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, fontSize: 10, alignItems: 'center' }}>
-        {chipOrder.map((k) => <Fragment key={k}>{chipNodes[k]}</Fragment>)}
-      </div>
-    );
+          (isVisualVisible('labels') && card.labels.length > 0) ||
+          (isVisualVisible('dueDate') && card.dueDate) ||
+          (isVisualVisible('status') && card.status) ||
+          (isVisualVisible('schedules') && (card.schedules ?? []).length > 0) ||
+          (isVisualVisible('timer') && displayedTimerSeconds > 0) ||
+          (isVisualVisible('updatedAt') && card.updatedAt)
+        ) && (
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, fontSize: 10, alignItems: 'center' }}>
+              {chipOrder.map((k) => <Fragment key={k}>{chipNodes[k]}</Fragment>)}
+            </div>
+          );
   const checklistBlock = !compact && isVisualVisible('checklist') && (checklistOpen || (displayedChecklistProgress && (displayedChecklistProgress.total > 0 || (displayedChecklistProgress.simpleCount ?? 0) > 0))) && (
-    <div onClick={(e) => e.stopPropagation()} onPointerDown={(e) => e.stopPropagation()}>
-      <button
-        onClick={() => setChecklistOpen((v) => {
-          const next = !v;
-          if (!next) setLiveChecklistProgress(null); // ao fechar, volta a confiar no prop (mais fresco na próxima recarga do board)
-          return next;
-        })}
-        className={displayedChecklistProgress && displayedChecklistProgress.total > 0
-          ? (displayedChecklistProgress.done === displayedChecklistProgress.total
-            ? 'text-emerald-600 dark:text-emerald-400'
-            : 'text-neutral-500 dark:text-neutral-400')
-          : 'text-neutral-400 dark:text-neutral-500'}
-        style={{
-          display: 'flex', alignItems: 'center', gap: 4, fontSize: 10, marginTop: 4,
-          background: 'none', border: 'none', cursor: 'pointer', padding: '2px 0',
-        }}
-      >
-        <span>{checklistOpen ? '▾' : '▸'}</span>
-        <span>
-          {displayedChecklistProgress && displayedChecklistProgress.total > 0
-            ? `☑ ${displayedChecklistProgress.done}/${displayedChecklistProgress.total}`
-            : (displayedChecklistProgress?.simpleCount ?? 0) > 0
-              // só tem itens de lista simples: não há "feito/total" (eles não contam), mostra quantos itens existem
-              ? `☰ ${displayedChecklistProgress!.simpleCount} item${displayedChecklistProgress!.simpleCount !== 1 ? 's' : ''}`
-              : '☑ Checklist'}
-        </span>
-      </button>
-      {checklistOpen && <InlineChecklist cardId={card.id} onProgressChange={setLiveChecklistProgress} />}
-    </div>
-  );
+          <div onClick={(e) => e.stopPropagation()} onPointerDown={(e) => e.stopPropagation()}>
+            <button
+              onClick={() => setChecklistOpen((v) => {
+                const next = !v;
+                if (!next) setLiveChecklistProgress(null); // ao fechar, volta a confiar no prop (mais fresco na próxima recarga do board)
+                return next;
+              })}
+              className={displayedChecklistProgress && displayedChecklistProgress.total > 0
+                ? (displayedChecklistProgress.done === displayedChecklistProgress.total
+                  ? 'text-emerald-600 dark:text-emerald-400'
+                  : 'text-neutral-500 dark:text-neutral-400')
+                : 'text-neutral-400 dark:text-neutral-500'}
+              style={{
+                display: 'flex', alignItems: 'center', gap: 4, fontSize: 10, marginTop: 4,
+                background: 'none', border: 'none', cursor: 'pointer', padding: '2px 0',
+              }}
+            >
+              <span>{checklistOpen ? '▾' : '▸'}</span>
+              <span>
+                {displayedChecklistProgress && displayedChecklistProgress.total > 0
+                  ? `☑ ${displayedChecklistProgress.done}/${displayedChecklistProgress.total}`
+                  : (displayedChecklistProgress?.simpleCount ?? 0) > 0
+                    // só tem itens de lista simples: não há "feito/total" (eles não contam), mostra quantos itens existem
+                    ? `☰ ${displayedChecklistProgress!.simpleCount} item${displayedChecklistProgress!.simpleCount !== 1 ? 's' : ''}`
+                    : '☑ Checklist'}
+              </span>
+            </button>
+            {checklistOpen && <InlineChecklist cardId={card.id} onProgressChange={setLiveChecklistProgress} />}
+          </div>
+        );
   const expandBlock = (
     <>
       {!compact && isVisualVisible('expandToggle') && (
-        <button
-          onClick={(e) => { e.stopPropagation(); setExpanded((v) => !v); }}
-          onPointerDown={(e) => e.stopPropagation()}
-          className="text-neutral-400 dark:text-neutral-500"
-          style={{
-            width: '100%', textAlign: 'center', fontSize: 10,
-            border: 'none', background: 'none', cursor: 'pointer', padding: '4px 0 0', marginTop: 4,
-          }}
-        >
-          {expanded ? '▴ Menos detalhes' : '▾ Mais detalhes'}
-        </button>
-      )}
+          <button
+            onClick={(e) => { e.stopPropagation(); setExpanded((v) => !v); }}
+            onPointerDown={(e) => e.stopPropagation()}
+            className="text-neutral-400 dark:text-neutral-500"
+            style={{
+              width: '100%', textAlign: 'center', fontSize: 10,
+              border: 'none', background: 'none', cursor: 'pointer', padding: '4px 0 0', marginTop: 4,
+            }}
+          >
+            {expanded ? '▴ Menos detalhes' : '▾ Mais detalhes'}
+          </button>
+        )}
       {expanded && (
-        <div
-          onClick={(e) => e.stopPropagation()}
-          onPointerDown={(e) => e.stopPropagation()}
-          className="border-t border-dashed border-neutral-300 dark:border-neutral-600"
-          style={{ marginTop: 8, paddingTop: 8, display: 'flex', flexDirection: 'column', gap: 10 }}
-        >
-          <div>
-            <label className="text-neutral-400 dark:text-neutral-500" style={{ fontSize: 10, fontWeight: 600, display: 'block', marginBottom: 2 }}>Descrição</label>
-            <textarea
-              defaultValue={card.description ?? ''}
-              onBlur={(e) => {
-                const trimmed = e.target.value.trim();
-                if (trimmed !== (card.description ?? '')) onUpdateDescription(card.id, trimmed || null);
-              }}
-              rows={3}
-              placeholder="Sem descrição..."
-              className="bg-white dark:bg-neutral-900 text-neutral-900 dark:text-neutral-100 border border-neutral-300 dark:border-neutral-600"
-              style={{ width: '100%', fontSize: 11, padding: 4, fontFamily: 'inherit', resize: 'vertical', boxSizing: 'border-box' }}
-            />
-          </div>
-
-          <div style={{ display: 'flex', gap: 8 }}>
-            <div style={{ flex: 1 }}>
-              <label className="text-neutral-400 dark:text-neutral-500" style={{ fontSize: 10, fontWeight: 600, display: 'block', marginBottom: 2 }}>Início</label>
-              <input
-                type="date"
-                value={card.startDate ?? ''}
-                onChange={(e) => onUpdateStartDate(card.id, e.target.value || null)}
-                className="bg-white dark:bg-neutral-900 text-neutral-900 dark:text-neutral-100 border border-neutral-300 dark:border-neutral-600 dark:[color-scheme:dark]"
-                style={{ width: '100%', fontSize: 11, padding: 4, boxSizing: 'border-box' }}
+          <div
+            onClick={(e) => e.stopPropagation()}
+            onPointerDown={(e) => e.stopPropagation()}
+            className="border-t border-dashed border-neutral-300 dark:border-neutral-600"
+            style={{ marginTop: 8, paddingTop: 8, display: 'flex', flexDirection: 'column', gap: 10 }}
+          >
+            <div>
+              <label className="text-neutral-400 dark:text-neutral-500" style={{ fontSize: 10, fontWeight: 600, display: 'block', marginBottom: 2 }}>Descrição</label>
+              <textarea
+                defaultValue={card.description ?? ''}
+                onBlur={(e) => {
+                  const trimmed = e.target.value.trim();
+                  if (trimmed !== (card.description ?? '')) onUpdateDescription(card.id, trimmed || null);
+                }}
+                rows={3}
+                placeholder="Sem descrição..."
+                className="bg-white dark:bg-neutral-900 text-neutral-900 dark:text-neutral-100 border border-neutral-300 dark:border-neutral-600"
+                style={{ width: '100%', fontSize: 11, padding: 4, fontFamily: 'inherit', resize: 'vertical', boxSizing: 'border-box' }}
               />
             </div>
-            <div style={{ flex: 1 }}>
-              <label className="text-neutral-400 dark:text-neutral-500" style={{ fontSize: 10, fontWeight: 600, display: 'block', marginBottom: 2 }}>Prazo</label>
-              <input
-                type="date"
-                value={card.dueDate ?? ''}
-                onChange={(e) => onUpdateCardDueDate(card.id, e.target.value || null)}
-                className="bg-white dark:bg-neutral-900 text-neutral-900 dark:text-neutral-100 border border-neutral-300 dark:border-neutral-600 dark:[color-scheme:dark]"
-                style={{ width: '100%', fontSize: 11, padding: 4, boxSizing: 'border-box' }}
-              />
+
+            <div style={{ display: 'flex', gap: 8 }}>
+              <div style={{ flex: 1 }}>
+                <label className="text-neutral-400 dark:text-neutral-500" style={{ fontSize: 10, fontWeight: 600, display: 'block', marginBottom: 2 }}>Início</label>
+                <input
+                  type="date"
+                  value={card.startDate ?? ''}
+                  onChange={(e) => onUpdateStartDate(card.id, e.target.value || null)}
+                  className="bg-white dark:bg-neutral-900 text-neutral-900 dark:text-neutral-100 border border-neutral-300 dark:border-neutral-600 dark:[color-scheme:dark]"
+                  style={{ width: '100%', fontSize: 11, padding: 4, boxSizing: 'border-box' }}
+                />
+              </div>
+              <div style={{ flex: 1 }}>
+                <label className="text-neutral-400 dark:text-neutral-500" style={{ fontSize: 10, fontWeight: 600, display: 'block', marginBottom: 2 }}>Prazo</label>
+                <input
+                  type="date"
+                  value={card.dueDate ?? ''}
+                  onChange={(e) => onUpdateCardDueDate(card.id, e.target.value || null)}
+                  className="bg-white dark:bg-neutral-900 text-neutral-900 dark:text-neutral-100 border border-neutral-300 dark:border-neutral-600 dark:[color-scheme:dark]"
+                  style={{ width: '100%', fontSize: 11, padding: 4, boxSizing: 'border-box' }}
+                />
+              </div>
             </div>
-          </div>
 
-          <div>
-            <label className="text-neutral-400 dark:text-neutral-500" style={{ fontSize: 10, fontWeight: 600, display: 'block', marginBottom: 2 }}>Checklist</label>
-            <InlineChecklist cardId={card.id} onProgressChange={setLiveChecklistProgress} />
-          </div>
+            <div>
+              <label className="text-neutral-400 dark:text-neutral-500" style={{ fontSize: 10, fontWeight: 600, display: 'block', marginBottom: 2 }}>Checklist</label>
+              <InlineChecklist cardId={card.id} onProgressChange={setLiveChecklistProgress} />
+            </div>
 
-          <CardFilesSection cardId={card.id} onSetCover={(path) => onUpdateCoverPath(card.id, path)} />
-        </div>
-      )}
+            <CardFilesSection cardId={card.id} onSetCover={(path) => onUpdateCoverPath(card.id, path)} />
+          </div>
+        )}
     </>
   );
 
@@ -706,14 +696,14 @@ export default function KanbanCard({
           onClick();
         }}
         onContextMenu={handleContextMenu}
-        onMouseEnter={(e) => { lastMouseRef.current = { x: e.clientX, y: e.clientY }; setHovering(true); cancelClose(); }}
+        onMouseEnter={(e) => { lastMouseRef.current = { x: e.clientX, y: e.clientY }; hoveredCardKey = hoverKeyRef.current; setHovering(true); cancelClose(); }}
         onMouseMove={(e) => { lastMouseRef.current = { x: e.clientX, y: e.clientY }; }}
-        onMouseLeave={() => { setHovering(false); scheduleClose(); }}
+        onMouseLeave={() => { if (hoveredCardKey === hoverKeyRef.current) hoveredCardKey = null; setHovering(false); scheduleClose(); }}
         style={{
           position: 'relative',
           transform: CSS.Transform.toString(transform),
           transition,
-          opacity: isDragging ? 0.4 : isCut ? 0.45 : 1,
+          opacity: isDragging ? 0.4 : isCut ? 0.45 : card.archived ? 0.55 : 1,
           ...(isCut ? { outline: '2px dashed #f59e0b', outlineOffset: -2 } : {}),
           borderWidth: 1, borderStyle: 'solid', borderColor: card.color ?? undefined,
           borderLeft: card.labels.length > 0 ? `4px solid ${parseLabel(card.labels[0]).color}` : (card.color ? `4px solid ${card.color}` : undefined),
@@ -764,6 +754,7 @@ export default function KanbanCard({
 
         {coverFirst && blocks.cover}
         {titleRow}
+        {!compact && card.isPlanTemplate && card.planTrackOnly && <PlanDistributionBar card={card} />}
         {blockOrder.filter((k) => !(k === 'cover' && coverFirst)).map((k) => <Fragment key={k}>{blocks[k]}</Fragment>)}
 
         {isVisualVisible('timer') && displayedTimerSeconds > 0 && (
@@ -848,6 +839,7 @@ export default function KanbanCard({
                   onHoverStart: (rect) => openDuplicateMenu({ x: rect.right + 4, y: rect.top }),
                 },
                 { label: '⏱ Cronômetro', onClick: () => openTimerMenu({ x: contextMenu.x, y: contextMenu.y }) },
+                ...(archiveActions ? [{ label: card.archived ? '📤 Desarquivar' : '🗄 Arquivar', onClick: () => archiveActions.archiveCard(card.id, !card.archived) }] : []),
                 { label: '🗑 Excluir', onClick: onRequestDelete, danger: true },
               ]
           }

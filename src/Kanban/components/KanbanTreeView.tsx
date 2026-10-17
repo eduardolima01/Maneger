@@ -1,3 +1,8 @@
+import PlanBadge from '@/Kanban/components/PlanBadge';
+import PlanDistributionBar from '@/Kanban/components/PlanDistributionBar';
+import { useArchive } from '@/Kanban/utils/archiveContext';
+import ChecklistSection from '@/Kanban/ChecklistSection';
+import { statusIds } from '@/Kanban/utils/customStatuses';
 import { StatusSections, GroupByStatusButton } from '@/Kanban/components/StatusGrouping';
 import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
@@ -70,6 +75,10 @@ export interface TreeActions {
   archivedCount?: number;
   onToggleShowArchived?: () => void;
   onToggleColumnArchived?: (columnId: string) => unknown;
+  /** Arquivados por coluna (cards + grupos) e o botão "ver arquivados" de cada coluna. */
+  archivedCountByColumn?: Map<string, number>;
+  showArchivedColumnIds?: Set<string>;
+  onToggleColumnShowArchived?: (columnId: string) => void;
 }
 
 interface KanbanTreeViewProps {
@@ -81,6 +90,8 @@ interface KanbanTreeViewProps {
   /** Cards de cada coluna que não estão em nenhum grupo. */
   ungroupedCardsByColumn: Map<string, KanbanCard[]>;
   checklistProgress: Record<string, ChecklistProgress>;
+  /** Chamado quando as tarefas de um card mudaram (bloco flutuante da árvore): o quadro recalcula o resumo. */
+  onChecklistChanged?: (cardId: string) => void;
   onCardClick: (cardId: string) => void;
   /** Id do card aberto no painel lateral (a linha dele fica destacada na árvore). */
   selectedCardId?: string | null;
@@ -268,9 +279,129 @@ function AddInlineInput({ depth, placeholder, onSubmit, onClose }: {
   );
 }
 
+/* ---------- tarefas do card: ícone na linha + bloco flutuante pra gerenciar sem abrir o card ---------- */
+
+/**
+ * Ícone/contagem das tarefas do card. Passar o mouse (ou clicar, que "prende" o bloco) abre um bloco flutuante com a lista de
+ * tarefas — dá pra marcar, criar e apagar tarefas ali, sem abrir o card no painel ao lado.
+ */
+function TaskPeek({ cardId, title, label, className, style, onChanged }: {
+  cardId: string;
+  title: string;
+  label: string;
+  className?: string;
+  style?: React.CSSProperties;
+  onChanged?: (cardId: string) => void;
+}) {
+  const triggerRef = useRef<HTMLSpanElement>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
+  const [pos, setPos] = useState<{ x: number; y: number } | null>(null);
+  const [pinned, setPinned] = useState(false);
+  const openTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const openRef = useRef(false);
+  openRef.current = pos !== null;
+  const changedRef = useRef(onChanged);
+  changedRef.current = onChanged;
+
+  function clear() {
+    if (openTimer.current) clearTimeout(openTimer.current);
+    if (closeTimer.current) clearTimeout(closeTimer.current);
+  }
+  function openNow() {
+    const r = triggerRef.current?.getBoundingClientRect();
+    if (!r) return;
+    const W = 340;
+    const H = 380;
+    const x = Math.max(8, Math.min(r.left, window.innerWidth - W - 12));
+    const below = r.bottom + 4 + H <= window.innerHeight;
+    setPos({ x, y: below ? r.bottom + 4 : Math.max(8, r.top - H - 4) });
+  }
+  function close() {
+    clear();
+    setPinned(false);
+    setPos(null);
+  }
+  function scheduleOpen() {
+    clear();
+    if (openRef.current) return;
+    openTimer.current = setTimeout(openNow, 250);
+  }
+  function scheduleClose() {
+    clear();
+    if (pinned) return;
+    closeTimer.current = setTimeout(() => {
+      // digitando numa tarefa: não fecha por o mouse ter saído do bloco
+      if (panelRef.current && panelRef.current.contains(document.activeElement) && document.activeElement?.tagName === 'INPUT') return;
+      setPos(null);
+    }, 300);
+  }
+  useEffect(() => clear, []);
+
+  // ao fechar, atualiza o resumo (✓ feitas/total) da linha
+  const wasOpen = useRef(false);
+  useEffect(() => {
+    if (pos !== null) { wasOpen.current = true; return; }
+    if (wasOpen.current) { wasOpen.current = false; changedRef.current?.(cardId); }
+  }, [pos, cardId]);
+
+  // "preso" (clicou): fecha ao clicar fora ou com Esc
+  useEffect(() => {
+    if (!pinned) return;
+    function onDown(e: MouseEvent) {
+      const t = e.target as Node;
+      if (panelRef.current?.contains(t) || triggerRef.current?.contains(t)) return;
+      close();
+    }
+    function onKey(e: KeyboardEvent) { if (e.key === 'Escape') close(); }
+    document.addEventListener('mousedown', onDown);
+    window.addEventListener('keydown', onKey);
+    return () => { document.removeEventListener('mousedown', onDown); window.removeEventListener('keydown', onKey); };
+  }, [pinned]);
+
+  const stop = (e: React.SyntheticEvent) => e.stopPropagation();
+  return (
+    <>
+      <span
+        ref={triggerRef}
+        title={title}
+        className={className}
+        onMouseEnter={scheduleOpen}
+        onMouseLeave={scheduleClose}
+        onPointerDown={stop}
+        onDoubleClick={stop}
+        onClick={(e) => { e.stopPropagation(); if (pos) { if (pinned) close(); else setPinned(true); } else { openNow(); setPinned(true); } }}
+        style={{ cursor: 'pointer', borderRadius: 3, padding: '0 3px', ...style }}
+      >
+        {label}
+      </span>
+      {pos && createPortal(
+        <div
+          ref={panelRef}
+          onMouseEnter={() => { if (closeTimer.current) clearTimeout(closeTimer.current); }}
+          onMouseLeave={scheduleClose}
+          onClick={stop}
+          onDoubleClick={stop}
+          onPointerDown={stop}
+          onContextMenu={stop}
+          onKeyDown={stop}
+          className="bg-white dark:bg-neutral-800 text-neutral-900 dark:text-neutral-100 border border-neutral-200 dark:border-neutral-600"
+          style={{ position: 'fixed', left: pos.x, top: pos.y, width: 340, maxHeight: 380, overflowY: 'auto', overscrollBehavior: 'contain', zIndex: 100000, padding: 10, borderRadius: 8, boxShadow: '0 8px 28px rgba(0,0,0,0.3)' }}
+        >
+          <div className="text-neutral-500 dark:text-neutral-400" style={{ display: 'flex', alignItems: 'center', fontSize: 11, fontWeight: 700, marginBottom: 6 }}>
+            <span style={{ flex: 1 }}>☑ Tarefas{pinned ? ' (fixo — clique fora para fechar)' : ''}</span>
+            <button type="button" onClick={close} aria-label="Fechar" style={{ border: 'none', background: 'none', cursor: 'pointer', color: 'inherit', fontSize: 12 }}>✕</button>
+          </div>
+          <ChecklistSection cardId={cardId} />
+        </div>,
+        document.body,
+      )}
+    </>
+  );
+}
+
 /* ---------- estado do card (texto pequeno + select pra trocar sem abrir o card) ---------- */
 
-const STATUS_ORDER: TaskStatus[] = ['pendente', 'fazer', 'fazendo', 'revisao', 'feito'];
 
 /**
  * Estado do card como TEXTO pequeno (na cor do estado) que já é um <select>: trocar o estado não exige abrir o card.
@@ -312,7 +443,7 @@ function StatusSelect({ status, onChange, bulkCount }: {
       }}
     >
       <option value="" style={{ fontSize: 12 }} className="bg-white text-black dark:bg-neutral-800 dark:text-neutral-100">Sem status</option>
-      {STATUS_ORDER.map((s) => (
+      {statusIds().map((s) => (
         <option key={s} value={s} style={{ fontSize: 12 }} className="bg-white text-black dark:bg-neutral-800 dark:text-neutral-100">{STATUS_LABELS[s]}</option>
       ))}
     </select>
@@ -328,6 +459,8 @@ interface TreeCardRowProps {
   card: KanbanCard;
   depth: number;
   progress?: ChecklistProgress;
+  /** Depois de mexer nas tarefas pelo bloco flutuante: recalcula o resumo do card. */
+  onChecklistChanged?: (cardId: string) => void;
   selected: boolean;
   /** Mostra a barra azul antes/depois da linha enquanto outro card está sendo arrastado por cima dela. */
   hint: 'before' | 'after' | null;
@@ -359,7 +492,7 @@ interface TreeCardRowProps {
   kbFocused?: boolean;
 }
 
-function TreeCardRow({ card, depth, progress, selected, hint, cardMenu, canEdit, canDrag, onClick, onRename, groupColors, onUpdateStatus, coverSize, checked, selectionActive, onToggleCheck, bulkIds, bulkActions, trailingOrder, editNonce, kbFocused }: TreeCardRowProps) {
+function TreeCardRow({ card, depth, progress, onChecklistChanged, selected, hint, cardMenu, canEdit, canDrag, onClick, onRename, groupColors, onUpdateStatus, coverSize, checked, selectionActive, onToggleCheck, bulkIds, bulkActions, trailingOrder, editNonce, kbFocused }: TreeCardRowProps) {
   const { icons: labelIcons } = useLabelIcons(); // ícones das etiquetas (os mesmos do quadro)
   // linha selecionada tem fundo azul claro: aí as cores calculadas pro fundo do grupo não valem, usa as do tema
   const inBulkSelection = checked && !!bulkActions && !!bulkIds && bulkIds.length > 1;
@@ -441,15 +574,25 @@ function TreeCardRow({ card, depth, progress, selected, hint, cardMenu, canEdit,
     checklist: (
       <>
         {progress && progress.total > 0 && (
-        <span className={colors ? undefined : 'text-neutral-500 dark:text-neutral-400'} title="Checklist" style={{ fontSize: 10, flexShrink: 0, color: colors?.secondary }}>
-          ✓ {progress.done}/{progress.total}
-        </span>
-      )}
+          <TaskPeek
+            cardId={card.id}
+            title="Tarefas (passe o mouse para gerenciar; clique para fixar)"
+            label={`☑ ${progress.done}/${progress.total}`}
+            className={colors ? 'hover:bg-black/10' : 'text-neutral-500 dark:text-neutral-400 hover:bg-neutral-200 dark:hover:bg-neutral-600'}
+            style={{ fontSize: 10, flexShrink: 0, color: colors?.secondary }}
+            onChanged={onChecklistChanged}
+          />
+        )}
         {progress && progress.total === 0 && (progress.simpleCount ?? 0) > 0 && (
-        <span className={colors ? undefined : 'text-neutral-500 dark:text-neutral-400'} title="Itens em lista simples (não entram na contagem de tarefas)" style={{ fontSize: 10, flexShrink: 0, color: colors?.secondary }}>
-          ☰ {progress.simpleCount}
-        </span>
-      )}
+          <TaskPeek
+            cardId={card.id}
+            title="Itens em lista simples (passe o mouse para ver; clique para fixar)"
+            label={`☰ ${progress.simpleCount}`}
+            className={colors ? 'hover:bg-black/10' : 'text-neutral-500 dark:text-neutral-400 hover:bg-neutral-200 dark:hover:bg-neutral-600'}
+            style={{ fontSize: 10, flexShrink: 0, color: colors?.secondary }}
+            onChanged={onChecklistChanged}
+          />
+        )}
       </>
     ),
     updated: card.updatedAt ? (
@@ -472,6 +615,7 @@ function TreeCardRow({ card, depth, progress, selected, hint, cardMenu, canEdit,
       ),
   };
   const trailing = trailingOrder ?? ['labels', 'priority', 'checklist', 'due'];
+  const archiveActions = useArchive();
 
   return (
     <div
@@ -490,7 +634,7 @@ function TreeCardRow({ card, depth, progress, selected, hint, cardMenu, canEdit,
           : colors ? 'group/row hover:bg-black/10' : 'group/row hover:bg-neutral-100 dark:hover:bg-neutral-700'}
       style={{
         display: 'flex', alignItems: 'center', gap: 6, padding: '3px 6px', paddingLeft: 6 + depth * INDENT_PX + 14,
-        fontSize: 12, cursor: canDrag ? 'grab' : 'pointer', borderRadius: 4, opacity: isDragging ? 0.4 : isCut ? 0.45 : 1,
+        fontSize: 12, cursor: canDrag ? 'grab' : 'pointer', borderRadius: 4, opacity: isDragging ? 0.4 : isCut ? 0.45 : card.archived ? 0.55 : 1,
         borderLeft: card.color ? `3px solid ${card.color}` : undefined, boxShadow: hintShadow,
         outline: kbFocused ? '2px solid #1a73e8' : isCut ? '2px dashed #f59e0b' : undefined, outlineOffset: -2,
       }}
@@ -568,7 +712,22 @@ function TreeCardRow({ card, depth, progress, selected, hint, cardMenu, canEdit,
         </>
       )}
 
+      {card.isPlanTemplate && <PlanBadge card={card} size={9} />}
+      {card.isPlanTemplate && card.planTrackOnly && <PlanDistributionBar card={card} inline />}
       {trailing.map((k) => <Fragment key={k}>{trailingNodes[k]}</Fragment>)}
+      {archiveActions && (
+        <button
+          type="button"
+          title={card.archived ? 'Desarquivar o card' : 'Arquivar o card (some da coluna; dá pra ver pelo botão "arquivados" da coluna)'}
+          aria-label={card.archived ? 'Desarquivar' : 'Arquivar'}
+          onPointerDown={(e) => e.stopPropagation()}
+          onClick={(e) => { e.stopPropagation(); archiveActions.archiveCard(card.id, !card.archived); }}
+          className={`bg-transparent border-0 p-0 cursor-pointer shrink-0 leading-none ${card.archived ? 'opacity-100' : 'opacity-0 group-hover/row:opacity-100 focus-visible:opacity-100'} ${colors ? '' : 'text-neutral-500 dark:text-neutral-400 hover:text-blue-600 dark:hover:text-blue-400'}`}
+          style={{ fontSize: 11, color: colors?.secondary }}
+        >
+          {card.archived ? '📤' : '🗄'}
+        </button>
+      )}
       {cardMenu && <CardActionsMenu card={card} {...cardMenu} bulkIds={bulkIds} bulkActions={bulkActions} />}
     </div>
   );
@@ -857,7 +1016,7 @@ function BulkBar({ ids, allLabels, bulk, onClear }: {
         style={{ fontSize: 11, padding: '1px 2px', borderRadius: 4 }}
       >
         <option value="">📊 Status…</option>
-        {STATUS_ORDER.map((s) => <option key={s} value={s}>{STATUS_LABELS[s]}</option>)}
+        {statusIds().map((s) => <option key={s} value={s}>{STATUS_LABELS[s]}</option>)}
         <option value="__none">Sem status</option>
       </select>
       <button className={linkCls} style={{ fontSize: 11 }} onClick={(e) => openPopup('color', e)}>🎨 Cor</button>
@@ -966,12 +1125,16 @@ interface TreeHeaderRowProps {
   /** Coluna arquivada (aparece esmaecida) e o botão de arquivar/desarquivar. */
   archived?: boolean;
   onToggleArchived?: () => void;
+  /** O que o botão de arquivar arquiva ('a coluna' | 'o grupo'), pro texto da dica. */
+  archiveLabel?: string;
+  /** Botão "ver arquivados" da coluna (mostra/oculta, na própria coluna, os cards e grupos arquivados dela). */
+  archivedView?: { count: number; on: boolean; onClick: () => void };
 }
 
 function TreeHeaderRow({
   nodeId, dropTarget, depth, icon, name, count, bold, hasContent, collapsed, coverPath, coverSize, isDropOver, onToggle, addItems, textColors,
   onEmojiClick, onAppearanceToggle, appearanceOpen, onRename, onDelete, draggableGroupId, dropZone, kbFocused,
-  onMoveUp, onMoveDown, canMoveUp = true, canMoveDown = true, archived, onToggleArchived,
+  onMoveUp, onMoveDown, canMoveUp = true, canMoveDown = true, archived, onToggleArchived, archiveLabel = 'a coluna', archivedView,
 }: TreeHeaderRowProps) {
   const { setNodeRef } = useDroppable({
     id: `drop-header:${nodeId}`,
@@ -1068,10 +1231,22 @@ function TreeHeaderRow({
           {name}
         </span>
       )}
+      {archivedView && (archivedView.count > 0 || archivedView.on) && !editing && (
+        <button
+          type="button"
+          title={archivedView.on ? 'Ocultar os cards e grupos arquivados desta coluna' : 'Mostrar os cards e grupos arquivados desta coluna'}
+          onPointerDown={(e) => e.stopPropagation()}
+          onClick={(e) => { e.stopPropagation(); archivedView.onClick(); }}
+          className={`bg-transparent border-0 p-0 cursor-pointer shrink-0 leading-none ${archivedView.on ? 'text-blue-600 dark:text-blue-400' : (textColors ? '' : 'text-neutral-500 dark:text-neutral-400 hover:text-blue-600 dark:hover:text-blue-400')}`}
+          style={{ fontSize: 10, color: archivedView.on ? undefined : textColors?.secondary }}
+        >
+          {archivedView.on ? '🗄 ocultar' : `🗄 ${archivedView.count}`}
+        </button>
+      )}
       {onToggleArchived && !editing && (
         <button
           type="button"
-          title={archived ? 'Desarquivar a coluna (volta ao quadro)' : 'Arquivar a coluna'}
+          title={archived ? `Desarquivar ${archiveLabel}` : `Arquivar ${archiveLabel}`}
           aria-label={archived ? 'Desarquivar' : 'Arquivar'}
           onPointerDown={(e) => e.stopPropagation()}
           onClick={(e) => { e.stopPropagation(); onToggleArchived(); }}
@@ -1199,8 +1374,9 @@ const LINK_CLS = 'text-blue-600 dark:text-blue-400 bg-transparent border-0 p-0 c
  * Capas: coluna, grupo/subgrupo e card mostram miniatura (a da coluna e a do grupo substituem o ícone/emoji, como no quadro).
  */
 export default function KanbanTreeView({
-  columns, groups, cardsByGroup, ungroupedCardsByColumn, checklistProgress, onCardClick, selectedCardId, cardMenu, treeActions, selectedCardIds, onToggleSelect, onSelectRange, onClearSelection, bulk, visualConfig, columnBackgrounds, columnOpacities, sidePanel, stateKey = 'default',
+  columns, groups, cardsByGroup, ungroupedCardsByColumn, checklistProgress, onChecklistChanged, onCardClick, selectedCardId, cardMenu, treeActions, selectedCardIds, onToggleSelect, onSelectRange, onClearSelection, bulk, visualConfig, columnBackgrounds, columnOpacities, sidePanel, stateKey = 'default',
 }: KanbanTreeViewProps) {
+  const archive = useArchive();
   const { icons: labelIcons } = useLabelIcons(); // ícones das etiquetas, os mesmos dos chips dos grupos no quadro
   // ordem dos itens à direita do título = ordem deles em visualConfig (a lista da aba ⚙ do card)
   const trailingOrder = useMemo(() => {
@@ -1907,6 +2083,7 @@ export default function KanbanTreeView({
         card={card}
         depth={depth}
         progress={checklistProgress[card.id]}
+        onChecklistChanged={onChecklistChanged}
         selected={card.id === selectedCardId}
         hint={hint}
         cardMenu={cardMenu}
@@ -1992,6 +2169,9 @@ export default function KanbanTreeView({
           appearanceOpen={panelOpen}
           onRename={treeActions ? (newName) => treeActions.onRenameGroup(g.id, newName) : undefined}
           onDelete={treeActions ? () => treeActions.onRequestDeleteGroup(g.id) : undefined}
+          archived={archive?.isGroupArchived(g.id)}
+          archiveLabel="o grupo"
+          onToggleArchived={archive ? () => archive.archiveGroup(g.id, !archive.isGroupArchived(g.id)) : undefined}
           draggableGroupId={treeActions ? g.id : undefined}
           dropZone={groupHint && groupHint.groupId === g.id ? groupHint.zone : null}
           addItems={treeActions ? [
@@ -2106,6 +2286,11 @@ export default function KanbanTreeView({
           name={col.visible === false ? `${col.name} (arquivada)` : col.name}
           archived={col.visible === false}
           onToggleArchived={treeActions?.onToggleColumnArchived ? () => treeActions.onToggleColumnArchived!(col.id) : undefined}
+          archivedView={treeActions?.onToggleColumnShowArchived && col.visible !== false ? {
+            count: treeActions.archivedCountByColumn?.get(col.id) ?? 0,
+            on: !!treeActions.showArchivedColumnIds?.has(col.id),
+            onClick: () => treeActions.onToggleColumnShowArchived!(col.id),
+          } : undefined}
           count={countColumnCards(col.id)}
           bold
           hasContent={hasContent}

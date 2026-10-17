@@ -1,3 +1,5 @@
+import { ArchiveContext, type ArchiveActions } from '@/Kanban/utils/archiveContext';
+import StatusManagerModal from '@/Kanban/components/StatusManagerModal';
 import { useMemo, useRef, useState, useEffect, useCallback, type ReactNode } from 'react';
 import {
   DndContext, PointerSensor, useSensor, useSensors, closestCorners,
@@ -140,6 +142,7 @@ export default function KanbanBoard({ kanban }: KanbanBoardProps) {
   // o botão do modo trabalho reflete se a janela DESTE kanban está aberta
   const [workOpen, setWorkOpen] = useState(false);
   const [moreOpen, setMoreOpen] = useState(false);
+  const [statusManagerOpen, setStatusManagerOpen] = useState(false);
   useEffect(() => {
     let alive = true;
     setWorkOpen(false);
@@ -797,6 +800,12 @@ export default function KanbanBoard({ kanban }: KanbanBoardProps) {
     };
   }, []);
 
+  const archiveValue = useMemo<ArchiveActions>(() => ({
+    archiveCard: (id, archived) => { void board.archiveCard(id, archived); },
+    archiveGroup: board.archiveGroup,
+    isGroupArchived: board.isGroupArchived,
+  }), [board.archiveCard, board.archiveGroup, board.isGroupArchived]);
+
   const cardMoveValue = useMemo(() => ({
     columns: board.columns.filter((c) => c.visible),
     groups: board.groups,
@@ -805,6 +814,7 @@ export default function KanbanBoard({ kanban }: KanbanBoardProps) {
 
   return (
     <CardMoveContext.Provider value={cardMoveValue}>
+      <ArchiveContext.Provider value={archiveValue}>
       <LabelIconContext.Provider value={labelIconValue}>
         <GroupLayoutContext.Provider value={groupLayoutValue}>
           <div
@@ -875,6 +885,15 @@ export default function KanbanBoard({ kanban }: KanbanBoardProps) {
                     {workOpen ? '✕ Fechar modo trabalho' : '🖥 Modo trabalho'}
                   </HeaderBtn>
                 </HeaderGroup>
+                {statusManagerOpen && (
+                  <StatusManagerModal
+                    onClose={() => setStatusManagerOpen(false)}
+                    onRemoved={(id) => {
+                      const ids = board.cards.filter((x) => x.status === id).map((x) => x.id);
+                      if (ids.length > 0) void board.bulkSetStatus(ids, null);
+                    }}
+                  />
+                )}
                 {helpOpen && <ShortcutsHelpModal isOpen onClose={() => setHelpOpen(false)} inTree={viewMode === 'tree'} />}
                 {historyOpen && <KanbanHistoryModal isOpen onClose={() => setHistoryOpen(false)} kanbanId={kanban.id} />}
                 {historyToast && (
@@ -906,6 +925,7 @@ export default function KanbanBoard({ kanban }: KanbanBoardProps) {
                           {showArchivedColumns ? '🗄 Ocultar colunas arquivadas' : `🗄 Colunas arquivadas${archivedColumns.length > 0 ? ` (${archivedColumns.length})` : ''}`}
                         </MenuItem>
                         <MenuItem onClick={() => { setBackgroundModalOpen(true); setMoreOpen(false); }}>🎨 Fundo do kanban</MenuItem>
+                        <MenuItem onClick={() => { setStatusManagerOpen(true); setMoreOpen(false); }}>🏷 Estados dos cards…</MenuItem>
                       </div>
                     </>
                   )}
@@ -930,6 +950,7 @@ export default function KanbanBoard({ kanban }: KanbanBoardProps) {
                     cardsByGroup={board.cardsByGroup}
                     ungroupedCardsByColumn={board.ungroupedCardsByColumn}
                     checklistProgress={board.checklistProgress}
+                    onChecklistChanged={(id) => { void board.refreshChecklistProgress(id); }}
                     onCardClick={(id) => { setSelectedCardIds(new Set()); changeTreeCard(id); }}
                     selectedCardId={treeCardId}
                     treeActions={{
@@ -950,6 +971,9 @@ export default function KanbanBoard({ kanban }: KanbanBoardProps) {
                       showArchived: showArchivedColumns,
                       archivedCount: archivedColumns.length,
                       onToggleShowArchived: () => setShowArchivedColumns((v) => !v),
+                      archivedCountByColumn: board.archivedCountByColumn,
+                      showArchivedColumnIds: board.showArchivedColumnIds,
+                      onToggleColumnShowArchived: board.toggleColumnShowArchived,
                       onToggleColumnArchived: (columnId) => {
                         const col = board.columns.find((x) => x.id === columnId);
                         if (col) board.updateColumn(columnId, { visible: !col.visible });
@@ -1090,6 +1114,9 @@ export default function KanbanBoard({ kanban }: KanbanBoardProps) {
                                   backgroundOpacity={board.viewPrefs.columnBackgroundOpacity?.[col.id] ?? 1}
                                   onUpdateBackgroundOpacity={(opacity) => updateColumnOpacity(col.id, opacity)}
                                   focused={!!focusedColumn}
+                                  archivedCount={board.archivedCountByColumn.get(col.id) ?? 0}
+                                  showArchived={board.showArchivedColumnIds.has(col.id)}
+                                  onToggleShowArchived={() => board.toggleColumnShowArchived(col.id)}
                                   onToggleFocus={() => setFocusedColumnId(focusedColumn ? null : col.id)}
 
                                   onCardClick={handleCardClick}
@@ -1487,6 +1514,7 @@ export default function KanbanBoard({ kanban }: KanbanBoardProps) {
           </div>
         </GroupLayoutContext.Provider>
       </LabelIconContext.Provider>
+      </ArchiveContext.Provider>
     </CardMoveContext.Provider>
   );
 }

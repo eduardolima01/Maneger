@@ -1,0 +1,31 @@
+{
+  "settings": {
+    "workMinutes": 1,
+    "shortBreakMinutes": 5,
+    "longBreakMinutes": 15,
+    "sessionsUntilLongBreak": 4
+  },
+  "sessions": [
+    {
+      "id": "6ee521bc-8581-44b1-9d28-a47301a61912",
+      "type": "work",
+      "startedAt": "2026-08-03T09:15:07",
+      "completedAt": "2026-08-03T09:16:07",
+      "durationMinutes": 1
+    },
+    {
+      "id": "235eba85-ed02-466f-8907-d4752b44644a",
+      "type": "work",
+      "startedAt": "2026-08-03T08:09:44",
+      "completedAt": null,
+      "durationMinutes": 25
+    },
+    {
+      "id": "fa3642ee-9125-409c-b9fa-ec7099db7aa3",
+      "type": "work",
+      "startedAt": "2026-08-02T19:03:40",
+      "completedAt": null,
+      "durationMinutes": 25
+    }
+  ]
+}

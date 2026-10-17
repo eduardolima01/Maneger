@@ -1,0 +1,8 @@
+{
+  "defaultSection": "modules",
+  "enabledSections": {
+    "modules": true,
+    "subprojects": false,
+    "modifications": false
+  }
+}

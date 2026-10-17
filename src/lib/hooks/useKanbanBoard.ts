@@ -3,6 +3,7 @@ import * as cardsApi from '@/lib/api/kanban/kanbanCards';
 import * as kanbansApi from '@/lib/api/kanban/kanbans.ts';
 import type { KanbanColumn, KanbanFilters, KanbanCard, KanbanCardGroup, Kanban, KanbanViewPrefs, ChecklistProgress, LabelIcon } from '@/types/kanban.types';
 import { emptyFilters, hasActiveFilters } from '@/types/kanban.types';
+import { registerCustomStatuses, setStatusPersister } from '@/Kanban/utils/customStatuses';
 
 import * as groupsApi from '@/lib/api/kanban/kanbanCardGroups';
 import { getProgressByCardIds } from '../api/kanban/kanbanChecklist';
@@ -14,6 +15,7 @@ import { generateDailyDates, generateNumberedTitles } from '@/Kanban/utils/kanba
 export function useKanbanBoard(kanban: Kanban) {
   const kanbanId = kanban.id;
   const [columns, setColumns] = useState<KanbanColumn[]>([]);
+  const [archivedCards, setArchivedCards] = useState<KanbanCard[]>([]);
   const [cards, setCards] = useState<KanbanCard[]>([]);
   const [groups, setGroups] = useState<KanbanCardGroup[]>([]);
   const [cardsWithSubKanban, setCardsWithSubKanban] = useState<Set<string>>(new Set());
@@ -28,32 +30,100 @@ export function useKanbanBoard(kanban: Kanban) {
     setViewPrefs(kanban.viewPrefs);
   }, [kanban.id]);
 
+  registerCustomStatuses(viewPrefs.customStatuses); // estados criados pelo usuário entram em STATUS_LABELS/COLORS antes de qualquer filho desenhar
+
   const reload = useCallback(async () => {
     setLoading(true);
-    const [cols, cardList] = await Promise.all([
+    const [cols, allCards] = await Promise.all([
       columnsApi.getColumnsByKanban(kanbanId),
-      cardsApi.getCardsByKanban(kanbanId),
+      cardsApi.getCardsByKanban(kanbanId, true), // inclui os arquivados: eles só aparecem onde o botão "ver arquivados" da coluna está ligado
     ]);
     setColumns(cols);
+    setArchivedCards(allCards.filter((c) => c.archived));
+    const cardList = allCards.filter((c) => !c.archived);
     setCards(cardList);
     const groupList = await groupsApi.getGroupsByKanban(kanbanId);
     setGroups(groupList);
-    const subKanbanIds = await kanbansApi.getCardIdsWithSubKanban(cardList.map((c) => c.id));
+    const subKanbanIds = await kanbansApi.getCardIdsWithSubKanban(allCards.map((c) => c.id));
     setCardsWithSubKanban(subKanbanIds);
     const allFileIds = new Set(await cardAssetsApi.listCardIdsWithFiles());
-    setCardsWithFiles(new Set(cardList.filter((c) => allFileIds.has(c.id)).map((c) => c.id)));
-    const progress = await getProgressByCardIds(cardList.map((c) => c.id));
+    setCardsWithFiles(new Set(allCards.filter((c) => allFileIds.has(c.id)).map((c) => c.id)));
+    const progress = await getProgressByCardIds(allCards.map((c) => c.id));
     setChecklistProgress(progress);
     setLoading(false);
   }, [kanbanId]);
 
   useEffect(() => { reload(); }, [reload]);
 
+  /* ----- arquivados: cards (card.archived) e grupos (viewPrefs.archivedGroupIds), vistos por coluna (viewPrefs.columnsShowArchived) ----- */
+  const showArchivedSet = useMemo(() => new Set(viewPrefs.columnsShowArchived ?? []), [viewPrefs.columnsShowArchived]);
+  const archivedGroupSet = useMemo(() => new Set(viewPrefs.archivedGroupIds ?? []), [viewPrefs.archivedGroupIds]);
+  const groupById = useMemo(() => new Map(groups.map((g) => [g.id, g])), [groups]);
+
+  /** Coluna do card (num grupo, a coluna é a do grupo). */
+  const columnOfCard = useCallback((card: KanbanCard): string | null => {
+    if (card.cardGroupId) return groupById.get(card.cardGroupId)?.columnId ?? null;
+    return card.columnId;
+  }, [groupById]);
+
+  /** O grupo ou algum ancestral dele está arquivado? */
+  const isGroupHiddenByArchive = useCallback((groupId: string): boolean => {
+    let g = groupById.get(groupId);
+    let guard = 0;
+    while (g && guard++ < 30) {
+      if (archivedGroupSet.has(g.id)) return true;
+      g = g.parentGroupId ? groupById.get(g.parentGroupId) : undefined;
+    }
+    return false;
+  }, [groupById, archivedGroupSet]);
+
+  /** Grupos que aparecem: os arquivados (e o que está dentro deles) só onde "ver arquivados" da coluna está ligado. */
+  const visibleGroups = useMemo(
+    () => groups.filter((g) => showArchivedSet.has(g.columnId) || !isGroupHiddenByArchive(g.id)),
+    [groups, showArchivedSet, isGroupHiddenByArchive],
+  );
+
+  /** Cards ativos + os arquivados das colunas com "ver arquivados" ligado. */
+  const shownCards = useMemo(() => {
+    if (showArchivedSet.size === 0) return cards;
+    const extra = archivedCards.filter((c) => { const col = columnOfCard(c); return col !== null && showArchivedSet.has(col); });
+    return extra.length > 0 ? [...cards, ...extra] : cards;
+  }, [cards, archivedCards, showArchivedSet, columnOfCard]);
+
+  /** Quantos itens arquivados cada coluna tem (cards arquivados + grupos arquivados) — mostrado no botão. */
+  const archivedCountByColumn = useMemo(() => {
+    const map = new Map<string, number>();
+    const bump = (col: string | null) => { if (col) map.set(col, (map.get(col) ?? 0) + 1); };
+    for (const c of archivedCards) bump(columnOfCard(c));
+    for (const g of groups) if (archivedGroupSet.has(g.id)) bump(g.columnId);
+    return map;
+  }, [archivedCards, groups, archivedGroupSet, columnOfCard]);
+
+  const toggleColumnShowArchived = useCallback((columnId: string) => {
+    setViewPrefs((prev) => {
+      const cur = new Set(prev.columnsShowArchived ?? []);
+      if (cur.has(columnId)) cur.delete(columnId); else cur.add(columnId);
+      const next = { ...prev, columnsShowArchived: [...cur] };
+      kanbansApi.updateKanban(kanbanId, { viewPrefs: next }).catch(() => { });
+      return next;
+    });
+  }, [kanbanId]);
+
+  const archiveGroup = useCallback((groupId: string, archived: boolean) => {
+    setViewPrefs((prev) => {
+      const cur = new Set(prev.archivedGroupIds ?? []);
+      if (archived) cur.add(groupId); else cur.delete(groupId);
+      const next = { ...prev, archivedGroupIds: [...cur] };
+      kanbansApi.updateKanban(kanbanId, { viewPrefs: next }).catch(() => { });
+      return next;
+    });
+  }, [kanbanId]);
+
   const ungroupedCardsByColumn = useMemo(() => {
     const term = search.trim().toLowerCase();
     const map = new Map<string, KanbanCard[]>();
 
-    for (const card of cards) {
+    for (const card of shownCards) {
       if (card.cardGroupId) continue; // agrupados são tratados abaixo
       if (term) {
         const haystack = `${card.title} ${card.description ?? ''} ${card.labels.join(' ')}`.toLowerCase();
@@ -70,11 +140,11 @@ export function useKanbanBoard(kanban: Kanban) {
 
     for (const list of map.values()) list.sort((a, b) => a.position - b.position);
     return map;
-  }, [cards, search, filters]);
+  }, [shownCards, search, filters]);
 
   const cardsByGroup = useMemo(() => {
     const map = new Map<string, KanbanCard[]>();
-    for (const card of cards) {
+    for (const card of shownCards) {
       if (!card.cardGroupId) continue;
       const list = map.get(card.cardGroupId) ?? [];
       list.push(card);
@@ -82,18 +152,18 @@ export function useKanbanBoard(kanban: Kanban) {
     }
     for (const list of map.values()) list.sort((a, b) => a.position - b.position);
     return map;
-  }, [cards]);
+  }, [shownCards]);
 
   const groupsByColumn = useMemo(() => {
     const map = new Map<string, KanbanCardGroup[]>();
-    for (const g of groups) {
+    for (const g of visibleGroups) {
       const list = map.get(g.columnId) ?? [];
       list.push(g);
       map.set(g.columnId, list);
     }
     for (const list of map.values()) list.sort((a, b) => a.position - b.position);
     return map;
-  }, [groups]);
+  }, [visibleGroups]);
 
   const createGroup = useCallback(async (columnId: string, name: string) => {
     await groupsApi.createGroup(kanbanId, columnId, name);
@@ -474,6 +544,12 @@ export function useKanbanBoard(kanban: Kanban) {
     }
   }, [kanbanId, reorderColumnsLocally, reload]);
 
+  /** Recalcula só o resumo de tarefas (✓ feitas/total) de UM card — usado depois de mexer nas tarefas sem abrir o card. */
+  const refreshChecklistProgress = useCallback(async (cardId: string) => {
+    const progress = await getProgressByCardIds([cardId]);
+    setChecklistProgress((prev) => ({ ...prev, ...progress }));
+  }, []);
+
   const saveViewPrefs = useCallback(async (partial: Partial<import('@/types/kanban.types').KanbanViewPrefs>) => {
     setViewPrefs((prev) => {
       const next = { ...prev, ...partial };
@@ -482,6 +558,12 @@ export function useKanbanBoard(kanban: Kanban) {
       return next;
     });
   }, [kanbanId]);
+
+  // criar/editar/apagar estado (menus de estado, gerenciador) grava em viewPrefs.customStatuses deste kanban
+  useEffect(() => {
+    setStatusPersister((list) => { void saveViewPrefs({ customStatuses: list }); });
+    return () => setStatusPersister(null);
+  }, [saveViewPrefs]);
 
   const fixInconsistentGroupLabels = useCallback(async () => {
     // descobre, por nome de etiqueta, se ELA é "de grupo" em qualquer card onde aparece
@@ -515,7 +597,7 @@ export function useKanbanBoard(kanban: Kanban) {
   }, [cards, reload]);
 
   return {
-    columns, ungroupedCardsByColumn, cardsByGroup, groupsByColumn, cards, groups, cardsWithSubKanban, cardsWithFiles, checklistProgress, loading, reload,
+    columns, ungroupedCardsByColumn, cardsByGroup, groupsByColumn, cards, groups: visibleGroups, allGroups: groups, archivedCountByColumn, showArchivedColumnIds: showArchivedSet, toggleColumnShowArchived, archiveGroup, isGroupArchived: (id: string) => archivedGroupSet.has(id), cardsWithSubKanban, cardsWithFiles, checklistProgress, loading, reload,
     search, setSearch, filters, setFilters, filtersActive: hasActiveFilters(filters),
     moveCard, createCard, updateCard, duplicateCard, archiveCard, removeCard,
     createCardInGroup,
@@ -526,7 +608,7 @@ export function useKanbanBoard(kanban: Kanban) {
     createColumn, updateColumn, removeColumn, duplicateColumn, reorderColumns,
     bulkMoveCards, moveCardsTo, bulkDeleteCards, bulkSetColor, bulkSetStatus, bulkToggleLabel,
     duplicateCardMultiple, createCardsBatch,
-    viewPrefs, saveViewPrefs,
+    viewPrefs, saveViewPrefs, refreshChecklistProgress,
     reorderCardsInGroup,
   };
 }

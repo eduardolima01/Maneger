@@ -1,5 +1,4 @@
 import { useState, useEffect, useCallback, useMemo, useReducer, useRef } from 'react';
-import { openPath as openWithDefaultApp } from '@tauri-apps/plugin-opener';
 import { open as openFileDialog } from '@tauri-apps/plugin-dialog';
 import * as fsService from '../api/fileSystemService';
 import { loadExplorerPrefs, saveExplorerPrefs } from '../api/explorerPrefs';
@@ -408,7 +407,7 @@ export function useFileExplorerStore() {
     if (entry.isDir) {
       navigateTo(entry.path);
     } else {
-      openWithDefaultApp(entry.path).catch(() => setError('Não foi possível abrir este arquivo.'));
+      fsService.openInSystem(entry.path).catch(() => setError('Não foi possível abrir este arquivo.'));
     }
   }, [navigateTo]);
 
@@ -416,6 +415,13 @@ export function useFileExplorerStore() {
     if (!currentPath) return;
     const created = await fsService.createFolder(currentPath, name);
     recordHistory({ kind: 'create-folder', path: created.path });
+    refresh();
+  }, [currentPath, refresh, recordHistory]);
+
+  const createFile = useCallback(async (name: string) => {
+    if (!currentPath) return;
+    const created = await fsService.createFile(currentPath, name);
+    recordHistory({ kind: 'create-file', path: created.path });
     refresh();
   }, [currentPath, refresh, recordHistory]);
 
@@ -437,6 +443,15 @@ export function useFileExplorerStore() {
         .catch(() => { /* pasta sumiu: o cache antigo some no próximo refresh */ });
     });
   }, [columnEntries, sortField, sortDirection]);
+
+  /**
+   * Atualizar de verdade (botão, menu e Ctrl+R): recarrega a pasta aberta E as pastas que estão no cache de
+   * colunas/árvore. O `refresh` interno (usado depois de cada operação) continua só recarregando a pasta aberta.
+   */
+  const refreshAll = useCallback(() => {
+    refresh();
+    refreshCachedDirs(Object.keys(columnEntries));
+  }, [refresh, refreshCachedDirs, columnEntries]);
 
   const restoreFromTrash = useCallback(async (item: TrashEntry) => {
     await fsService.restoreTrashItem(item);
@@ -536,7 +551,7 @@ export function useFileExplorerStore() {
 
   const openCurrentFolderInSystem = useCallback(() => {
     if (!currentPath) return;
-    openWithDefaultApp(currentPath).catch(() => setError('Não foi possível abrir a pasta no explorador do sistema.'));
+    fsService.openInSystem(currentPath).catch(() => setError('Não foi possível abrir a pasta no explorador do sistema.'));
   }, [currentPath]);
 
   // Ícone customizado de pasta — fonte pode ser um arquivo escolhido no sistema ou colado
@@ -994,7 +1009,7 @@ export function useFileExplorerStore() {
   return {
     currentPath, homePath, entries: visibleEntries, loading, initializing, error,
     canGoBack: backStack.length > 0, canGoForward: forwardStack.length > 0, canGoUp,
-    navigateTo, goBack, goForward, goUp, refresh, openEntry,
+    navigateTo, goBack, goForward, goUp, refresh: refreshAll, openEntry,
     quickAccess, defaultPath, setAsDefaultPath,
     sortField, setSortField, sortDirection, setSortDirection, viewMode, setViewMode,
     search, setSearch,
@@ -1003,7 +1018,7 @@ export function useFileExplorerStore() {
     folderGroups, createGroup, renameGroup, deleteGroup, toggleGroupCollapsed, addFoldersToGroup, removeFolderFromGroup,
     openInNewWindow, moveEntries, startSystemDrag, history, undo, redo, canUndo, canRedo,
     startDragSelection, extendDragSelection, endDragSelection,
-    createFolder, rename, removeEntry, removeEntries, openCurrentFolderInSystem,
+    createFolder, createFile, rename, removeEntry, removeEntries, openCurrentFolderInSystem,
     clipboard, copyEntry, cutEntry, pasteClipboard,
     folderIcons, setFolderIconFromFile, setFolderIconFromClipboard, removeFolderIcon,
     totalSize, itemCount: visibleEntries.length, folderPreview,

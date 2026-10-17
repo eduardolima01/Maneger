@@ -1,0 +1,38 @@
+{
+  "sessionsByCard": {
+    "6c74c4ec-a9c5-4a0a-99cf-76f896105f45": [
+      {
+        "id": "0a0994dc-34f7-490c-9172-80f9d07950d7",
+        "startAt": "2026-08-29T14:10:42",
+        "endAt": "2026-08-29T16:20:55",
+        "durationSeconds": 16
+      },
+      {
+        "id": "390b1ccc-edfb-4403-bb34-42d11b1fd2c3",
+        "startAt": "2026-08-28T23:11:05",
+        "endAt": "2026-08-28T23:11:05",
+        "durationSeconds": 293
+      },
+      {
+        "id": "9b94a858-8daa-4105-944d-5728731f65ea",
+        "startAt": "2026-08-28T22:31:10",
+        "endAt": "2026-08-28T22:51:09",
+        "durationSeconds": 25
+      }
+    ],
+    "ade37d7a-e591-4e05-8098-ee46ebb3300e": [
+      {
+        "id": "3318bc86-1e81-4ef0-b501-372004c9ee9d",
+        "startAt": "2026-08-29T16:17:15",
+        "endAt": "2026-08-29T16:17:15",
+        "durationSeconds": 1
+      },
+      {
+        "id": "60c464d1-8d25-4e4f-8c4c-01164f07a228",
+        "startAt": "2026-08-29T16:13:58",
+        "endAt": "2026-08-29T16:13:58",
+        "durationSeconds": 39
+      }
+    ]
+  }
+}

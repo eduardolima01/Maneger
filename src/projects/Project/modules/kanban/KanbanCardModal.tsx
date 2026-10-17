@@ -12,6 +12,9 @@ import MarkdownField from '@/components/ui/MarkdownField';
 import ChecklistSection from '@/Kanban/ChecklistSection';
 import ImageUploadField from '@/components/ImageUploadField';
 import CardFilesSection from '@/Kanban/components/Cardfilessection';
+import CardAudio from '@/Kanban/components/CardAudio';
+import CardScreenRecord from '@/Kanban/components/CardScreenRecord';
+import PlanTracker from '@/Kanban/components/PlanTracker';
 import { getRelativeDue } from '@/Kanban/utils/relativeDate';
 
 type Tab = 'details' | 'meta' | 'config';
@@ -333,7 +336,9 @@ export default function KanbanCardModal({
       >
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <span className={INDIGO_TEXT_CLS} style={{ fontSize: 12, fontWeight: 600, flex: 1 }}>
-            📋 Card de plano — gera ocorrência no calendário de {card!.startDate ?? '?'} até {card!.dueDate ?? '?'}
+            {card!.planTrackOnly
+              ? `📋 Card de plano — acompanhado aqui, de ${card!.startDate ?? '?'} até ${card!.dueDate ?? '?'}`
+              : `📋 Card de plano — gera ocorrência no calendário de ${card!.startDate ?? '?'} até ${card!.dueDate ?? '?'}`}
           </span>
           <label style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 12, cursor: 'pointer', whiteSpace: 'nowrap' }}>
             <input
@@ -363,6 +368,15 @@ export default function KanbanCardModal({
               </button>
             ))}
           </div>
+          <label className={INDIGO_TEXT_CLS} style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 11, cursor: 'pointer' }} title="Em vez de criar um card novo por ocorrência, marque as tarefas de cada dia aqui mesmo (gráfico de contribuições)">
+            <input
+              type="checkbox"
+              checked={!!card!.planTrackOnly}
+              onChange={(e) => onUpdate(card!.id, { planTrackOnly: e.target.checked })}
+            />
+            Acompanhar neste card (não criar card novo)
+          </label>
+          {!card!.planTrackOnly && (
           <label className={INDIGO_TEXT_CLS} style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 11 }}>
             Vezes por dia:
             <input
@@ -375,8 +389,10 @@ export default function KanbanCardModal({
               style={{ width: 48, padding: 4, fontSize: 11 }}
             />
           </label>
+          )}
         </div>
 
+        {!card!.planTrackOnly && (
         <div style={{ display: 'flex', gap: 8 }}>
           <div style={{ flex: 1 }}>
             <label className={INDIGO_TEXT_CLS} style={{ fontSize: 11, display: 'block', marginBottom: 3 }}>
@@ -413,6 +429,11 @@ export default function KanbanCardModal({
             </div>
           )}
         </div>
+        )}
+
+        {card!.planTrackOnly && (
+          <PlanTracker card={card!} onUpdate={(patch) => onUpdate(card!.id, patch)} />
+        )}
       </div>
     );
   }
@@ -470,6 +491,7 @@ export default function KanbanCardModal({
           rows={6}
           toggleEditSignal={toggleEditSignal}
         />
+        <div style={{ marginTop: 6 }}><CardAudio cardId={card!.id} field="description" /></div>
       </div>
     );
   }
@@ -791,6 +813,8 @@ export default function KanbanCardModal({
               className="bg-transparent text-neutral-900 dark:text-neutral-100"
               style={{ fontSize: 18, fontWeight: 600, border: 'none', outline: 'none', padding: '4px 0' }}
             />
+            <CardAudio cardId={card.id} field="title" />
+            <CardScreenRecord cardId={card.id} />
             {renderPlanBanner()}
             {renderTabFields('details')}
           </>

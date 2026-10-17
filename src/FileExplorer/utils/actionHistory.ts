@@ -10,6 +10,8 @@ export type HistoryAction =
   | { kind: 'trash'; items: { path: string; name: string }[] }
   | { kind: 'rename'; from: string; to: string }
   | { kind: 'create-folder'; path: string }
+  /** arquivo vazio criado pelo usuário: desfazer manda pra lixeira */
+  | { kind: 'create-file'; path: string }
   /** só registrada no log: não dá pra reverter */
   | { kind: 'permanent-delete'; items: { path: string; name: string }[] };
 
@@ -27,6 +29,7 @@ export interface HistoryFs {
   deleteToTrash(path: string): Promise<void>;
   renamePath(path: string, newName: string): Promise<{ path: string }>;
   createFolder(parent: string, name: string): Promise<{ path: string }>;
+  createFile(parent: string, name: string): Promise<{ path: string }>;
   listTrash(): Promise<{ id: string; name: string; originalParent: string; timeDeleted: number }[]>;
   restoreTrashItem(item: { id: string; name: string; originalParent: string; timeDeleted: number }): Promise<void>;
 }
@@ -80,6 +83,8 @@ export function describeAction(action: HistoryAction): string {
       return `Renomeou "${basename(action.from)}" para "${basename(action.to)}"`;
     case 'create-folder':
       return `Criou a pasta "${basename(action.path)}"`;
+    case 'create-file':
+      return `Criou o arquivo "${basename(action.path)}"`;
     case 'permanent-delete':
       return action.items.length === 1
         ? `Excluiu "${action.items[0].name}" permanentemente`
@@ -95,7 +100,8 @@ export function affectedPaths(action: HistoryAction): string[] {
     case 'trash':
     case 'permanent-delete': return action.items.map((i) => i.path);
     case 'rename': return [action.from, action.to];
-    case 'create-folder': return [action.path];
+    case 'create-folder':
+    case 'create-file': return [action.path];
   }
 }
 
@@ -106,7 +112,8 @@ export function landedPaths(action: HistoryAction, after: 'undo' | 'redo'): stri
     case 'copy': return after === 'redo' ? action.items.map((i) => i.copy) : [];
     case 'trash': return after === 'undo' ? action.items.map((i) => i.path) : [];
     case 'rename': return [after === 'undo' ? action.from : action.to];
-    case 'create-folder': return after === 'redo' ? [action.path] : [];
+    case 'create-folder':
+    case 'create-file': return after === 'redo' ? [action.path] : [];
     case 'permanent-delete': return [];
   }
 }
@@ -184,7 +191,8 @@ export async function undoAction(action: HistoryAction, fs: HistoryFs): Promise<
       const res = await fs.renamePath(action.to, basename(action.from));
       return { action: { kind: 'rename', from: res.path, to: action.to }, complete: true, errors: [] };
     }
-    case 'create-folder': {
+    case 'create-folder':
+    case 'create-file': {
       await fs.deleteToTrash(action.path);
       return { action, complete: true, errors: [] };
     }
@@ -223,6 +231,10 @@ export async function redoAction(action: HistoryAction, fs: HistoryFs): Promise<
     case 'create-folder': {
       const res = await fs.createFolder(dirname(action.path), basename(action.path));
       return { action: { kind: 'create-folder', path: res.path }, complete: true, errors: [] };
+    }
+    case 'create-file': {
+      const res = await fs.createFile(dirname(action.path), basename(action.path));
+      return { action: { kind: 'create-file', path: res.path }, complete: true, errors: [] };
     }
     case 'permanent-delete':
       throw new Error('exclusão permanente não pode ser refeita');

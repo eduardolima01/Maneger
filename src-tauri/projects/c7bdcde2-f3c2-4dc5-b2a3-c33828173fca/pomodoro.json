@@ -1,0 +1,17 @@
+{
+  "settings": {
+    "workMinutes": 1,
+    "shortBreakMinutes": 5,
+    "longBreakMinutes": 15,
+    "sessionsUntilLongBreak": 4
+  },
+  "sessions": [
+    {
+      "id": "ee44f7b6-d273-47b1-b364-b06813b35184",
+      "type": "work",
+      "startedAt": "2026-08-03T09:03:57",
+      "completedAt": "2026-08-03T09:04:57",
+      "durationMinutes": 1
+    }
+  ]
+}

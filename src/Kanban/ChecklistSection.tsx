@@ -179,6 +179,26 @@ function SubItemInput({ depth, onSubmit, onClose }: { depth: number; onSubmit: (
   );
 }
 
+/** Copia texto pra área de transferência (API moderna; se o webview recusar, cai no jeito antigo com um textarea escondido). */
+async function copyText(text: string): Promise<boolean> {
+  try {
+    await navigator.clipboard.writeText(text);
+    return true;
+  } catch {
+    try {
+      const ta = document.createElement('textarea');
+      ta.value = text;
+      ta.style.position = 'fixed';
+      ta.style.opacity = '0';
+      document.body.appendChild(ta);
+      ta.select();
+      const ok = document.execCommand('copy');
+      document.body.removeChild(ta);
+      return ok;
+    } catch { return false; }
+  }
+}
+
 /* ---------- linha do item ---------- */
 
 interface ChecklistRowProps {
@@ -207,6 +227,16 @@ function ChecklistRow({
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: item.id });
   const [titleDraft, setTitleDraft] = useState(node.title);
   const [moveMenu, setMoveMenu] = useState<{ x: number; y: number } | null>(null);
+  const [copied, setCopied] = useState<'ok' | 'fail' | null>(null);
+  const copiedTimerRef = useRef<number | undefined>(undefined);
+  useEffect(() => () => window.clearTimeout(copiedTimerRef.current), []);
+
+  async function handleCopyTitle() {
+    const ok = await copyText(titleDraft.trim() || node.title);
+    setCopied(ok ? 'ok' : 'fail');
+    window.clearTimeout(copiedTimerRef.current);
+    copiedTimerRef.current = window.setTimeout(() => setCopied(null), 1200);
+  }
 
   const hasChildren = node.children.length > 0;
   const simple = node.isSimple; // marcado como lista simples OU dentro de uma
@@ -270,6 +300,15 @@ function ChecklistRow({
           }}
         />
         {!simple && subCounts.total > 0 && <span className="text-neutral-400 dark:text-neutral-500" style={{ fontSize: 10 }}>{subCounts.done}/{subCounts.total}</span>}
+        <button
+          onClick={handleCopyTitle}
+          title={copied === 'ok' ? 'Copiado!' : copied === 'fail' ? 'Não foi possível copiar' : 'Copiar o título'}
+          aria-label="Copiar o título"
+          className={copied === 'ok' ? 'text-green-600 dark:text-green-400' : copied === 'fail' ? 'text-red-600 dark:text-red-400' : 'text-neutral-500 dark:text-neutral-400'}
+          style={{ border: 'none', background: 'none', cursor: 'pointer', fontSize: 12, padding: '0 2px', minWidth: 16 }}
+        >
+          {copied === 'ok' ? '✓' : copied === 'fail' ? '✕' : '⧉'}
+        </button>
         <button
           onClick={() => onAddSubClick(node.id)}
           title="Adicionar sub-item"

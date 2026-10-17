@@ -77,6 +77,10 @@ interface KanbanColumnProps {
   /** Modo foco: a coluna ocupa a largura toda e os grupos se organizam em grade. */
   focused: boolean;
   onToggleFocus: () => void;
+  /** Itens arquivados da coluna (cards + grupos) e o botão que mostra/oculta eles NA PRÓPRIA coluna. */
+  archivedCount?: number;
+  showArchived?: boolean;
+  onToggleShowArchived?: () => void;
 
   selectedCardIds: Set<string>;
   onCardSelectToggle: (cardId: string) => void;
@@ -131,6 +135,9 @@ export default function KanbanColumn({
   onUpdateBackgroundOpacity,
   focused,
   onToggleFocus,
+  archivedCount = 0,
+  showArchived = false,
+  onToggleShowArchived,
   onReorderGroupCards,
   projectId
 }: KanbanColumnProps) {
@@ -349,6 +356,17 @@ export default function KanbanColumn({
         <div className={textClass(overLimit ? 'danger' : 'secondary')} style={{ fontSize: 11, color: textColor(overLimit ? 'danger' : 'secondary'), marginBottom: 6, display: 'flex', gap: 8 }}>
           <span>{cards.length} card{cards.length !== 1 ? 's' : ''}</span>
           <GroupByStatusButton kanbanId={column.kanbanId} />
+          {onToggleShowArchived && (archivedCount > 0 || showArchived) && (
+            <button
+              type="button"
+              onClick={(e) => { e.stopPropagation(); onToggleShowArchived(); }}
+              onPointerDown={(e) => e.stopPropagation()}
+              title={showArchived ? 'Ocultar os cards e grupos arquivados desta coluna' : 'Mostrar os cards e grupos arquivados desta coluna'}
+              style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, fontSize: 11, color: 'inherit', textDecoration: showArchived ? 'underline' : 'none', opacity: showArchived ? 1 : 0.7 }}
+            >
+              {showArchived ? '🗄 ocultar arquivados' : `🗄 arquivados (${archivedCount})`}
+            </button>
+          )}
           {column.wipLimit !== null && <span>WIP: {cards.length}/{column.wipLimit}</span>}
         </div>
 

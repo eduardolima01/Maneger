@@ -11,6 +11,7 @@ import {
   type Kanban, type KanbanCard, type TaskStatus, type TaskPriority, type CardFieldKey,
 } from '@/types/kanban.types';
 import CardFilesSection from '@/Kanban/components/Cardfilessection';
+import CardAudio from '@/Kanban/components/CardAudio';
 
 const PREFS_PREFIX = 'kanban-work-mode-prefs:';
 interface Prefs { columnId: string; onlyPending: boolean; cardId: string | null }
@@ -312,8 +313,11 @@ function CardDetail({ card, fields, syncNonce, onBack, onUpdate }: {
     switch (active) {
       case 'checklist': return <ChecklistSection key={`${card.id}:${syncNonce}`} cardId={card.id} />;
       case 'description': return (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6, height: '100%' }}>
+        <CardAudio cardId={card.id} field="description" compact />
         <textarea value={description} onFocus={() => { editingRef.current = 'description'; }} onChange={(e) => setDescription(e.target.value)} onBlur={() => commit('description', description)}
-          placeholder="Descrição do card…" className={FIELD_CLS} style={{ width: '100%', minHeight: 220, height: '100%', padding: 8, borderRadius: 4, fontSize: 13, resize: 'none', boxSizing: 'border-box' }} />
+          placeholder="Descrição do card…" className={FIELD_CLS} style={{ width: '100%', minHeight: 220, flex: 1, padding: 8, borderRadius: 4, fontSize: 13, resize: 'none', boxSizing: 'border-box' }} />
+        </div>
       );
       case 'notes': return (
         <textarea value={notes} onFocus={() => { editingRef.current = 'notes'; }} onChange={(e) => setNotes(e.target.value)} onBlur={() => commit('notes', notes)}
@@ -395,6 +399,7 @@ function CardDetail({ card, fields, syncNonce, onBack, onUpdate }: {
           className={FIELD_CLS}
           style={{ flex: 1, minWidth: 0, fontSize: 13, fontWeight: 600, padding: '3px 6px', borderRadius: 4 }}
         />
+        <CardAudio cardId={card.id} field="title" compact />
       </div>
       <div className="border-b border-neutral-200 dark:border-neutral-700" style={{ display: 'flex', flexShrink: 0, overflowX: 'auto' }}>
         {fields.map((k) => (

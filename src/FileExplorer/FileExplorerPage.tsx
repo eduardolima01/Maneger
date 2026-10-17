@@ -27,6 +27,9 @@ import Modal from '@/components/ui/Modal';
 // Tudo que tem cor usa classes Tailwind com a variante `dark:`. Pra funcionar, o app precisa pôr a
 // classe `dark` num ancestral (ex: <html class="dark">) e o Tailwind precisa estar com o dark mode
 // por classe (v3: `darkMode: 'class'`; v4: `@custom-variant dark (&:where(.dark, .dark *));`).
+// Atalhos de criação, todos na mão esquerda (junto de q=lixeira, r=desfazer, w/a/s/d=navegar). Mude aqui se preferir outras.
+const NEW_FOLDER_KEY = 'f'; // F de Folder/pasta
+const NEW_FILE_KEY = 'e'; // E de arquivo
 const MUTED = 'text-zinc-500 dark:text-zinc-400';
 /** Quantos itens da pasta selecionada o painel da direita lista (o resto vira "+ N itens"). */
 const PREVIEW_LIST_LIMIT = 100;
@@ -207,7 +210,7 @@ export default function FileExplorerPage() {
     currentPath, entries, loading, initializing, error,
     navigateTo, refresh, openEntry, quickAccess,
     sortField, sortDirection, setSortField, setSortDirection, viewMode,
-    createFolder, rename, removeEntries, openCurrentFolderInSystem,
+    createFolder, createFile, rename, removeEntries, openCurrentFolderInSystem,
     folderGroups, createGroup, renameGroup, deleteGroup, toggleGroupCollapsed, addFoldersToGroup, removeFolderFromGroup,
     openInNewWindow, moveEntries, startSystemDrag, history, undo, redo, canUndo, canRedo, folderPreview,
     clipboard, copyEntry, cutEntry, pasteClipboard,
@@ -234,6 +237,7 @@ export default function FileExplorerPage() {
   const [emptyAreaMenu, setEmptyAreaMenu] = useState<{ x: number; y: number } | null>(null);
 
   const [createFolderOpen, setCreateFolderOpen] = useState(false);
+  const [createFileOpen, setCreateFileOpen] = useState(false);
   // criar (group: null) / renomear grupo da sidebar, e grupo aguardando confirmação de exclusão
   const [groupModal, setGroupModal] = useState<{ group: FolderGroup | null } | null>(null);
   const [deletingGroup, setDeletingGroup] = useState<FolderGroup | null>(null);
@@ -292,9 +296,10 @@ export default function FileExplorerPage() {
 
   const emptyAreaItems: ContextMenuItem[] = [
     ...selectionItems,
-    { label: 'Nova pasta', onClick: () => setCreateFolderOpen(true) },
+    { label: `Nova pasta (${NEW_FOLDER_KEY.toUpperCase()})`, onClick: () => setCreateFolderOpen(true) },
+    { label: `Novo arquivo (${NEW_FILE_KEY.toUpperCase()})`, onClick: () => setCreateFileOpen(true) },
     { label: 'Colar', onClick: () => pasteClipboard(), disabled: !clipboard },
-    { label: 'Atualizar', onClick: () => refresh() },
+    { label: 'Atualizar (Shift+R)', onClick: () => refresh() },
     { label: 'Abrir no explorador do sistema', onClick: () => openCurrentFolderInSystem() },
   ];
 
@@ -636,11 +641,29 @@ export default function FileExplorerPage() {
         if (k === 'v' && clipboard) { e.preventDefault(); pasteClipboard(); return; }
       }
 
+      // "Shift+R" atualiza a listagem. NÃO usa Ctrl+R de propósito: esse é o atalho do WebView pra recarregar o app.
+      // Vem antes do "r" porque o handler de desfazer não olha o Shift.
+      if (e.shiftKey && !e.ctrlKey && !e.metaKey && !e.altKey && e.key.toLowerCase() === 'r') {
+        e.preventDefault();
+        if (!e.repeat) refresh();
+        return;
+      }
+
       // "r" desfaz a última ação; "Alt+R" refaz (log na coluna Histórico). Alt+R checa `e.code` por causa do macOS.
       const isR = e.key.toLowerCase() === 'r' || (e.altKey && e.code === 'KeyR');
       if (isR && !e.ctrlKey && !e.metaKey) {
         e.preventDefault();
         if (!e.repeat) { if (e.altKey) redo(); else undo(); }
+        return;
+      }
+
+      // "f" cria pasta, "e" cria arquivo (abrem o modal de nome, na pasta atual)
+      if (!e.ctrlKey && !e.metaKey && !e.altKey && (e.key.toLowerCase() === NEW_FOLDER_KEY || e.key.toLowerCase() === NEW_FILE_KEY)) {
+        e.preventDefault();
+        if (!e.repeat && currentPath) {
+          if (e.key.toLowerCase() === NEW_FOLDER_KEY) setCreateFolderOpen(true);
+          else setCreateFileOpen(true);
+        }
         return;
       }
 
@@ -731,7 +754,7 @@ export default function FileExplorerPage() {
     openEntry, goUp, toggleExpand, expandColumn, expandColumnAndFocus, collapseToParentColumn, moveSelectionVertical,
     quickLookOpen, openQuickLook, closeQuickLook,
     selectedPaths, clearSelection, entriesForAction,
-    selectPaths, selectAll, copyEntry, cutEntry, pasteClipboard, clipboard, undo, redo,
+    selectPaths, selectAll, copyEntry, cutEntry, pasteClipboard, clipboard, undo, redo, refresh, currentPath,
   ]);
 
   if (initializing) {
@@ -1172,6 +1195,14 @@ export default function FileExplorerPage() {
         confirmLabel="Criar"
         onClose={() => setCreateFolderOpen(false)}
         onSubmit={(name) => createFolder(name)}
+      />
+
+      <NamePromptModal
+        open={createFileOpen}
+        title="Novo arquivo (com extensão, ex: notas.txt)"
+        confirmLabel="Criar"
+        onClose={() => setCreateFileOpen(false)}
+        onSubmit={(name) => createFile(name)}
       />
 
       <NamePromptModal

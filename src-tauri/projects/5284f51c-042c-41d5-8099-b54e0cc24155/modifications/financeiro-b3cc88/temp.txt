@@ -1,0 +1,590 @@
+# Solicitação de Nova Modificação
+
+## O QUE EU QUERO
+
+**Projeto:** Financeiro
+
+**Nome da modificação:** Finance Manager (Gestão Financeira)
+
+**Descrição do que ela deve fazer:**
+
+Quero criar uma modificação exclusiva para o Projeto **Financeiro**, chamada **Finance Manager**, responsável por gerenciar toda a movimentação e organização financeira do usuário.
+
+Essa funcionalidade deve existir apenas neste Projeto e utilizar a infraestrutura já existente da aplicação, sem alterar o núcleo do sistema.
+
+O objetivo é substituir controles financeiros manuais, planilhas e anotações por um sistema estruturado de gestão, acompanhamento e análise das finanças.
+
+A arquitetura deve ser preparada para permitir evolução futura sem necessidade de reestruturação significativa do módulo.
+
+---
+
+## Funcionalidades principais
+
+O sistema deve manter o saldo atualizado automaticamente conforme as movimentações registradas.
+
+---
+
+## Lançamentos financeiros
+
+Permitir registrar todas as movimentações financeiras.
+
+Tipos principais:
+
+* Receita;
+* Despesa;
+* Transferência;
+* Ajuste de saldo;
+* Estorno.
+
+Cada lançamento deve permitir registrar:
+
+* Descrição;
+* Valor;
+* Data;
+* Conta de origem;
+* Conta de destino, quando aplicável;
+* Categoria;
+* Subcategoria;
+* Tipo de movimentação;
+* Status;
+* Forma de pagamento;
+* Pessoa ou empresa relacionada;
+* Tags;
+* Observações;
+* Anexos, quando suportados pela infraestrutura existente.
+
+O sistema deve permitir editar, excluir, duplicar e consultar lançamentos.
+
+---
+
+## Categorias
+
+Os lançamentos devem ser organizados por categorias.
+
+Exemplos de receitas:
+
+* Salário;
+* Freelances;
+* Vendas;
+* Comissões;
+* Rendimentos;
+* Dividendos;
+* Outras receitas.
+
+Exemplos de despesas:
+
+* Alimentação;
+* Moradia;
+* Transporte;
+* Saúde;
+* Educação;
+* Lazer;
+* Assinaturas;
+* Impostos;
+* Serviços;
+* Compras;
+* Dívidas;
+* Outras despesas.
+
+O usuário deve poder:
+
+* Criar categorias;
+* Editar categorias;
+* Excluir categorias;
+* Criar subcategorias;
+* Organizar categorias hierarquicamente;
+* Definir categorias personalizadas.
+
+A estrutura deve permitir expansão futura sem necessidade de alteração do núcleo da aplicação.
+
+---
+
+## Contas a pagar e receber
+
+Criar uma estrutura para controle de compromissos financeiros futuros.
+
+Permitir cadastrar:
+
+* Contas a pagar;
+* Contas a receber;
+* Data de vencimento;
+* Valor;
+* Categoria;
+* Conta relacionada;
+* Pessoa ou empresa;
+* Descrição;
+* Status;
+* Data de pagamento/recebimento;
+* Observações.
+
+Status possíveis:
+
+* Pendente;
+* Pago;
+* Recebido;
+* Atrasado;
+* Cancelado;
+* Parcialmente pago.
+
+O sistema deve permitir converter um compromisso financeiro em lançamento efetivo quando ele for pago ou recebido.
+
+---
+
+## Recorrências
+
+Permitir criar lançamentos recorrentes.
+
+Exemplos:
+
+* Salário mensal;
+* Aluguel;
+* Internet;
+* Energia;
+* Streaming;
+* Academia;
+* Assinaturas;
+* Parcelamentos;
+* Receitas recorrentes.
+
+Permitir definir:
+
+* Frequência;
+* Data inicial;
+* Data final;
+* Número de ocorrências;
+* Valor fixo ou variável;
+* Categoria;
+* Conta;
+* Descrição.
+
+A arquitetura deve permitir futuramente trabalhar com regras mais avançadas de recorrência.
+
+---
+
+## Parcelamentos
+
+Permitir registrar compras parceladas.
+
+Exemplo:
+
+Uma compra de R$ 1.200,00 em 12 parcelas.
+
+O sistema deve registrar:
+
+* Valor total;
+* Quantidade de parcelas;
+* Valor de cada parcela;
+* Parcela atual;
+* Próxima parcela;
+* Data de vencimento;
+* Categoria;
+* Conta ou cartão;
+* Status.
+
+Preparar a arquitetura para permitir renegociação, antecipação e cancelamento de parcelas futuramente.
+
+---
+
+## Orçamento
+
+Criar sistema de orçamento financeiro.
+
+Permitir definir limites por:
+
+* Categoria;
+* Subcategoria;
+* Período;
+* Conta;
+* Projeto financeiro.
+
+Exemplo:
+
+```text
+Alimentação
+Limite mensal: R$ 1.000,00
+Utilizado: R$ 750,00
+Disponível: R$ 250,00
+```
+
+O sistema deve permitir acompanhar:
+
+* Valor planejado;
+* Valor realizado;
+* Valor restante;
+* Percentual utilizado;
+* Excedentes.
+
+Preparar estrutura para alertas quando o usuário atingir determinados percentuais do orçamento.
+
+---
+
+## Metas financeiras
+
+Permitir criar metas.
+
+Exemplos:
+
+* Reserva de emergência;
+* Comprar um veículo;
+* Comprar um imóvel;
+* Viagem;
+* Investimento;
+* Quitar dívida;
+* Economizar determinado valor.
+
+Cada meta deve permitir:
+
+* Nome;
+* Valor objetivo;
+* Valor atual;
+* Data limite;
+* Categoria;
+* Conta relacionada;
+* Descrição;
+* Status.
+
+Exibir o progresso da meta em percentual.
+
+Preparar a estrutura para futuramente permitir recomendações automáticas de quanto economizar por período.
+
+---
+
+## Dívidas
+
+Criar estrutura para controle de dívidas.
+
+Permitir registrar:
+
+* Credor;
+* Valor original;
+* Valor atual;
+* Taxa de juros;
+* Número de parcelas;
+* Valor das parcelas;
+* Data de vencimento;
+* Data inicial;
+* Categoria;
+* Status.
+
+Permitir acompanhar:
+
+* Total devido;
+* Total já pago;
+* Saldo restante;
+* Juros;
+* Próximos vencimentos.
+
+Preparar a arquitetura para futuras funcionalidades de planejamento de quitação.
+
+---
+
+## Investimentos
+
+Preparar o módulo para permitir controle de investimentos.
+
+A estrutura deve suportar futuramente:
+
+* Renda fixa;
+* Ações;
+* Fundos;
+* ETFs;
+* Criptomoedas;
+* Previdência;
+* Outros investimentos.
+
+Inicialmente, permitir registrar manualmente:
+
+* Ativo;
+* Instituição;
+* Quantidade;
+* Valor investido;
+* Valor atual;
+* Data;
+* Rentabilidade;
+* Observações.
+
+Preparar a arquitetura para futura integração com APIs externas de cotações.
+
+---
+
+## Dashboard
+
+Adicionar widgets específicos ao Dashboard do Projeto Financeiro.
+
+Exibir informações como:
+
+* Saldo total;
+* Receitas do mês;
+* Despesas do mês;
+* Resultado mensal;
+* Contas a pagar;
+* Contas a receber;
+* Faturas abertas;
+* Orçamento utilizado;
+* Metas financeiras;
+* Gastos por categoria;
+* Evolução do patrimônio;
+* Próximos vencimentos;
+* Últimas movimentações.
+
+Criar indicadores visuais claros para facilitar a compreensão da situação financeira.
+
+---
+
+## Relatórios
+
+Criar estrutura para relatórios financeiros.
+
+Permitir visualizar:
+
+* Receitas por período;
+* Despesas por período;
+* Resultado financeiro;
+* Fluxo de caixa;
+* Gastos por categoria;
+* Gastos por conta;
+* Gastos por cartão;
+* Evolução do saldo;
+* Evolução patrimonial;
+* Comparação entre períodos.
+
+Filtros:
+
+* Hoje;
+* Esta semana;
+* Este mês;
+* Mês anterior;
+* Últimos 3 meses;
+* Últimos 6 meses;
+* Este ano;
+* Período personalizado.
+
+Preparar a estrutura para gráficos e relatórios avançados.
+
+---
+
+## Evolução financeira
+
+O sistema deve manter histórico completo das movimentações e permitir analisar a evolução financeira ao longo do tempo.
+
+Exemplos:
+
+* Evolução do patrimônio;
+* Evolução das receitas;
+* Evolução das despesas;
+* Evolução do saldo;
+* Média mensal de gastos;
+* Média mensal de receitas;
+* Categorias com maior crescimento;
+* Comparação entre meses;
+* Taxa de economia;
+* Fluxo de caixa.
+
+Preparar a estrutura para gráficos futuros.
+
+---
+
+## Pesquisa
+
+Integrar com a **Pesquisa Global** da aplicação para localizar rapidamente:
+
+* Lançamentos;
+* Contas;
+* Cartões;
+* Categorias;
+* Contas a pagar;
+* Contas a receber;
+* Metas;
+* Dívidas;
+* Investimentos;
+* Relatórios.
+
+A pesquisa deve permitir localizar informações por nome, descrição, categoria ou outros campos relevantes.
+
+---
+
+## Interface
+
+A interface deve ser moderna, limpa e otimizada para uso diário.
+
+O fluxo de lançamento de uma movimentação deve ser extremamente rápido.
+
+Exemplo:
+
+```text
++ Nova movimentação
+        ↓
+Receita / Despesa / Transferência
+        ↓
+Valor
+        ↓
+Categoria
+        ↓
+Conta
+        ↓
+Data
+        ↓
+Salvar
+```
+
+Evitar excesso de cliques.
+
+Priorizar:
+
+* Clareza;
+* Velocidade;
+* Responsividade;
+* Boa hierarquia visual;
+* Feedback imediato;
+* Ações rápidas;
+* Filtros simples;
+* Busca rápida.
+
+---
+
+## Persistência
+
+Todos os dados devem permanecer exclusivos do Projeto Financeiro.
+
+A modificação deve armazenar seus próprios arquivos e configurações dentro da pasta:
+
+```text
+projects/financeiro/modifications/finance-manager/
+```
+
+Não utilizar arquivos compartilhados com outros Projetos.
+
+Os dados financeiros devem permanecer isolados do restante da aplicação, respeitando a arquitetura de projetos existente.
+
+---
+
+## Arquitetura
+
+A modificação deve ser totalmente autocontida, contendo sua própria estrutura de:
+
+* componentes;
+* páginas;
+* serviços;
+* stores;
+* hooks;
+* tipos;
+* schemas;
+* comandos;
+* widgets;
+* relatórios;
+* configurações;
+* regras de negócio.
+
+Ela deve utilizar apenas APIs públicas disponibilizadas pela aplicação.
+
+Evitar dependências desnecessárias.
+
+Priorizar reutilização de componentes e serviços já existentes quando isso não aumentar o acoplamento.
+
+---
+
+## Modelo de dados
+
+A arquitetura deve considerar entidades independentes e relacionadas, como:
+
+```text
+Account
+Transaction
+Category
+Subcategory
+CreditCard
+CreditCardPurchase
+Installment
+RecurringTransaction
+Payable
+Receivable
+Budget
+FinancialGoal
+Debt
+Investment
+Tag
+FinancialReport
+```
+
+Os relacionamentos devem ser bem definidos e preparados para evolução futura.
+
+A modelagem deve evitar duplicação desnecessária de dados e preservar a integridade financeira das operações.
+
+---
+
+## Segurança e integridade
+
+Como o módulo trabalha com informações financeiras, todas as operações devem priorizar integridade e consistência dos dados.
+
+Requisitos:
+
+* Validar valores financeiros;
+* Evitar valores negativos indevidos;
+* Garantir consistência entre contas;
+* Garantir que transferências não sejam contabilizadas incorretamente;
+* Evitar duplicação de lançamentos;
+* Validar parcelamentos;
+* Validar recorrências;
+* Manter histórico confiável;
+* Utilizar tipagem forte;
+* Validar dados de entrada.
+
+---
+
+## Requisitos
+
+* Não modificar o núcleo da aplicação.
+* Não alterar módulos existentes sem necessidade.
+* Reutilizar a infraestrutura disponível sempre que possível.
+* Seguir a arquitetura modular do projeto.
+* Utilizar TypeScript com tipagem forte.
+* Manter baixo acoplamento e alta coesão.
+* Manter os dados isolados dentro do Projeto Financeiro.
+* Utilizar apenas APIs públicas disponibilizadas pela aplicação.
+* Validar todas as entradas financeiras.
+* Priorizar consistência e integridade dos dados.
+* Evitar duplicação de regras de negócio.
+* Manter componentes reutilizáveis.
+* Preparar a arquitetura para futuras integrações.
+* Explicar as decisões arquiteturais antes de iniciar a implementação.
+* Apresentar a estrutura de pastas proposta antes da implementação.
+* Definir o modelo de dados antes da criação das telas.
+* Implementar a solução de forma incremental.
+* Validar cada etapa antes de avançar para a próxima.
+* Não implementar funcionalidades futuras sem necessidade; apenas preparar a arquitetura para elas.
+* Manter o módulo totalmente autocontido dentro do Projeto Financeiro.
+* Não criar dependências desnecessárias no núcleo da aplicação.
+
+---
+
+## Ordem de implementação
+
+A implementação deve seguir uma abordagem incremental:
+
+### Etapa 1 — Arquitetura
+
+Antes de escrever código:
+
+* analisar a infraestrutura existente;
+* identificar APIs públicas disponíveis;
+* identificar componentes reutilizáveis;
+* definir estrutura de pastas;
+* definir entidades;
+* definir relacionamentos;
+* definir stores;
+* definir serviços;
+* definir hooks;
+* definir comandos;
+* definir integrações.
+
+Apresentar as decisões arquiteturais antes de implementar.
+
+## Regra principal
+
+O **Finance Manager** deve funcionar como um módulo financeiro independente dentro do Projeto Financeiro.
+
+Ele não deve alterar o núcleo da aplicação nem criar dependências desnecessárias com outros Projetos.
+
+A prioridade deve ser:
+
+**Integridade dos dados → Simplicidade → Velocidade de uso → Modularidade → Escalabilidade.**

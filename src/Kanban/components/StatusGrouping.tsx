@@ -1,5 +1,6 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import { STATUS_LABELS, STATUS_COLORS, type TaskStatus } from '@/types/kanban.types';
+import { listCustomStatuses, useStatusRegistryTick } from '@/Kanban/utils/customStatuses';
 
 /* ----------------------------------------------------------------------------------------------- */
 /* Estado (localStorage + aviso entre componentes): "agrupar por estado" por kanban, e quais seções  */
@@ -57,7 +58,7 @@ export function GroupByStatusButton({ kanbanId, className, style }: { kanbanId: 
   );
 }
 
-const ORDER: Array<TaskStatus | 'none'> = ['fazendo', 'fazer', 'revisao', 'pendente', 'none', 'feito'];
+const statusOrder = (): Array<TaskStatus | 'none'> => ['fazendo', 'fazer', 'revisao', 'pendente', ...listCustomStatuses().map((x) => x.id), 'none', 'feito'];
 
 interface WithStatus { id: string; status: TaskStatus | null }
 
@@ -75,6 +76,7 @@ export function StatusSections<T extends WithStatus>({ kanbanId, scopeId, cards,
   indent?: number;
 }) {
   useTick();
+  useStatusRegistryTick();
   const enabled = !disabled && readEnabled(kanbanId);
   if (!enabled) return <>{cards.map((c) => renderCard(c))}</>;
 
@@ -88,11 +90,11 @@ export function StatusSections<T extends WithStatus>({ kanbanId, scopeId, cards,
 
   return (
     <>
-      {ORDER.map((key) => {
+      {statusOrder().map((key) => {
         const list = cards.filter((c) => (c.status ?? 'none') === key);
         if (list.length === 0) return null;
         const isCollapsed = collapsed.has(key);
-        const label = key === 'none' ? 'Sem estado' : STATUS_LABELS[key];
+        const label = key === 'none' ? 'Sem estado' : (STATUS_LABELS[key] ?? key);
         const color = key === 'none' ? '#9e9e9e' : STATUS_COLORS[key];
         return (
           <div key={`status-section:${scopeId}:${key}`}>
