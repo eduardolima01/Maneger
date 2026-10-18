@@ -1,5 +1,6 @@
 import PlanBadge from '@/Kanban/components/PlanBadge';
 import PlanDistributionBar from '@/Kanban/components/PlanDistributionBar';
+import PlanPanel from '@/Kanban/components/PlanPeek';
 import { useArchive } from '@/Kanban/utils/archiveContext';
 import ChecklistSection from '@/Kanban/ChecklistSection';
 import { statusIds } from '@/Kanban/utils/customStatuses';
@@ -498,6 +499,7 @@ function TreeCardRow({ card, depth, progress, onChecklistChanged, selected, hint
   const inBulkSelection = checked && !!bulkActions && !!bulkIds && bulkIds.length > 1;
   const colors = selected || checked ? null : groupColors ?? null; // fundo azul/índigo: as cores calculadas pro fundo do grupo não valem
   const [editing, setEditing] = useState(false);
+  const [planOpen, setPlanOpen] = useState(false);
   const [draft, setDraft] = useState(card.title);
   const cancelledRef = useRef(false);
 
@@ -618,6 +620,7 @@ function TreeCardRow({ card, depth, progress, onChecklistChanged, selected, hint
   const archiveActions = useArchive();
 
   return (
+    <>
     <div
       ref={(node) => { setDragRef(node); setDropRef(node); }}
       data-tree-card-id={card.id}
@@ -713,7 +716,7 @@ function TreeCardRow({ card, depth, progress, onChecklistChanged, selected, hint
       )}
 
       {card.isPlanTemplate && <PlanBadge card={card} size={9} />}
-      {card.isPlanTemplate && card.planTrackOnly && <PlanDistributionBar card={card} inline />}
+      {card.isPlanTemplate && card.planTrackOnly && <PlanDistributionBar card={card} inline open={planOpen} onToggle={() => setPlanOpen((v) => !v)} />}
       {trailing.map((k) => <Fragment key={k}>{trailingNodes[k]}</Fragment>)}
       {archiveActions && (
         <button
@@ -730,6 +733,10 @@ function TreeCardRow({ card, depth, progress, onChecklistChanged, selected, hint
       )}
       {cardMenu && <CardActionsMenu card={card} {...cardMenu} bulkIds={bulkIds} bulkActions={bulkActions} />}
     </div>
+    {card.isPlanTemplate && card.planTrackOnly && planOpen && (
+      <PlanPanel card={card} onClose={() => setPlanOpen(false)} style={{ marginLeft: 6 + depth * INDENT_PX + 14, marginTop: 2 }} />
+    )}
+    </>
   );
 }
 

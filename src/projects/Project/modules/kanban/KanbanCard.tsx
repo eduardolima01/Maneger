@@ -32,6 +32,7 @@ import { useLabelIcons } from '@/Kanban/hooks/Labeliconcontext';
 import LabelIconBadge from '@/Kanban/components/LabelIconBadge';
 import PlanBadge from '@/Kanban/components/PlanBadge';
 import PlanDistributionBar from '@/Kanban/components/PlanDistributionBar';
+import PlanPanel from '@/Kanban/components/PlanPeek';
 import CopyTitleButton from '@/Kanban/components/CopyTitleButton';
 import { getRelativeDue } from '@/Kanban/utils/relativeDate';
 
@@ -157,6 +158,7 @@ export default function KanbanCard({
   const [editingTitle, setEditingTitle] = useState(false);
   const [titleDraft, setTitleDraft] = useState(card.title);
   const [titleHover, setTitleHover] = useState(false);
+  const [planOpen, setPlanOpen] = useState(false);
   const [checklistOpen, setChecklistOpen] = useState(false);
   const [expanded, setExpanded] = useState(false);
   const [liveChecklistProgress, setLiveChecklistProgress] = useState<ChecklistProgress | null>(null);
@@ -754,7 +756,7 @@ export default function KanbanCard({
 
         {coverFirst && blocks.cover}
         {titleRow}
-        {!compact && card.isPlanTemplate && card.planTrackOnly && <PlanDistributionBar card={card} />}
+        {!compact && card.isPlanTemplate && card.planTrackOnly && <PlanDistributionBar card={card} open={planOpen} onToggle={() => setPlanOpen((v) => !v)} />}
         {blockOrder.filter((k) => !(k === 'cover' && coverFirst)).map((k) => <Fragment key={k}>{blocks[k]}</Fragment>)}
 
         {isVisualVisible('timer') && displayedTimerSeconds > 0 && (
@@ -770,6 +772,8 @@ export default function KanbanCard({
           </span>
         )}
       </div>
+
+      {!compact && card.isPlanTemplate && card.planTrackOnly && planOpen && <PlanPanel card={card} onClose={() => setPlanOpen(false)} />}
 
       {contextMenu && (
         <ContextMenu

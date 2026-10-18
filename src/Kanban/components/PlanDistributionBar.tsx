@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { loadKanbanData } from '@/Kanban/api/kanbanDataStore';
 import { listenKanbanChanges } from '@/Kanban/utils/kanbanSync';
 import { computePlanDistribution } from '@/Kanban/utils/planDistribution';
+import { PlanToggleButton } from '@/Kanban/components/PlanPeek';
 import type { KanbanCard, KanbanChecklistItem } from '@/types/kanban.types';
 
 /** Linha "Distribuição dos dias" do card de plano (verde/amarelo/vermelho/pendente), sem abrir o card. */
@@ -13,9 +14,12 @@ interface Props {
   card: KanbanCard;
   /** Só a barra, bem fina e curta (linha da visão em árvore) — sem os números. */
   inline?: boolean;
+  /** Acompanhamento aberto embaixo do card? O estado e o painel ficam com quem desenha o card. */
+  open: boolean;
+  onToggle: () => void;
 }
 
-export default function PlanDistributionBar({ card, inline }: Props) {
+export default function PlanDistributionBar({ card, inline, open, onToggle }: Props) {
   const [items, setItems] = useState<KanbanChecklistItem[]>([]);
   const reload = useCallback(async () => {
     try {
@@ -27,7 +31,8 @@ export default function PlanDistributionBar({ card, inline }: Props) {
   useEffect(() => listenKanbanChanges(() => void reload()), [reload]);
 
   const dist = computePlanDistribution(card, items);
-  if (!dist || dist.total === 0) return null;
+  // sem datas (ou sem dias previstos) não há o que distribuir, mas o botão continua pra mostrar o aviso do acompanhamento
+  if (!dist || dist.total === 0) return <PlanToggleButton open={open} onToggle={onToggle} size={inline ? 10 : 14} />;
 
   const title = `Distribuição dos dias: ${dist.done} completos · ${dist.partial} parciais · ${dist.missed} perdidos · ${dist.pending} pendentes`;
   const seg = (n: number, color: string, label: string) => (n > 0
@@ -45,14 +50,24 @@ export default function PlanDistributionBar({ card, inline }: Props) {
       {seg(dist.missed, RED, 'Perdidos')}
     </div>
   );
-  if (inline) return bar;
+  if (inline) {
+    return (
+      <>
+        {bar}
+        <PlanToggleButton open={open} onToggle={onToggle} size={10} />
+      </>
+    );
+  }
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 2, marginBottom: 4 }}>
-      {bar}
-      <span className="text-neutral-500 dark:text-neutral-400" style={{ fontSize: 10 }}>
-        🟩 {dist.done} · 🟨 {dist.partial} · 🟥 {dist.missed} · ⬜ {dist.pending}
-      </span>
+    <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
+      <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 2 }}>
+        {bar}
+        <span className="text-neutral-500 dark:text-neutral-400" style={{ fontSize: 10 }}>
+          🟩 {dist.done} · 🟨 {dist.partial} · 🟥 {dist.missed} · ⬜ {dist.pending}
+        </span>
+      </div>
+      <PlanToggleButton open={open} onToggle={onToggle} size={14} />
     </div>
   );
 }
