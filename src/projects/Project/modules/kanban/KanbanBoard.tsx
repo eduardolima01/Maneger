@@ -35,6 +35,7 @@ import { LabelIconContext } from '@/Kanban/hooks/Labeliconcontext';
 import { GroupLayoutContext } from '@/Kanban/components/GroupLayoutContext';
 import UpcomingCardsPanel from '@/Kanban/components/UpcomingCardsPanel';
 import KanbanTreeView, { type TreeMoveTarget } from '@/Kanban/components/KanbanTreeView';
+import PlanTrackersView from '@/Kanban/components/PlanTrackersView';
 
 interface KanbanBoardProps {
   kanban: Kanban;
@@ -43,7 +44,7 @@ interface KanbanBoardProps {
 const DEFAULT_COLUMN_WIDTH = 280;
 const EMPTY_COLUMN_WIDTH = 160;
 
-type BoardViewMode = 'board' | 'tree';
+type BoardViewMode = 'board' | 'tree' | 'plans';
 const VIEW_MODE_PREFIX = 'kanban-view-mode:';
 
 const TREE_CARD_PREFIX = 'kanban-tree-card:';
@@ -60,7 +61,8 @@ function readTreeCardId(kanbanId: string): string | null {
 /** Visão salva deste kanban (quadro de cards ou árvore). Sem valor salvo, valor inválido ou storage indisponível: quadro. */
 function readViewMode(kanbanId: string): BoardViewMode {
   try {
-    return localStorage.getItem(`${VIEW_MODE_PREFIX}${kanbanId}`) === 'tree' ? 'tree' : 'board';
+    const v = localStorage.getItem(`${VIEW_MODE_PREFIX}${kanbanId}`);
+    return v === 'tree' || v === 'plans' ? v : 'board';
   } catch {
     return 'board';
   }
@@ -851,7 +853,7 @@ export default function KanbanBoard({ kanban }: KanbanBoardProps) {
                   />
                 </div>
                 <div role="tablist" aria-label="Modo de visualização" className="bg-neutral-100 dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-700" style={{ display: 'inline-flex', padding: 2, borderRadius: 8, flexShrink: 0 }}>
-                  {([['board', '🗂', 'Quadro'], ['tree', '🌳', 'Árvore']] as const).map(([mode, icon, label]) => (
+                  {([['board', '🗂', 'Quadro'], ['tree', '🌳', 'Árvore'], ['plans', '📊', 'Planos']] as const).map(([mode, icon, label]) => (
                     <button
                       key={mode}
                       type="button"
@@ -943,6 +945,9 @@ export default function KanbanBoard({ kanban }: KanbanBoardProps) {
 
             <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>
               <div style={{ flex: 1, minWidth: 0 }}>
+                {viewMode === 'plans' && (
+                  <PlanTrackersView cards={board.cards} columns={board.columns} groups={board.allGroups} onOpenCard={(id) => handleCardClick(id)} />
+                )}
                 {viewMode === 'tree' && (
                   <KanbanTreeView
                     columns={displayedColumns}
@@ -1033,7 +1038,7 @@ export default function KanbanBoard({ kanban }: KanbanBoardProps) {
                     stateKey={kanban.id}
                   />
                 )}
-                <div hidden={viewMode === 'tree'}>
+                <div hidden={viewMode !== 'board'}>
                   <DndContext sensors={sensors} collisionDetection={closestCorners} onDragEnd={handleDragEnd}>
                     <SortableContext items={columnsToRender.map((c) => c.id)} strategy={horizontalListSortingStrategy}>
                       <div

@@ -35,7 +35,7 @@ export function PlanToggleButton({ open, onToggle, size = 12, className, style }
   );
 }
 
-export default function PlanPanel({ card, onClose, style }: { card: KanbanCard; onClose: () => void; style?: React.CSSProperties }) {
+export default function PlanPanel({ card, onClose, style, hideHeader }: { card: KanbanCard; onClose?: () => void; style?: React.CSSProperties; hideHeader?: boolean }) {
   // cópia local dos checks: o quadrado muda na hora, sem esperar o arquivo ser regravado e relido
   const [checks, setChecks] = useState<Record<string, string[]>>(card.planDayChecks ?? {});
   useEffect(() => { setChecks(card.planDayChecks ?? {}); }, [card.planDayChecks]);
@@ -59,10 +59,12 @@ export default function PlanPanel({ card, onClose, style }: { card: KanbanCard; 
       className="bg-white dark:bg-neutral-800 text-neutral-900 dark:text-neutral-100 border border-neutral-200 dark:border-neutral-600"
       style={{ padding: 8, borderRadius: 6, marginBottom: 8, boxSizing: 'border-box', cursor: 'default', ...style }}
     >
-      <div className="text-neutral-500 dark:text-neutral-400" style={{ display: 'flex', alignItems: 'center', fontSize: 11, fontWeight: 700, marginBottom: 6 }}>
-        <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>📊 {card.title}</span>
-        <button type="button" onClick={onClose} aria-label="Fechar" style={{ border: 'none', background: 'none', cursor: 'pointer', color: 'inherit', fontSize: 12 }}>✕</button>
-      </div>
+      {!hideHeader && (
+        <div className="text-neutral-500 dark:text-neutral-400" style={{ display: 'flex', alignItems: 'center', fontSize: 11, fontWeight: 700, marginBottom: 6 }}>
+          <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>📊 {card.title}</span>
+          {onClose && <button type="button" onClick={onClose} aria-label="Fechar" style={{ border: 'none', background: 'none', cursor: 'pointer', color: 'inherit', fontSize: 12 }}>✕</button>}
+        </div>
+      )}
       <PlanTracker card={{ ...card, planDayChecks: checks }} onUpdate={persist} />
     </div>
   );

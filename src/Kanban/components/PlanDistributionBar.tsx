@@ -17,9 +17,11 @@ interface Props {
   /** Acompanhamento aberto embaixo do card? O estado e o painel ficam com quem desenha o card. */
   open: boolean;
   onToggle: () => void;
+  /** Sem o botão 📊 (visão "Planos", onde o painel já está sempre à mostra). */
+  hideToggle?: boolean;
 }
 
-export default function PlanDistributionBar({ card, inline, open, onToggle }: Props) {
+export default function PlanDistributionBar({ card, inline, open, onToggle, hideToggle }: Props) {
   const [items, setItems] = useState<KanbanChecklistItem[]>([]);
   const reload = useCallback(async () => {
     try {
@@ -32,7 +34,7 @@ export default function PlanDistributionBar({ card, inline, open, onToggle }: Pr
 
   const dist = computePlanDistribution(card, items);
   // sem datas (ou sem dias previstos) não há o que distribuir, mas o botão continua pra mostrar o aviso do acompanhamento
-  if (!dist || dist.total === 0) return <PlanToggleButton open={open} onToggle={onToggle} size={inline ? 10 : 14} />;
+  if (!dist || dist.total === 0) return hideToggle ? null : <PlanToggleButton open={open} onToggle={onToggle} size={inline ? 10 : 14} />;
 
   const title = `Distribuição dos dias: ${dist.done} completos · ${dist.partial} parciais · ${dist.missed} perdidos · ${dist.pending} pendentes`;
   const seg = (n: number, color: string, label: string) => (n > 0
@@ -54,7 +56,7 @@ export default function PlanDistributionBar({ card, inline, open, onToggle }: Pr
     return (
       <>
         {bar}
-        <PlanToggleButton open={open} onToggle={onToggle} size={10} />
+        {!hideToggle && <PlanToggleButton open={open} onToggle={onToggle} size={10} />}
       </>
     );
   }
