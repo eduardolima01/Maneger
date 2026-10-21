@@ -1,6 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { loadKanbanData } from '@/Kanban/api/kanbanDataStore';
 import { listenKanbanChanges } from '@/Kanban/utils/kanbanSync';
+import PlanDayPanel from '@/Kanban/components/PlanDayPanel';
+import { buildTasks } from '@/Kanban/utils/planTasks';
+import type { PlanPatch } from '@/Kanban/utils/planPersist';
 import type { KanbanCard, KanbanChecklistItem } from '@/types/kanban.types';
 
 /**
@@ -40,38 +43,23 @@ function fmtLong(k: string): string {
   return `${WEEK_LABELS[d.getDay()]}, ${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}`;
 }
 
-interface TaskRow { id: string; title: string; depth: number }
-
-/** Tarefas do plano = itens da checklist que entram na conta (fora de "lista simples"), na ordem da árvore. */
-function buildTasks(items: KanbanChecklistItem[]): TaskRow[] {
-  const byParent = new Map<string | null, KanbanChecklistItem[]>();
-  for (const it of items) {
-    const arr = byParent.get(it.parentItemId ?? null) ?? [];
-    arr.push(it);
-    byParent.set(it.parentItemId ?? null, arr);
-  }
-  const out: TaskRow[] = [];
-  const walk = (parent: string | null, depth: number) => {
-    for (const it of (byParent.get(parent) ?? []).sort((a, b) => a.position - b.position)) {
-      if (it.simple) continue; // "lista simples": o item e tudo abaixo ficam de fora
-      out.push({ id: it.id, title: it.title, depth });
-      walk(it.id, depth + 1);
-    }
-  };
-  walk(null, 0);
-  return out;
-}
-
 interface DayInfo { date: string; status: DayStatus; done: number; future: boolean }
 
 interface Props {
   card: KanbanCard;
-  onUpdate: (patch: { planDayChecks: Record<string, string[]> }) => void;
+  onUpdate: (patch: PlanPatch) => void;
+  /** Dia selecionado controlado por quem usa (ex.: "Hoje" da visão Planos). Sem isso o componente guarda a seleção sozinho. */
+  selected?: string | null;
+  onSelect?: (date: string | null) => void;
 }
 
-export default function PlanTracker({ card, onUpdate }: Props) {
+export default function PlanTracker({ card, onUpdate, selected: selectedProp, onSelect }: Props) {
   const [items, setItems] = useState<KanbanChecklistItem[]>([]);
-  const [selected, setSelected] = useState<string | null>(null);
+  const [selInner, setSelInner] = useState<string | null>(null);
+  const selected = selectedProp !== undefined ? selectedProp : selInner;
+  const setSelected = (k: string | null) => { if (onSelect) onSelect(k); else setSelInner(k); };
+  const setSelectedRef = useRef(setSelected);
+  setSelectedRef.current = setSelected; // o timer do hover é criado uma vez: precisa do setter mais recente
   const [report, setReport] = useState(true);
   const [hoverKey, setHoverKey] = useState<string | null>(null);
   const hoverTimer = useRef<number | null>(null);
@@ -83,7 +71,7 @@ export default function PlanTracker({ card, onUpdate }: Props) {
   const startHover = useCallback((k: string) => {
     if (hoverTimer.current !== null) window.clearTimeout(hoverTimer.current);
     setHoverKey(k);
-    hoverTimer.current = window.setTimeout(() => { hoverTimer.current = null; setSelected(k); setHoverKey(null); }, HOVER_SELECT_MS);
+    hoverTimer.current = window.setTimeout(() => { hoverTimer.current = null; setSelectedRef.current(k); setHoverKey(null); }, HOVER_SELECT_MS);
   }, []);
   useEffect(() => () => { if (hoverTimer.current !== null) window.clearTimeout(hoverTimer.current); }, []);
 
@@ -100,6 +88,7 @@ export default function PlanTracker({ card, onUpdate }: Props) {
   const tasks = useMemo(() => buildTasks(items), [items]);
   const taskIds = useMemo(() => new Set(tasks.map((t) => t.id)), [tasks]);
   const checks = card.planDayChecks ?? {};
+  const titles = card.planDayTitles ?? {};
   const todayKey = keyOf(new Date());
   const weekdays = card.planWeekdays.length > 0 ? card.planWeekdays : [0, 1, 2, 3, 4, 5, 6];
 
@@ -187,6 +176,11 @@ export default function PlanTracker({ card, onUpdate }: Props) {
     if (clean.length > 0) next[date] = clean; else delete next[date];
     onUpdate({ planDayChecks: next });
   }
+  function setDayTitle(date: string, t: string) {
+    const next = { ...titles };
+    if (t.trim()) next[date] = t.trim(); else delete next[date];
+    onUpdate({ planDayTitles: next });
+  }
   function toggleTask(date: string, id: string) {
     const cur = (checks[date] ?? []).filter((x) => taskIds.has(x));
     setDay(date, cur.includes(id) ? cur.filter((x) => x !== id) : [...cur, id]);
@@ -243,7 +237,7 @@ export default function PlanTracker({ card, onUpdate }: Props) {
             {columns.map((col, ci) => (
               <ColumnCells
                 key={ci} month={monthLabels[ci]} col={col} days={days} selected={selected} onSelect={setSelected} todayKey={todayKey}
-                faintCls={faint} hoverKey={hoverKey} onHoverStart={startHover} onHoverEnd={clearHover}
+                faintCls={faint} titles={titles} hoverKey={hoverKey} onHoverStart={startHover} onHoverEnd={clearHover}
               />
             ))}
           </div>
@@ -259,25 +253,19 @@ export default function PlanTracker({ card, onUpdate }: Props) {
         ))}
       </div>
 
-      {/* dia selecionado: tarefas */}
+      {/* dia selecionado: título + tarefas */}
       {selected && sel && (
-        <div className="border border-neutral-200 dark:border-neutral-700 bg-neutral-50 dark:bg-neutral-950" style={{ padding: 8, borderRadius: 6, display: 'flex', flexDirection: 'column', gap: 6 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-            <b style={{ fontSize: 12 }}>{fmtLong(selected)}</b>
-            <span className={faint} style={{ fontSize: 11 }}>{sel.done}/{tasks.length} tarefas · {STATUS_LABEL[sel.status]}</span>
-            <span style={{ flex: 1 }} />
-            <button type="button" onClick={() => setDay(selected, tasks.map((t) => t.id))} className="text-indigo-700 dark:text-indigo-300 bg-transparent border-0 cursor-pointer underline" style={{ fontSize: 11 }}>Marcar todas</button>
-            <button type="button" onClick={() => setDay(selected, [])} className={`${faint} bg-transparent border-0 cursor-pointer underline`} style={{ fontSize: 11 }}>Limpar</button>
-            <button type="button" onClick={() => setSelected(null)} aria-label="Fechar" className={`${faint} bg-transparent border-0 cursor-pointer`} style={{ fontSize: 12 }}>✕</button>
-          </div>
-          {tasks.length === 0 && <span className={faint} style={{ fontSize: 11 }}>Sem tarefas configuradas.</span>}
-          {tasks.map((t) => (
-            <label key={t.id} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, cursor: 'pointer', paddingLeft: t.depth * 16 }}>
-              <input type="checkbox" checked={selIds.includes(t.id)} onChange={() => toggleTask(selected, t.id)} />
-              <span style={{ textDecoration: selIds.includes(t.id) ? 'line-through' : undefined, opacity: selIds.includes(t.id) ? 0.65 : 1 }}>{t.title}</span>
-            </label>
-          ))}
-        </div>
+        <PlanDayPanel
+          date={selected}
+          tasks={tasks}
+          doneIds={selIds}
+          title={titles[selected] ?? ''}
+          statusLabel={STATUS_LABEL[sel.status]}
+          onToggle={(id) => toggleTask(selected, id)}
+          onSetAll={(ids) => setDay(selected, ids)}
+          onTitle={(t) => setDayTitle(selected, t)}
+          onClose={() => setSelected(null)}
+        />
       )}
 
       {/* relatório */}
@@ -353,10 +341,10 @@ function Kpi({ label, value, sub }: { label: string; value: string; sub: string 
   );
 }
 
-function ColumnCells({ month, col, days, selected, onSelect, todayKey, faintCls, hoverKey, onHoverStart, onHoverEnd }: {
+function ColumnCells({ month, col, days, selected, onSelect, todayKey, faintCls, titles, hoverKey, onHoverStart, onHoverEnd }: {
   month: string; col: Array<string | null>; days: Map<string, DayInfo | null>; selected: string | null;
   onSelect: (k: string) => void; todayKey: string; faintCls: string;
-  hoverKey: string | null; onHoverStart: (k: string) => void; onHoverEnd: () => void;
+  titles: Record<string, string>; hoverKey: string | null; onHoverStart: (k: string) => void; onHoverEnd: () => void;
 }) {
   return (
     <>
@@ -374,8 +362,8 @@ function ColumnCells({ month, col, days, selected, onSelect, todayKey, faintCls,
             key={i} type="button" onClick={() => { onHoverEnd(); onSelect(k); }}
             onPointerEnter={(e) => { if (e.pointerType === 'mouse' && selected !== k) onHoverStart(k); }}
             onPointerLeave={onHoverEnd}
-            title={`${fmtLong(k)} — ${STATUS_LABEL[info.status]}`}
-            aria-label={`${fmtLong(k)}: ${STATUS_LABEL[info.status]}`}
+            title={`${fmtLong(k)} — ${STATUS_LABEL[info.status]}${titles[k] ? ` — ${titles[k]}` : ''}`}
+            aria-label={`${fmtLong(k)}: ${STATUS_LABEL[info.status]}${titles[k] ? ` — ${titles[k]}` : ''}`}
             className={color ? 'border-0 cursor-pointer p-0' : 'bg-neutral-200 dark:bg-neutral-700 border-0 cursor-pointer p-0'}
             style={{
               width: CELL, height: CELL, borderRadius: 3, background: color ?? undefined,

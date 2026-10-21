@@ -90,7 +90,7 @@ const FIELD_LABEL: Record<string, string> = {
   parentItemId: 'item pai', simple: 'lista simples', isPlanTemplate: 'modelo de plano', planActive: 'plano ativo',
   planWeekdays: 'dias do plano', planTimesPerDay: 'vezes por dia', planTargetColumnId: 'coluna do plano',
   planTargetGroupId: 'grupo do plano', parentCardId: 'card pai',
-  planTrackOnly: 'acompanhar no card', planDayChecks: 'dias do plano',
+  planTrackOnly: 'acompanhar no card', planDayChecks: 'dias do plano', planDayTitles: 'títulos dos dias do plano',
 };
 const LONG_TEXT_FIELDS = new Set(['description', 'notes']);
 
@@ -156,6 +156,7 @@ function fieldLine(coll: HistColl, field: string, from: unknown, to: unknown, ct
   if (LONG_TEXT_FIELDS.has(field)) return `${label} alterada`;
   if (field === 'position') return 'ordem alterada';
   if (field === 'planDayChecks') return 'dias do plano atualizados';
+  if (field === 'planDayTitles') return 'títulos dos dias do plano atualizados';
   return `${label} ${fmtValue(coll, field, from, ctx)} → ${fmtValue(coll, field, to, ctx)}`;
 }
 

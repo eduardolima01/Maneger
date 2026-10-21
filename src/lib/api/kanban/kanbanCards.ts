@@ -176,6 +176,7 @@ function applyCardUpdate(card: KanbanCard, input: UpdateKanbanCardInput): boolea
   if (input.planTargetGroupId !== undefined) { card.planTargetGroupId = input.planTargetGroupId; changed = true; }
   if (input.planTrackOnly !== undefined) { card.planTrackOnly = input.planTrackOnly; changed = true; }
   if (input.planDayChecks !== undefined) { card.planDayChecks = input.planDayChecks; changed = true; }
+  if (input.planDayTitles !== undefined) { card.planDayTitles = input.planDayTitles; changed = true; }
   if (changed) card.updatedAt = toLocalISO(new Date());
   return changed;
 }

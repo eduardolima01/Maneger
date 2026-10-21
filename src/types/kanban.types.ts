@@ -60,6 +60,8 @@ export interface KanbanCard {
   planTrackOnly?: boolean;
   /** Tarefas feitas em cada dia do plano: { 'YYYY-MM-DD': [ids dos itens da checklist] }. Usado quando `planTrackOnly`. */
   planDayChecks?: Record<string, string[]>;
+  /** Título opcional de cada quadrado (dia) do plano: { 'YYYY-MM-DD': 'texto' }. */
+  planDayTitles?: Record<string, string>;
   createdAt: string;
   updatedAt: string;
 }
@@ -115,6 +117,7 @@ export type UpdateKanbanCardInput = Partial<{
   planTargetGroupId: string | null;
   planTrackOnly: boolean;
   planDayChecks: Record<string, string[]>;
+  planDayTitles: Record<string, string>;
 }>;
 
 export type KanbanDensity = 'compact' | 'normal' | 'expanded';

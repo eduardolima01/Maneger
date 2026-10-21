@@ -1,5 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
-import { updateCard } from '@/lib/api/kanban/kanbanCards';
+import { usePlanPersist } from '@/Kanban/utils/planPersist';
 import PlanTracker from '@/Kanban/components/PlanTracker';
 import type { KanbanCard } from '@/types/kanban.types';
 
@@ -36,16 +35,7 @@ export function PlanToggleButton({ open, onToggle, size = 12, className, style }
 }
 
 export default function PlanPanel({ card, onClose, style, hideHeader }: { card: KanbanCard; onClose?: () => void; style?: React.CSSProperties; hideHeader?: boolean }) {
-  // cópia local dos checks: o quadrado muda na hora, sem esperar o arquivo ser regravado e relido
-  const [checks, setChecks] = useState<Record<string, string[]>>(card.planDayChecks ?? {});
-  useEffect(() => { setChecks(card.planDayChecks ?? {}); }, [card.planDayChecks]);
-  const saveChain = useRef<Promise<unknown>>(Promise.resolve());
-
-  const persist = useCallback((patch: { planDayChecks: Record<string, string[]> }) => {
-    setChecks(patch.planDayChecks);
-    // uma gravação por vez: cada updateCard lê e regrava o JSON inteiro
-    saveChain.current = saveChain.current.then(() => updateCard(card.id, patch)).catch(() => { });
-  }, [card.id]);
+  const { card: live, persist } = usePlanPersist(card);
 
   const stop = (e: React.SyntheticEvent) => e.stopPropagation();
 
@@ -65,7 +55,7 @@ export default function PlanPanel({ card, onClose, style, hideHeader }: { card: 
           {onClose && <button type="button" onClick={onClose} aria-label="Fechar" style={{ border: 'none', background: 'none', cursor: 'pointer', color: 'inherit', fontSize: 12 }}>✕</button>}
         </div>
       )}
-      <PlanTracker card={{ ...card, planDayChecks: checks }} onUpdate={persist} />
+      <PlanTracker card={live} onUpdate={persist} />
     </div>
   );
 }
