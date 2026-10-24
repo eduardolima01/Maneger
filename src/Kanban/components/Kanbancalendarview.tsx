@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { convertFileSrc } from '@tauri-apps/api/core';
 import { DndContext, PointerSensor, useDraggable, useDroppable, useSensor, useSensors, type DragEndEvent } from '@dnd-kit/core';
 import { CSS } from '@dnd-kit/utilities';
@@ -6,6 +6,9 @@ import Button from '@/components/layout/Button';
 import { parseLabel } from '@/Kanban/utils/kanbanLabels';
 import { PRIORITY_COLORS, PRIORITY_LABELS, STATUS_COLORS, STATUS_LABELS } from '@/types/kanban.types';
 import type { KanbanCard, KanbanColumn, KanbanCardGroup, ChecklistProgress } from '@/types/kanban.types';
+import { PlanMonthChip, PlanDetailEntry, buildPlanEntries } from '@/Kanban/components/PlanCalendarEntries';
+import { usePlanItems } from '@/Kanban/utils/planTasks';
+import { setPlanDayChecks } from '@/Kanban/utils/planPersist';
 
 interface KanbanCalendarViewProps {
   cards: KanbanCard[];
@@ -613,7 +616,32 @@ export default function KanbanCalendarView({
   const weeks = useMemo(() => buildWeeks(year, month), [year, month]);
   const weekDays = useMemo(() => buildWeekDays(cursor), [cursor]);
   const todayKey = dateKeyFromDate(today);
-  const hasAnyDatedCard = cardsByDate.size > 0;
+
+  // Planos acompanhados no próprio card (sem ocorrências/cards novos): um item por dia previsto, com as tarefas do plano.
+  const trackedPlans = useMemo(() => planTemplates.filter((p) => p.planTrackOnly && p.planActive && !p.archived), [planTemplates]);
+  const planItems = usePlanItems(trackedPlans.map((p) => p.id));
+  // Marcação otimista: o check aparece NA HORA (cópia local por plano) e só some quando os cards relidos do arquivo já a trazem.
+  const [checkOverrides, setCheckOverrides] = useState<Map<string, Record<string, string[]>>>(new Map());
+  const pendingWrites = useRef(0);
+  useEffect(() => { if (pendingWrites.current === 0) setCheckOverrides(new Map()); }, [cards]);
+  const livePlans = useMemo(
+    () => trackedPlans.map((p) => (checkOverrides.has(p.id) ? { ...p, planDayChecks: checkOverrides.get(p.id) } : p)),
+    [trackedPlans, checkOverrides],
+  );
+  const planEntriesByDate = useMemo(() => buildPlanEntries(livePlans, planItems, todayKey), [livePlans, planItems, todayKey]);
+
+  function togglePlanTask(planId: string, date: string, taskId: string) {
+    const plan = livePlans.find((p) => p.id === planId);
+    if (!plan) return;
+    const checks = { ...(plan.planDayChecks ?? {}) };
+    const cur = checks[date] ?? [];
+    const next = cur.includes(taskId) ? cur.filter((x) => x !== taskId) : [...cur, taskId];
+    if (next.length > 0) checks[date] = next; else delete checks[date];
+    setCheckOverrides((prev) => new Map(prev).set(planId, checks));
+    pendingWrites.current++;
+    void setPlanDayChecks(planId, date, next).finally(() => { pendingWrites.current--; });
+  }
+  const hasAnyDatedCard = cardsByDate.size > 0 || planEntriesByDate.size > 0;
 
   /** Colunas que têm pelo menos um card com data — base da legenda de identificação. */
   const columnsInUse = useMemo(() => {
@@ -809,6 +837,9 @@ export default function KanbanCalendarView({
                           <DraggableMonthChip key={card.id} card={card} column={column} groupCoverPath={resolveGroupCoverPath(card, groups)} onClick={() => handleCardClick(card)} />
                         );
                       })}
+                      {(planEntriesByDate.get(key) ?? []).map((entry) => (
+                        <PlanMonthChip key={`plan-${entry.plan.id}`} entry={entry} onOpen={() => onCardClick(entry.plan.id)} />
+                      ))}
                     </div>
                   </DroppableDayCell>
                 );
@@ -850,6 +881,14 @@ export default function KanbanCalendarView({
                         </DraggableDetail>
                       );
                     })}
+                    {(planEntriesByDate.get(key) ?? []).map((entry) => (
+                      <PlanDetailEntry
+                        key={`plan-${entry.plan.id}`}
+                        entry={entry}
+                        onOpen={() => onCardClick(entry.plan.id)}
+                        onToggle={(taskId) => togglePlanTask(entry.plan.id, entry.date, taskId)}
+                      />
+                    ))}
                   </div>
                 </DroppableWeekDay>
               );
@@ -861,9 +900,10 @@ export default function KanbanCalendarView({
       {granularity === 'day' && (() => {
         const key = dateKeyFromDate(cursor);
         const dayCards = cardsByDate.get(key) ?? [];
+        const dayPlanEntries = planEntriesByDate.get(key) ?? [];
         return (
           <div className="bg-white dark:bg-neutral-800" style={{ borderRadius: 8, padding: 12, display: 'flex', flexDirection: 'column', gap: 8 }}>
-            {dayCards.length === 0 ? (
+            {dayCards.length === 0 && dayPlanEntries.length === 0 ? (
               <p className="text-neutral-400 dark:text-neutral-500" style={{ fontSize: 13, textAlign: 'center', padding: 24, margin: 0 }}>
                 Nenhum card com data neste dia.
               </p>
@@ -884,6 +924,14 @@ export default function KanbanCalendarView({
                 );
               })
             )}
+            {dayPlanEntries.map((entry) => (
+              <PlanDetailEntry
+                key={`plan-${entry.plan.id}`}
+                entry={entry}
+                onOpen={() => onCardClick(entry.plan.id)}
+                onToggle={(taskId) => togglePlanTask(entry.plan.id, entry.date, taskId)}
+              />
+            ))}
           </div>
         );
       })()}

@@ -1,17 +1,30 @@
-import { useEffect, useLayoutEffect, useRef, useState } from 'react';
-import type { ReactElement } from 'react';
-import type { Event } from '@/types/event.types';
-import { snapMinutes, formatHourLabel, formatMinutesLabel, isSameDay, fromLocalISO, toLocalISO, addDays, formatDuration, minutesSinceMidnight } from '../lib/utils/date';
-import EventBlock from './EventBlock';
-import { useNow } from '@/lib/hooks/useNow';
-import { ProjectType } from '@/types/project.types';
-import { convertFileSrc } from '@tauri-apps/api/core';
-import WeekSummaryModal from './WeekSummaryModal';
-import { computeOverlapLevels, getVisualRange } from './utils/eventLayout';
-import WeekComparisonModal from './components/WeekComparisonModal';
-import { useGhostEventSuggestion } from './hooks/useGhostEventSuggestion';
-import { usePersistentState } from './hooks/usePersistentState';
-import { PROJECT_DRAG_ID_KEY, PROJECT_DRAG_NAME_KEY } from './components/AgendaProjectSidebar';
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import type { ReactElement } from "react";
+import type { Event } from "@/types/event.types";
+import {
+  addDays,
+  formatDuration,
+  formatHourLabel,
+  formatMinutesLabel,
+  fromLocalISO,
+  isSameDay,
+  minutesSinceMidnight,
+  snapMinutes,
+  toLocalISO,
+} from "../lib/utils/date";
+import EventBlock from "./EventBlock";
+import { useNow } from "@/lib/hooks/useNow";
+import { ProjectType } from "@/types/project.types";
+import { convertFileSrc } from "@tauri-apps/api/core";
+import WeekSummaryModal from "./WeekSummaryModal";
+import { computeOverlapLevels, getVisualRange } from "./utils/eventLayout";
+import WeekComparisonModal from "./components/WeekComparisonModal";
+import { useGhostEventSuggestion } from "./hooks/useGhostEventSuggestion";
+import { usePersistentState } from "./hooks/usePersistentState";
+import {
+  PROJECT_DRAG_ID_KEY,
+  PROJECT_DRAG_NAME_KEY,
+} from "./components/AgendaProjectSidebar";
 
 // Zoom (Ctrl + scroll do mouse): altura de 1 hora na grade, em px
 const DEFAULT_HOUR_HEIGHT = 48;
@@ -19,9 +32,34 @@ const MIN_HOUR_HEIGHT = 20;
 const MAX_HOUR_HEIGHT = 240;
 
 function isHourHeight(v: unknown): v is number {
-  return typeof v === 'number' && Number.isFinite(v) && v >= MIN_HOUR_HEIGHT && v <= MAX_HOUR_HEIGHT;
+  return typeof v === "number" && Number.isFinite(v) && v >= MIN_HOUR_HEIGHT &&
+    v <= MAX_HOUR_HEIGHT;
 }
 const HOURS = Array.from({ length: 24 }, (_, i) => i);
+
+/** Dia do ano (1–366) e quantos dias faltam para o fim do ano. Usa UTC pra não errar no horário de verão. */
+function yearProgress(
+  day: Date,
+): { dayOfYear: number; totalDays: number; remaining: number } {
+  const y = day.getFullYear();
+  const dayOfYear = Math.round(
+    (Date.UTC(y, day.getMonth(), day.getDate()) - Date.UTC(y, 0, 1)) /
+    86400000,
+  ) + 1;
+  const totalDays = Math.round(
+    (Date.UTC(y + 1, 0, 1) - Date.UTC(y, 0, 1)) / 86400000,
+  );
+  return { dayOfYear, totalDays, remaining: totalDays - dayOfYear };
+}
+
+function yearProgressTitle(day: Date): string {
+  const { dayOfYear, totalDays, remaining } = yearProgress(day);
+  const tail = remaining === 0
+    ? "último dia do ano"
+    : `faltam ${remaining} ${remaining === 1 ? "dia" : "dias"
+    } para o fim do ano`;
+  return `Dia ${dayOfYear} de ${totalDays} · ${tail}`;
+}
 
 interface SharedBoundaryHandleProps {
   upperEvent: Event;
@@ -39,17 +77,22 @@ interface SharedBoundaryHandleProps {
  * quantidade, sem separar nem sobrepor os eventos. Cada lado ainda respeita
  * o mínimo de 15min de duração, igual aos handles individuais do EventBlock.
  */
-function SharedBoundaryHandle({ upperEvent, lowerEvent, boundaryMin, left, hourHeight, onChange }: SharedBoundaryHandleProps) {
+function SharedBoundaryHandle(
+  { upperEvent, lowerEvent, boundaryMin, left, hourHeight, onChange }:
+    SharedBoundaryHandleProps,
+) {
   const [deltaMin, setDeltaMin] = useState(0);
   const [isHovering, setIsHovering] = useState(false);
   const dragStartY = useRef(0);
   const pxPerMin = hourHeight / 60;
 
   const upperDurationMin = Math.round(
-    (fromLocalISO(upperEvent.end_at).getTime() - fromLocalISO(upperEvent.start_at).getTime()) / 60000
+    (fromLocalISO(upperEvent.end_at).getTime() -
+      fromLocalISO(upperEvent.start_at).getTime()) / 60000,
   );
   const lowerDurationMin = Math.round(
-    (fromLocalISO(lowerEvent.end_at).getTime() - fromLocalISO(lowerEvent.start_at).getTime()) / 60000
+    (fromLocalISO(lowerEvent.end_at).getTime() -
+      fromLocalISO(lowerEvent.start_at).getTime()) / 60000,
   );
 
   function beginDrag(e: React.PointerEvent) {
@@ -64,23 +107,27 @@ function SharedBoundaryHandle({ upperEvent, lowerEvent, boundaryMin, left, hourH
     };
 
     const handleUp = (ev: PointerEvent) => {
-      window.removeEventListener('pointermove', handleMove);
-      window.removeEventListener('pointerup', handleUp);
+      window.removeEventListener("pointermove", handleMove);
+      window.removeEventListener("pointerup", handleUp);
 
       const raw = snapMinutes((ev.clientY - dragStartY.current) / pxPerMin);
       const extra = Math.min(maxExtra, Math.max(minExtra, raw));
 
       if (extra !== 0) {
-        const newUpperEnd = new Date(fromLocalISO(upperEvent.end_at).getTime() + extra * 60000);
-        const newLowerStart = new Date(fromLocalISO(lowerEvent.start_at).getTime() + extra * 60000);
+        const newUpperEnd = new Date(
+          fromLocalISO(upperEvent.end_at).getTime() + extra * 60000,
+        );
+        const newLowerStart = new Date(
+          fromLocalISO(lowerEvent.start_at).getTime() + extra * 60000,
+        );
         onChange(upperEvent.id, upperEvent.start_at, toLocalISO(newUpperEnd));
         onChange(lowerEvent.id, toLocalISO(newLowerStart), lowerEvent.end_at);
       }
       setDeltaMin(0);
     };
 
-    window.addEventListener('pointermove', handleMove);
-    window.addEventListener('pointerup', handleUp);
+    window.addEventListener("pointermove", handleMove);
+    window.addEventListener("pointerup", handleUp);
   }
 
   const isDragging = deltaMin !== 0;
@@ -91,20 +138,44 @@ function SharedBoundaryHandle({ upperEvent, lowerEvent, boundaryMin, left, hourH
       onMouseEnter={() => setIsHovering(true)}
       onMouseLeave={() => setIsHovering(false)}
       style={{
-        position: 'absolute',
+        position: "absolute",
         top: (boundaryMin + deltaMin) * pxPerMin - 4,
         height: 8,
         left,
         right: 2,
-        cursor: 'ns-resize',
+        cursor: "ns-resize",
         zIndex: 6,
       }}
     >
       {(isHovering || isDragging) && (
-        <div style={{ position: 'absolute', top: 3, left: 0, right: 0, height: 2, backgroundColor: '#1a73e8', borderRadius: 1 }} />
+        <div
+          style={{
+            position: "absolute",
+            top: 3,
+            left: 0,
+            right: 0,
+            height: 2,
+            backgroundColor: "#1a73e8",
+            borderRadius: 1,
+          }}
+        />
       )}
       {isDragging && (
-        <div style={{ position: 'absolute', top: -18, left: 0, backgroundColor: '#333', color: '#fff', fontSize: 11, padding: '2px 6px', borderRadius: 4, whiteSpace: 'nowrap', zIndex: 10, pointerEvents: 'none' }}>
+        <div
+          style={{
+            position: "absolute",
+            top: -18,
+            left: 0,
+            backgroundColor: "#333",
+            color: "#fff",
+            fontSize: 11,
+            padding: "2px 6px",
+            borderRadius: 4,
+            whiteSpace: "nowrap",
+            zIndex: 10,
+            pointerEvents: "none",
+          }}
+        >
           {formatMinutesLabel(boundaryMin + deltaMin)}
         </div>
       )}
@@ -129,11 +200,23 @@ interface TimeGridViewProps {
   onProjectAssign: (eventId: string, projectId: string | null) => void;
   onProjectSummaryClick: (projectId: string | null) => void;
   onEventRequestDelete: (event: Event) => void;
-  onCreateSuggested: (data: { title: string; project_id: string | null; start_at: string; end_at: string }) => void;
+  onCreateSuggested: (
+    data: {
+      title: string;
+      project_id: string | null;
+      start_at: string;
+      end_at: string;
+    },
+  ) => void;
   onDescriptionChange: (id: string, description: string) => void;
   onOpenInfoPopup: (event: Event, cover?: string | null) => void;
   onEventHistory?: (event: Event) => void;
-  onProjectDrop: (projectId: string, projectName: string, start: Date, end: Date) => void;
+  onProjectDrop: (
+    projectId: string,
+    projectName: string,
+    start: Date,
+    end: Date,
+  ) => void;
 }
 
 interface GhostEventBlockProps {
@@ -148,7 +231,9 @@ interface GhostEventBlockProps {
  * Bloco fantasma: sugestão de evento repetido, em opacidade reduzida.
  * Clicar cria o evento de verdade na hora, sem passar por confirmação.
  */
-function GhostEventBlock({ title, color, top, height, onClick }: GhostEventBlockProps) {
+function GhostEventBlock(
+  { title, color, top, height, onClick }: GhostEventBlockProps,
+) {
   const [isHovering, setIsHovering] = useState(false);
 
   return (
@@ -158,25 +243,25 @@ function GhostEventBlock({ title, color, top, height, onClick }: GhostEventBlock
       onMouseLeave={() => setIsHovering(false)}
       title={`Criar "${title}" de novo (repetiu nos dias anteriores)`}
       style={{
-        position: 'absolute',
+        position: "absolute",
         top,
         height: Math.max(16, height),
         left: 2,
         right: 2,
         backgroundColor: color,
         opacity: isHovering ? 0.55 : 0.3,
-        transition: 'opacity 120ms ease',
-        border: '1px dashed rgba(255,255,255,0.85)',
+        transition: "opacity 120ms ease",
+        border: "1px dashed rgba(255,255,255,0.85)",
         borderRadius: 4,
-        color: '#fff',
+        color: "#fff",
         fontSize: 12,
-        padding: '2px 6px',
-        cursor: 'pointer',
+        padding: "2px 6px",
+        cursor: "pointer",
         zIndex: 1,
-        overflow: 'hidden',
-        whiteSpace: 'nowrap',
-        textOverflow: 'ellipsis',
-        userSelect: 'none',
+        overflow: "hidden",
+        whiteSpace: "nowrap",
+        textOverflow: "ellipsis",
+        userSelect: "none",
       }}
     >
       {title}
@@ -184,21 +269,43 @@ function GhostEventBlock({ title, color, top, height, onClick }: GhostEventBlock
   );
 }
 
-
 export default function TimeGridView({
-  days, events, resolveColor, resolveCover, onCreateEvent, resolveBreadcrumb,
+  days,
+  events,
+  resolveColor,
+  resolveCover,
+  onCreateEvent,
+  resolveBreadcrumb,
   resolveEventImages,
-  onEventEdit, onEventProjectClick, onEventDoubleClick, onEventClick, onEventChange, onEventDuplicate,
-  onProjectAssign, onProjectSummaryClick, onEventRequestDelete, onCreateSuggested, onDescriptionChange, onOpenInfoPopup, onEventHistory, onProjectDrop,
+  onEventEdit,
+  onEventProjectClick,
+  onEventDoubleClick,
+  onEventClick,
+  onEventChange,
+  onEventDuplicate,
+  onProjectAssign,
+  onProjectSummaryClick,
+  onEventRequestDelete,
+  onCreateSuggested,
+  onDescriptionChange,
+  onOpenInfoPopup,
+  onEventHistory,
+  onProjectDrop,
 }: TimeGridViewProps) {
-  const [draft, setDraft] = useState<{ dayIndex: number; startMin: number; currentMin: number } | null>(null);
+  const [draft, setDraft] = useState<
+    { dayIndex: number; startMin: number; currentMin: number } | null
+  >(null);
   const columnRefs = useRef<(HTMLDivElement | null)[]>([]);
   const gridRef = useRef<HTMLDivElement>(null);
 
   // ---- zoom: Ctrl + scroll muda a altura da hora (salva); Ctrl + 0 volta ao padrão ----
-  const [hourHeight, setHourHeight] = usePersistentState<number>('agenda.hourHeight', DEFAULT_HOUR_HEIGHT, isHourHeight);
-  const renderedHourHeight = useRef(hourHeight);   // o que está desenhado agora
-  const zoomTarget = useRef(hourHeight);           // alvo (vários eventos de scroll antes do próximo render)
+  const [hourHeight, setHourHeight] = usePersistentState<number>(
+    "agenda.hourHeight",
+    DEFAULT_HOUR_HEIGHT,
+    isHourHeight,
+  );
+  const renderedHourHeight = useRef(hourHeight); // o que está desenhado agora
+  const zoomTarget = useRef(hourHeight); // alvo (vários eventos de scroll antes do próximo render)
   const zoomAnchor = useRef<{ minutes: number; offset: number } | null>(null);
 
   // depois de redesenhar com a nova escala, mantém o horário sob o cursor no mesmo lugar da tela
@@ -207,7 +314,12 @@ export default function TimeGridView({
     zoomTarget.current = hourHeight;
     const el = gridRef.current;
     const anchor = zoomAnchor.current;
-    if (el && anchor) el.scrollTop = Math.max(0, (anchor.minutes / 60) * hourHeight - anchor.offset);
+    if (el && anchor) {
+      el.scrollTop = Math.max(
+        0,
+        (anchor.minutes / 60) * hourHeight - anchor.offset,
+      );
+    }
     zoomAnchor.current = null;
   }, [hourHeight]);
 
@@ -218,29 +330,42 @@ export default function TimeGridView({
       if (!e.ctrlKey) return;
       e.preventDefault(); // listener não-passivo: impede o zoom da página
       const next = Math.round(
-        Math.min(MAX_HOUR_HEIGHT, Math.max(MIN_HOUR_HEIGHT, zoomTarget.current * Math.exp(-e.deltaY * 0.0015))) * 100,
+        Math.min(
+          MAX_HOUR_HEIGHT,
+          Math.max(
+            MIN_HOUR_HEIGHT,
+            zoomTarget.current * Math.exp(-e.deltaY * 0.0015),
+          ),
+        ) * 100,
       ) / 100;
       if (next === zoomTarget.current) return;
       zoomTarget.current = next;
       if (!zoomAnchor.current && el) {
         const offset = e.clientY - el.getBoundingClientRect().top;
-        zoomAnchor.current = { minutes: ((el.scrollTop + offset) / renderedHourHeight.current) * 60, offset };
+        zoomAnchor.current = {
+          minutes: ((el.scrollTop + offset) / renderedHourHeight.current) * 60,
+          offset,
+        };
       }
       setHourHeight(next);
     }
     function onKeyDown(e: KeyboardEvent) {
-      if (!e.ctrlKey || e.altKey || e.shiftKey || e.key !== '0') return;
+      if (!e.ctrlKey || e.altKey || e.shiftKey || e.key !== "0") return;
       const t = e.target as HTMLElement | null;
-      if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return;
+      if (
+        t &&
+        (t.tagName === "INPUT" || t.tagName === "TEXTAREA" ||
+          t.isContentEditable)
+      ) return;
       e.preventDefault();
       zoomTarget.current = DEFAULT_HOUR_HEIGHT;
       setHourHeight(DEFAULT_HOUR_HEIGHT);
     }
-    el.addEventListener('wheel', onWheel, { passive: false });
-    window.addEventListener('keydown', onKeyDown);
+    el.addEventListener("wheel", onWheel, { passive: false });
+    window.addEventListener("keydown", onKeyDown);
     return () => {
-      el.removeEventListener('wheel', onWheel);
-      window.removeEventListener('keydown', onKeyDown);
+      el.removeEventListener("wheel", onWheel);
+      window.removeEventListener("keydown", onKeyDown);
     };
   }, [setHourHeight]);
   const [hoverMinutes, setHoverMinutes] = useState<number | null>(null);
@@ -263,12 +388,23 @@ export default function TimeGridView({
     setDraft({ dayIndex, startMin, currentMin: startMin + 30 });
 
     const handleMove = (ev: PointerEvent) => {
-      setDraft((d) => (d ? { ...d, currentMin: Math.max(d.startMin + 15, yToMinutes(dayIndex, ev.clientY)) } : d));
+      setDraft((
+        d,
+      ) => (d
+        ? {
+          ...d,
+          currentMin: Math.max(
+            d.startMin + 15,
+            yToMinutes(dayIndex, ev.clientY),
+          ),
+        }
+        : d)
+      );
     };
 
     const handleUp = () => {
-      window.removeEventListener('pointermove', handleMove);
-      window.removeEventListener('pointerup', handleUp);
+      window.removeEventListener("pointermove", handleMove);
+      window.removeEventListener("pointerup", handleUp);
       setDraft((d) => {
         if (d) {
           const day = days[d.dayIndex];
@@ -282,8 +418,8 @@ export default function TimeGridView({
       });
     };
 
-    window.addEventListener('pointermove', handleMove);
-    window.addEventListener('pointerup', handleUp);
+    window.addEventListener("pointermove", handleMove);
+    window.addEventListener("pointerup", handleUp);
   }
 
   function handleGridMouseMove(e: React.MouseEvent) {
@@ -303,8 +439,14 @@ export default function TimeGridView({
   const nowMinutes = now.getHours() * 60 + now.getMinutes();
   const todayIndex = days.findIndex((d) => isSameDay(d, now));
 
-  const todayEventsForGhost = events.filter((ev) => isSameDay(fromLocalISO(ev.start_at), now));
-  const ghostSuggestion = useGhostEventSuggestion(todayEventsForGhost, now, todayIndex !== -1);
+  const todayEventsForGhost = events.filter((ev) =>
+    isSameDay(fromLocalISO(ev.start_at), now)
+  );
+  const ghostSuggestion = useGhostEventSuggestion(
+    todayEventsForGhost,
+    now,
+    todayIndex !== -1,
+  );
 
   function handleGhostClick() {
     if (!ghostSuggestion) return;
@@ -320,26 +462,46 @@ export default function TimeGridView({
     });
   }
 
-  function getDaySummary(day: Date): { totalMinutes: number; count: number; byProject: Record<string, { projectId: string | null; label: string; minutes: number }> } | null {
-    const dayEvents = events.filter((ev) => isSameDay(fromLocalISO(ev.start_at), day));
+  function getDaySummary(
+    day: Date,
+  ): {
+    totalMinutes: number;
+    count: number;
+    byProject: Record<
+      string,
+      { projectId: string | null; label: string; minutes: number }
+    >;
+  } | null {
+    const dayEvents = events.filter((ev) =>
+      isSameDay(fromLocalISO(ev.start_at), day)
+    );
     if (dayEvents.length === 0) return null;
 
     let totalMinutes = 0;
-    const byProject: Record<string, { projectId: string | null; label: string; minutes: number }> = {};
+    const byProject: Record<
+      string,
+      { projectId: string | null; label: string; minutes: number }
+    > = {};
 
     for (const ev of dayEvents) {
       const start = fromLocalISO(ev.start_at);
       const end = fromLocalISO(ev.end_at);
       const startMin = minutesSinceMidnight(start);
       const spansMidnight = !isSameDay(start, end);
-      const durationMin = spansMidnight ? (24 * 60 - startMin) + minutesSinceMidnight(end) : minutesSinceMidnight(end) - startMin;
+      const durationMin = spansMidnight
+        ? (24 * 60 - startMin) + minutesSinceMidnight(end)
+        : minutesSinceMidnight(end) - startMin;
 
       totalMinutes += durationMin;
 
-      const key = ev.project_id ?? '__none__';
+      const key = ev.project_id ?? "__none__";
       const breadcrumb = resolveBreadcrumb(ev.project_id);
-      const label = breadcrumb.length > 0 ? breadcrumb[breadcrumb.length - 1].name : 'Sem projeto';
-      if (!byProject[key]) byProject[key] = { projectId: ev.project_id, label, minutes: 0 };
+      const label = breadcrumb.length > 0
+        ? breadcrumb[breadcrumb.length - 1].name
+        : "Sem projeto";
+      if (!byProject[key]) {
+        byProject[key] = { projectId: ev.project_id, label, minutes: 0 };
+      }
       byProject[key].minutes += durationMin;
     }
 
@@ -347,25 +509,44 @@ export default function TimeGridView({
   }
 
   const daySummaries = days.map((day) => getDaySummary(day));
-  const weekTotalMinutes = daySummaries.reduce((sum, s) => sum + (s?.totalMinutes ?? 0), 0);
-  const weekEventCount = daySummaries.reduce((sum, s) => sum + (s?.count ?? 0), 0);
+  const weekTotalMinutes = daySummaries.reduce(
+    (sum, s) => sum + (s?.totalMinutes ?? 0),
+    0,
+  );
+  const weekEventCount = daySummaries.reduce(
+    (sum, s) => sum + (s?.count ?? 0),
+    0,
+  );
 
-  const weekByProject: Record<string, { projectId: string | null; label: string; minutes: number }> = {};
+  const weekByProject: Record<
+    string,
+    { projectId: string | null; label: string; minutes: number }
+  > = {};
   for (const summary of daySummaries) {
     if (!summary) continue;
     for (const [key, entry] of Object.entries(summary.byProject)) {
-      if (!weekByProject[key]) weekByProject[key] = { projectId: entry.projectId, label: entry.label, minutes: 0 };
+      if (!weekByProject[key]) {
+        weekByProject[key] = {
+          projectId: entry.projectId,
+          label: entry.label,
+          minutes: 0,
+        };
+      }
       weekByProject[key].minutes += entry.minutes;
     }
   }
 
-  const weekByProjectSorted = Object.values(weekByProject).sort((a, b) => b.minutes - a.minutes);
+  const weekByProjectSorted = Object.values(weekByProject).sort((a, b) =>
+    b.minutes - a.minutes
+  );
 
   const [weekSummaryOpen, setWeekSummaryOpen] = useState(false);
   const [comparisonOpen, setComparisonOpen] = useState(false);
   // Resumo por dia (rodapé) começa recolhido, mostrando só o total; cada dia
   // expande/recolhe independente pra ver o detalhamento por projeto.
-  const [expandedSummaryDays, setExpandedSummaryDays] = useState<Set<number>>(new Set());
+  const [expandedSummaryDays, setExpandedSummaryDays] = useState<Set<number>>(
+    new Set(),
+  );
 
   function toggleSummaryDay(dayIndex: number) {
     setExpandedSummaryDays((prev) => {
@@ -379,13 +560,21 @@ export default function TimeGridView({
   useEffect(() => {
     const el = gridRef.current;
     if (!el || todayIndex === -1) return;
-    const targetScrollTop = (nowMinutes / 60) * hourHeight - el.clientHeight / 2;
+    const targetScrollTop = (nowMinutes / 60) * hourHeight -
+      el.clientHeight / 2;
     el.scrollTop = Math.max(0, targetScrollTop);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [days]); // só re-centraliza quando o range de dias muda (troca de view/navegação), não a cada minuto
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
+    <div
+      style={{
+        display: "flex",
+        flexDirection: "column",
+        height: "100%",
+        overflow: "hidden",
+      }}
+    >
       {days.length > 1 && (
         <div className="flex flex-shrink-0 border-b border-gray-200 dark:border-gray-700">
           <button
@@ -393,10 +582,15 @@ export default function TimeGridView({
             className="flex flex-1 items-center justify-between border-none bg-[#eef2f7] dark:bg-gray-800 px-3 py-2 cursor-pointer"
           >
             <span className="text-xs text-gray-600 dark:text-gray-300">
-              📊 {weekEventCount} evento{weekEventCount !== 1 ? 's' : ''} nesta semana
+              📊 {weekEventCount} evento{weekEventCount !== 1 ? "s" : ""}{" "}
+              nesta semana
             </span>
-            <span title="semana contem 168 horas" className="text-sm font-bold text-blue-600 dark:text-blue-400">
-              Total: {weekTotalMinutes > 0 ? formatDuration(weekTotalMinutes) : '—'}
+            <span
+              title="semana contem 168 horas"
+              className="text-sm font-bold text-blue-600 dark:text-blue-400"
+            >
+              Total:{" "}
+              {weekTotalMinutes > 0 ? formatDuration(weekTotalMinutes) : "—"}
             </span>
           </button>
           <button
@@ -408,15 +602,31 @@ export default function TimeGridView({
         </div>
       )}
 
-      <div className="border-b border-gray-200 dark:border-gray-700" style={{ display: 'flex', flexShrink: 0 }}>
+      <div
+        className="border-b border-gray-200 dark:border-gray-700"
+        style={{ display: "flex", flexShrink: 0 }}
+      >
         <div style={{ width: 56 }} />
         {days.map((day, i) => (
           <div
             key={i}
             className="border-l border-gray-200 text-gray-600 dark:border-gray-800 dark:text-gray-400"
-            style={{ flex: 1, textAlign: 'center', padding: '6px 4px', fontSize: 11 }}
+            style={{
+              flex: 1,
+              textAlign: "center",
+              padding: "6px 4px",
+              fontSize: 11,
+            }}
+            title={yearProgressTitle(day)}
           >
-            {day.toLocaleDateString('pt-BR', { weekday: 'short' })} {day.getDate()}
+            {day.toLocaleDateString("pt-BR", { weekday: "short" })}{" "}
+            {day.getDate()}
+            <span
+              className="text-gray-400 dark:text-gray-500"
+              style={{ display: "block", fontSize: 10, lineHeight: "12px" }}
+            >
+              {yearProgress(day).dayOfYear}
+            </span>
           </div>
         ))}
       </div>
@@ -425,11 +635,26 @@ export default function TimeGridView({
         ref={gridRef}
         onMouseMove={handleGridMouseMove}
         onMouseLeave={handleGridMouseLeave}
-        style={{ flex: 1, overflowY: 'auto', display: 'flex', position: 'relative' }}
+        style={{
+          flex: 1,
+          overflowY: "auto",
+          display: "flex",
+          position: "relative",
+        }}
       >
-        <div style={{ width: 56, position: 'relative' }}>
+        <div style={{ width: 56, position: "relative" }}>
           {HOURS.map((h) => (
-            <div key={h} className="text-gray-600 dark:text-gray-400" style={{ height: hourHeight, fontSize: 11, textAlign: 'right', paddingRight: 4, transform: 'translateY(-6px)' }}>
+            <div
+              key={h}
+              className="text-gray-600 dark:text-gray-400"
+              style={{
+                height: hourHeight,
+                fontSize: 11,
+                textAlign: "right",
+                paddingRight: 4,
+                transform: "translateY(-6px)",
+              }}
+            >
               {formatHourLabel(h)}
             </div>
           ))}
@@ -438,13 +663,13 @@ export default function TimeGridView({
             <div
               className="bg-white dark:bg-gray-900"
               style={{
-                position: 'absolute',
+                position: "absolute",
                 top: (hoverMinutes / 60) * hourHeight - 6,
                 right: 4,
                 fontSize: 11,
                 fontWeight: 700,
-                color: '#ea4335',
-                pointerEvents: 'none',
+                color: "#ea4335",
+                pointerEvents: "none",
               }}
             >
               {formatMinutesLabel(hoverMinutes)}
@@ -459,7 +684,7 @@ export default function TimeGridView({
             onDragOver={(e) => {
               if (!e.dataTransfer.types.includes(PROJECT_DRAG_ID_KEY)) return;
               e.preventDefault();
-              e.dataTransfer.dropEffect = 'copy';
+              e.dataTransfer.dropEffect = "copy";
             }}
             onDrop={(e) => {
               const projectId = e.dataTransfer.getData(PROJECT_DRAG_ID_KEY);
@@ -467,49 +692,62 @@ export default function TimeGridView({
               e.preventDefault();
               const projectName = e.dataTransfer.getData(PROJECT_DRAG_NAME_KEY);
               // limita o início pra o evento de 1h padrão não cruzar meia-noite
-              const startMin = Math.min(yToMinutes(dayIndex, e.clientY), 24 * 60 - 60);
+              const startMin = Math.min(
+                yToMinutes(dayIndex, e.clientY),
+                24 * 60 - 60,
+              );
               const start = new Date(day);
               start.setHours(0, startMin, 0, 0);
               const end = new Date(start.getTime() + 60 * 60000);
               onProjectDrop(projectId, projectName, start, end);
             }}
-            className={
-              'border-l border-gray-200 dark:border-gray-800 ' +
-              (dayIndex === todayIndex ? 'bg-[rgba(26,115,232,0.04)] dark:bg-[rgba(26,115,232,0.12)]' : '')
-            }
+            className={"border-l border-gray-200 dark:border-gray-800 " +
+              (dayIndex === todayIndex
+                ? "bg-[rgba(26,115,232,0.04)] dark:bg-[rgba(26,115,232,0.12)]"
+                : "")}
             style={{
               flex: 1,
-              position: 'relative',
+              position: "relative",
               height: hourHeight * 24,
             }}
           >
             {HOURS.map((h) => (
-              <div key={h} className="border-t border-gray-100 dark:border-gray-800" style={{ position: 'absolute', top: h * hourHeight, left: 0, right: 0, height: hourHeight }} />
+              <div
+                key={h}
+                className="border-t border-gray-100 dark:border-gray-800"
+                style={{
+                  position: "absolute",
+                  top: h * hourHeight,
+                  left: 0,
+                  right: 0,
+                  height: hourHeight,
+                }}
+              />
             ))}
 
             <div
               onPointerDown={(e) => handlePointerDown(dayIndex, e)}
-              style={{ position: 'absolute', inset: 0 }}
+              style={{ position: "absolute", inset: 0 }}
             />
 
             <div
               onPointerDown={(e) => handlePointerDown(dayIndex, e)}
               style={{
-                position: 'absolute',
+                position: "absolute",
                 top: 0,
                 right: 0,
                 bottom: 0,
                 width: CREATE_ZONE_WIDTH,
-                cursor: 'crosshair',
+                cursor: "crosshair",
                 zIndex: 50,
-                borderLeft: '1px dashed rgba(26,115,232,0.3)',
+                borderLeft: "1px dashed rgba(26,115,232,0.3)",
               }}
             />
 
             {(() => {
               const startSegments = events
                 .filter((ev) => isSameDay(fromLocalISO(ev.start_at), day))
-                .map((ev) => ({ event: ev, segmentKind: 'start' as const }));
+                .map((ev) => ({ event: ev, segmentKind: "start" as const }));
 
               const continuationSegments = events
                 .filter((ev) => {
@@ -518,18 +756,27 @@ export default function TimeGridView({
                   if (isSameDay(start, end)) return false;
                   return isSameDay(start, addDays(day, -1));
                 })
-                .map((ev) => ({ event: ev, segmentKind: 'continuation' as const }));
+                .map((ev) => ({
+                  event: ev,
+                  segmentKind: "continuation" as const,
+                }));
 
               const allSegments = [...startSegments, ...continuationSegments];
 
               const levels = computeOverlapLevels(
                 allSegments.map(({ event, segmentKind }) => {
                   const range = getVisualRange(event, segmentKind);
-                  return { key: `${event.id}-${segmentKind}`, startMin: range.startMin, endMin: range.endMin };
-                })
+                  return {
+                    key: `${event.id}-${segmentKind}`,
+                    startMin: range.startMin,
+                    endMin: range.endMin,
+                  };
+                }),
               );
 
-              const eventBlocks = allSegments.map(({ event: ev, segmentKind }) => (
+              const eventBlocks = allSegments.map((
+                { event: ev, segmentKind },
+              ) => (
                 <EventBlock
                   key={`${ev.id}-${segmentKind}`}
                   event={ev}
@@ -569,7 +816,10 @@ export default function TimeGridView({
 
                 const boundaryMin = minutesSinceMidnight(upperEnd);
                 const lower = startSegments.find(
-                  (s) => s.event.id !== upperEvent.id && minutesSinceMidnight(fromLocalISO(s.event.start_at)) === boundaryMin
+                  (s) =>
+                    s.event.id !== upperEvent.id &&
+                    minutesSinceMidnight(fromLocalISO(s.event.start_at)) ===
+                    boundaryMin,
                 );
                 if (!lower) continue;
 
@@ -585,7 +835,7 @@ export default function TimeGridView({
                     left={2 + Math.min(upperLevel, lowerLevel) * 14}
                     hourHeight={hourHeight}
                     onChange={onEventChange}
-                  />
+                  />,
                 );
               }
 
@@ -596,31 +846,32 @@ export default function TimeGridView({
                 title={ghostSuggestion.title}
                 color={resolveColor(ghostSuggestion.projectId)}
                 top={(ghostSuggestion.startMin / 60) * hourHeight}
-                height={((ghostSuggestion.endMin - ghostSuggestion.startMin) / 60) * hourHeight}
+                height={((ghostSuggestion.endMin - ghostSuggestion.startMin) /
+                  60) * hourHeight}
                 onClick={handleGhostClick}
               />
             )}
             {dayIndex === todayIndex && (
               <div
                 style={{
-                  position: 'absolute',
+                  position: "absolute",
                   top: (nowMinutes / 60) * hourHeight,
                   left: 0,
                   right: 0,
-                  borderTop: '2px solid #ea4335',
+                  borderTop: "2px solid #ea4335",
                   zIndex: 3,
-                  pointerEvents: 'none',
+                  pointerEvents: "none",
                 }}
               >
                 <div
                   style={{
-                    position: 'absolute',
+                    position: "absolute",
                     left: -5,
                     top: -4,
                     width: 8,
                     height: 8,
-                    borderRadius: '50%',
-                    backgroundColor: '#ea4335',
+                    borderRadius: "50%",
+                    backgroundColor: "#ea4335",
                   }}
                 />
               </div>
@@ -629,13 +880,14 @@ export default function TimeGridView({
             {draft && draft.dayIndex === dayIndex && (
               <div
                 style={{
-                  position: 'absolute',
+                  position: "absolute",
                   top: (draft.startMin / 60) * hourHeight,
-                  height: ((draft.currentMin - draft.startMin) / 60) * hourHeight,
+                  height: ((draft.currentMin - draft.startMin) / 60) *
+                    hourHeight,
                   left: 2,
                   right: 2,
-                  backgroundColor: 'rgba(26,115,232,0.3)',
-                  border: '1px dashed #1a73e8',
+                  backgroundColor: "rgba(26,115,232,0.3)",
+                  border: "1px dashed #1a73e8",
                   borderRadius: 4,
                   zIndex: 1,
                 }}
@@ -645,70 +897,136 @@ export default function TimeGridView({
         ))}
       </div>
 
-      <div className="border-t border-gray-200 bg-gray-50 dark:border-gray-700 dark:bg-gray-800" style={{ display: 'flex', flexShrink: 0 }}>
+      <div
+        className="border-t border-gray-200 bg-gray-50 dark:border-gray-700 dark:bg-gray-800"
+        style={{ display: "flex", flexShrink: 0 }}
+      >
         <div style={{ width: 56 }} />
         {days.map((_, i) => {
           const summary = daySummaries[i];
           const isExpanded = expandedSummaryDays.has(i);
 
-          const projectsSorted = summary ? Object.values(summary.byProject).sort((a, b) => b.minutes - a.minutes) : [];
+          const projectsSorted = summary
+            ? Object.values(summary.byProject).sort((a, b) =>
+              b.minutes - a.minutes
+            )
+            : [];
           return (
             <div
               key={i}
               className="border-l border-gray-200 dark:border-gray-700"
               style={{
                 flex: 1,
-                textAlign: 'center',
-                padding: '6px 4px',
+                textAlign: "center",
+                padding: "6px 4px",
                 fontSize: 11,
-                color: '#fff',
+                color: "#fff",
                 maxHeight: isExpanded ? 100 : undefined,
-                overflowY: isExpanded ? 'auto' : undefined,
+                overflowY: isExpanded ? "auto" : undefined,
               }}
             >
-              {summary ? (
-                <>
-                  <button
-                    onClick={() => toggleSummaryDay(i)}
-                    className="text-blue-600 dark:text-blue-400"
-                    style={{
-                      width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4,
-                      border: 'none', background: 'none', cursor: 'pointer', padding: 0,
-                      fontSize: 12, fontWeight: 700,
-                    }}
-                  >
-                    {formatDuration(summary.totalMinutes)}
-                    <span style={{ fontSize: 9, transition: 'transform 150ms', transform: isExpanded ? 'rotate(180deg)' : undefined }}>▾</span>
-                  </button>
+              {summary
+                ? (
+                  <>
+                    <button
+                      onClick={() => toggleSummaryDay(i)}
+                      className="text-blue-600 dark:text-blue-400"
+                      style={{
+                        width: "100%",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        gap: 4,
+                        border: "none",
+                        background: "none",
+                        cursor: "pointer",
+                        padding: 0,
+                        fontSize: 12,
+                        fontWeight: 700,
+                      }}
+                    >
+                      {formatDuration(summary.totalMinutes)}
+                      <span
+                        style={{
+                          fontSize: 9,
+                          transition: "transform 150ms",
+                          transform: isExpanded ? "rotate(180deg)" : undefined,
+                        }}
+                      >
+                        ▾
+                      </span>
+                    </button>
 
-                  {isExpanded && (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 2, textAlign: 'left', paddingLeft: 4, marginTop: 4 }}>
-                      {projectsSorted.map((p) => {
-                        const cover = resolveCover(p.projectId);
-                        const color = resolveColor(p.projectId);
-                        return (
-                          <div
-                            key={p.projectId ?? '__none__'}
-                            style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 10, backgroundColor: color, borderRadius: 4, padding: '2px 4px', cursor: 'pointer' }}
-                            className="border hover:border-black dark:hover:border-white"
-                            onClick={() => onProjectSummaryClick(p.projectId)}
-                          >
-                            {cover ? (
-                              <img src={convertFileSrc(cover)} className="w-3 h-3 rounded-full object-cover shrink-0" />
-                            ) : (
-                              <span style={{ width: 6, height: 6, borderRadius: '50%', backgroundColor: color, flexShrink: 0, border: '1px solid #fff' }} />
-                            )}
-                            <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.label}</span>
-                            <span style={{ flexShrink: 0, fontWeight: 600 }}>{formatDuration(p.minutes)}</span>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  )}
-                </>
-              ) : (
-                <span className="text-gray-300 dark:text-gray-600">—</span>
-              )}
+                    {isExpanded && (
+                      <div
+                        style={{
+                          display: "flex",
+                          flexDirection: "column",
+                          gap: 2,
+                          textAlign: "left",
+                          paddingLeft: 4,
+                          marginTop: 4,
+                        }}
+                      >
+                        {projectsSorted.map((p) => {
+                          const cover = resolveCover(p.projectId);
+                          const color = resolveColor(p.projectId);
+                          return (
+                            <div
+                              key={p.projectId ?? "__none__"}
+                              style={{
+                                display: "flex",
+                                alignItems: "center",
+                                gap: 4,
+                                fontSize: 10,
+                                backgroundColor: color,
+                                borderRadius: 4,
+                                padding: "2px 4px",
+                                cursor: "pointer",
+                              }}
+                              className="border hover:border-black dark:hover:border-white"
+                              onClick={() => onProjectSummaryClick(p.projectId)}
+                            >
+                              {cover
+                                ? (
+                                  <img
+                                    src={convertFileSrc(cover)}
+                                    className="w-3 h-3 rounded-full object-cover shrink-0"
+                                  />
+                                )
+                                : (
+                                  <span
+                                    style={{
+                                      width: 6,
+                                      height: 6,
+                                      borderRadius: "50%",
+                                      backgroundColor: color,
+                                      flexShrink: 0,
+                                      border: "1px solid #fff",
+                                    }}
+                                  />
+                                )}
+                              <span
+                                style={{
+                                  flex: 1,
+                                  overflow: "hidden",
+                                  textOverflow: "ellipsis",
+                                  whiteSpace: "nowrap",
+                                }}
+                              >
+                                {p.label}
+                              </span>
+                              <span style={{ flexShrink: 0, fontWeight: 600 }}>
+                                {formatDuration(p.minutes)}
+                              </span>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </>
+                )
+                : <span className="text-gray-300 dark:text-gray-600">—</span>}
             </div>
           );
         })}
